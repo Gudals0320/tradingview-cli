@@ -29,6 +29,8 @@ npm test
 
 Run `npm run test:e2e` only when TradingView Desktop is available on local CDP port 9222.
 
+The CI workflow runs `npm run lint` and `npm test` on Windows/Node.js 24 with `TRADINGVIEW_SKIP_NETWORK_TESTS=1`. This excludes only the two suites that contact TradingView's Pine server. Desktop E2E tests remain a separate local command.
+
 Keep command adapters in `src/cli/commands/` thin. Put reusable TradingView behavior in `src/core/`, validate all values interpolated into page evaluations, and preserve JSON output plus the documented exit codes.
 
 ## Pull Requests

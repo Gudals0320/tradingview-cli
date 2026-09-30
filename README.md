@@ -188,6 +188,8 @@ The command only accepts an `origin` pointing to `Gudals0320/tradingview-cli`, t
 
 ## Testing
 
+GitHub Actions runs lint and unit tests on Windows with Node.js 24 for pushes to `main`, pull requests targeting `main`, and manual runs. CI sets `TRADINGVIEW_SKIP_NETWORK_TESTS=1` to skip the five Pine server-compile tests; no TradingView account or Desktop session is required. Normal local `npm test` still includes those server checks.
+
 ```bash
 npm ci
 npm run lint

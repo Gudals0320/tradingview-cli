@@ -137,7 +137,7 @@ describe('CLI — pine analyze (offline)', () => {
   });
 });
 
-describe('CLI — pine check (server compile)', () => {
+describe('CLI — pine check (server compile)', { skip: process.env.TRADINGVIEW_SKIP_NETWORK_TESTS === '1' }, () => {
   it('compiles valid Pine Script', () => {
     const source = '//@version=6\nindicator("test")\nplot(close)';
     const { stdout, exitCode } = run(['pine', 'check'], { input: source });
