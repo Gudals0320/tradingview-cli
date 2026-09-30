@@ -129,6 +129,8 @@ For monitored strategies, input/context changes require an observed native recal
 
 Desktop builds without subscribable native calculation events return `REPORT_UNVERIFIED` even after compilation. A replacement internal strategy object with the same study ID also loses verification; the CLI reattaches monitoring and requires a new observed calculation. After an external script replacement, an identical-source apply can time out safely; change an input with `indicator set` or edit the source before recompiling to establish a new verified result.
 
+Do not edit strategy inputs in the GUI while `pine compile` or `indicator set` is running. GUI edits do not participate in the CLI session lock. Before compilation adopts its first report and installs monitoring, concurrent GUI input edits can still cause an old calculation to be attributed to the current inputs; this unsupported concurrency path remains a follow-up limitation.
+
 Batch jobs own an endpoint lock shared by cooperating processes using the same operating-system temporary directory, because Pine drafts can be shared across layouts. Conflicting CLI operations are rejected while a batch is alive. `tv session status` shows ownership and recovery status without revealing the saved draft. Abruptly killed batches leave a private recovery journal and refuse subsequent mutations until explicit recovery. During recovery, `status`, `state` and `tab list` remain available for diagnosis. `tv session discard --run-id RECOVERY_RUN_ID` explicitly abandons restoration and archives the saved journal, leaving Desktop changes in place. See the example documentation for `--recover` and history-coverage options.
 
 ## JSON Output and Exit Codes
