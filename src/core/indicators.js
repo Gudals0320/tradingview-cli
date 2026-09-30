@@ -2,6 +2,7 @@
  * Core indicator settings logic.
  */
 import { evaluate, safeString } from '../connection.js';
+import { STRATEGY_PAGE_CODE } from '../strategy-state.js';
 
 const CHART_API = 'window.TradingViewApi._activeChartWidgetWV.value()';
 const DIALOG = '[data-name="indicators-dialog"]';
@@ -159,7 +160,7 @@ export async function addStudyFromSearch({ query, match, section } = {}) {
   };
 }
 
-export async function setInputs({ entity_id, inputs: inputsRaw }) {
+export async function setInputs({ entity_id, inputs: inputsRaw, timeout = 30000 }) {
   const inputs = inputsRaw ? (typeof inputsRaw === 'string' ? JSON.parse(inputsRaw) : inputsRaw) : undefined;
   if (!entity_id) throw new Error('entity_id is required. Use chart_get_state to find study IDs.');
   if (!inputs || typeof inputs !== 'object' || Object.keys(inputs).length === 0) {
@@ -170,24 +171,41 @@ export async function setInputs({ entity_id, inputs: inputsRaw }) {
 
   const result = await evaluate(`
     (function() {
+      ${STRATEGY_PAGE_CODE};
       var chart = ${CHART_API};
       var study = chart.getStudyById(${safeString(entity_id)});
       if (!study) return { error: 'Study not found: ' + ${safeString(entity_id)} };
+      var strategy = prepareInputChange(window, ${safeString(entity_id)});
       var currentInputs = study.getInputValues();
       var overrides = ${inputsJson};
       var updatedKeys = {};
+      var changed = false;
       for (var i = 0; i < currentInputs.length; i++) {
         if (overrides.hasOwnProperty(currentInputs[i].id)) {
+          if (currentInputs[i].value !== overrides[currentInputs[i].id]) changed = true;
           currentInputs[i].value = overrides[currentInputs[i].id];
           updatedKeys[currentInputs[i].id] = overrides[currentInputs[i].id];
         }
       }
-      study.setInputValues(currentInputs);
-      return { updated_inputs: updatedKeys };
+      if (changed) study.setInputValues(currentInputs);
+      return { updated_inputs: updatedKeys, strategy, changed };
     })()
   `);
 
   if (result && result.error) throw new Error(result.error);
+  if (result.strategy && result.changed) {
+    const start = Date.now();
+    do {
+      const state = await evaluate(`(() => { ${STRATEGY_PAGE_CODE}; return compilationState(window); })()`);
+      if (state.phase === 'ready' && Object.entries(result.updated_inputs).every(([id, value]) => state.inputs?.some(input => input.id === id && input.value === value))) {
+        return { success: true, entity_id, updated_inputs: result.updated_inputs, report_ready: true };
+      }
+      if (['failed', 'invalidated'].includes(state.phase)) return { success: false, entity_id, updated_inputs: result.updated_inputs, error: state.error, report_ready: false };
+      await delay(100);
+    } while (Date.now() - start < timeout);
+    return { success: false, entity_id, updated_inputs: result.updated_inputs, report_ready: false,
+      error: 'Strategy inputs were applied but their recalculation was not verified before timeout.' };
+  }
   return { success: true, entity_id, updated_inputs: result.updated_inputs };
 }
 

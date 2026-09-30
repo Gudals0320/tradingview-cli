@@ -162,7 +162,10 @@ describe('CLI operation result exit contract', () => {
     const router = pathToFileURL(join(__dirname, '..', 'src', 'cli', 'router.js')).href;
     try {
       const stdout = execFileSync(process.execPath, ['--input-type=module', '-e',
-        `import {register,run} from ${JSON.stringify(router)};register('fixture',{handler:${handler}});await run(['node','tv','fixture']);`], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+        `import {register,run} from ${JSON.stringify(router)};register('fixture',{handler:${handler}});await run(['node','tv','fixture']);`], {
+        encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, TV_CDP_HOST: 'tv-cli-unit-fixture', TV_CDP_PORT: '1' },
+      });
       return { code: 0, stdout };
     } catch (error) { return { code: error.status, stdout: error.stdout, stderr: error.stderr }; }
   }

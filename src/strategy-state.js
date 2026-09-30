@@ -41,6 +41,62 @@ export function compiledIdentity(inputs) {
   return JSON.stringify(inputs.filter(input => ['text', 'pineId', 'pineVersion'].includes(input.id)));
 }
 
+export function calculationKey(inputs, context) {
+  return JSON.stringify({ inputs, symbol: context?.symbol, resolution: context?.resolution, chart_type: context?.chart_type });
+}
+
+/** Keep native calculation transitions across separate CLI processes. */
+export function observeCalculation(window, epoch, item) {
+  if (epoch.observer_source === item.source) return;
+  epoch.dispose?.();
+  epoch.calculation = { cycle: 0, active: false, completed: null };
+  epoch.accepted_cycle = 0;
+  const inspect = () => pageStrategies(window).find(value => value.id === item.id);
+  const statusChanged = () => {
+    if (window.__tvCliCompilation !== epoch) { epoch.dispose?.(); return; }
+    let status, report;
+    try {
+      status = item.source.status?.(); if (status?.value) status = status.value();
+      report = item.source.reportData?.(); if (report?.value) report = report.value();
+    } catch { return; }
+    if (status?.type !== 2 || !reportIsComplete(report)) {
+      if (!epoch.calculation.active) epoch.calculation.cycle++;
+      epoch.calculation.active = true;
+    }
+  };
+  const reportChanged = () => {
+    statusChanged();
+    if (window.__tvCliCompilation !== epoch || !epoch.calculation.active) return;
+    const current = inspect();
+    if (epoch.calculation.active && current?.status_type === 2 && reportIsComplete(current.report)) {
+      epoch.calculation.completed = { cycle: epoch.calculation.cycle,
+        key: calculationKey(current.inputs, readChartContext(window)) };
+      epoch.calculation.active = false;
+    }
+  };
+  try {
+    const status = item.source.onStatusChanged?.(), reports = item.source.reportChanged?.();
+    if (!status?.subscribe || !reports?.subscribe) return;
+    epoch.dispose = () => { status.unsubscribe(epoch, statusChanged); reports.unsubscribe(epoch, reportChanged); epoch.observer_source = null; };
+    status.subscribe(epoch, statusChanged); reports.subscribe(epoch, reportChanged);
+    epoch.observer_source = item.source;
+  } catch { epoch.dispose?.(); /* Unsupported native events: input changes fail closed. */ }
+}
+
+export function prepareInputChange(window, strategyId) {
+  const item = pageStrategies(window).find(value => value.id === strategyId);
+  if (!item) return false; // Ordinary indicator, not a Strategy Tester report.
+  let epoch = window.__tvCliCompilation;
+  if (!epoch || epoch.strategy_id !== strategyId || epoch.phase !== 'ready') {
+    epoch?.dispose?.();
+    epoch = window.__tvCliCompilation = { strategy_mode: true, strategy_id: strategyId, strategy_name: item.name,
+      token: null, source_hash: null, phase: 'ready', context: readChartContext(window), report: item.report,
+      fingerprint: reportFingerprint(item.report), inputs_fingerprint: JSON.stringify(item.inputs), compiled_identity: compiledIdentity(item.inputs) };
+  }
+  observeCalculation(window, epoch, item);
+  return true;
+}
+
 export function beginCompilation(window, token, sourceHash, strategyMode, strategyName = null) {
   const previous = window.__tvCliCompilation;
   const strategies = pageStrategies(window);
@@ -54,6 +110,7 @@ export function beginCompilation(window, token, sourceHash, strategyMode, strate
     && context?.chart_type === previous.context?.chart_type) {
     return { phase: 'unchanged', token: previous.token, strategy_id: applied.id, inputs: applied.inputs };
   }
+  previous?.dispose?.();
   window.__tvCliCompilation = { token, source_hash: sourceHash, strategy_mode: strategyMode,
     strategy_name: strategyName, requires_compiled_change: true,
     phase: 'pending', baselines: strategies.map((item) => {
@@ -71,7 +128,7 @@ export function compilationState(window) {
   if (epoch.phase === 'ready') {
     const context = readChartContext(window);
     const selected = pageStrategies(window).find(item => item.id === epoch.strategy_id);
-    if (!selected) { window.__tvCliCompilation = null; return { phase: 'not-strategy' }; }
+    if (!selected) { epoch.dispose?.(); window.__tvCliCompilation = null; return { phase: 'not-strategy' }; }
     if (compiledIdentity(selected.inputs) !== epoch.compiled_identity) {
       epoch.phase = 'invalidated'; epoch.error = 'Compiled script changed outside this CLI compilation; its source hash is no longer verified.';
     }
@@ -81,7 +138,7 @@ export function compilationState(window) {
       || JSON.stringify(selected?.inputs) !== epoch.inputs_fingerprint) {
       epoch.phase = 'pending'; epoch.baselines = [{ id: epoch.strategy_id, report: epoch.report,
         fingerprint: epoch.fingerprint, compiled_identity: epoch.compiled_identity, stable_reference: true, runtime_error: null }];
-      // An input/context edit must recalculate, but is not a new script compile.
+      // Old real-time ticks are not evidence of recalculation for new inputs.
       epoch.requires_compiled_change = false;
     } else return { phase: 'ready', token: epoch.token, strategy_id: epoch.strategy_id, inputs: selected?.inputs || [] };
   }
@@ -102,15 +159,26 @@ export function compilationState(window) {
   if (changed.length > 1) return { phase: 'pending', token: epoch.token, error: 'More than one strategy changed; cannot identify the compiled script.' };
   for (const item of changed) {
     const old = epoch.baselines.find((baseline) => baseline.id === item.id);
+    if (!epoch.requires_compiled_change && compiledIdentity(item.inputs) !== epoch.compiled_identity) {
+      epoch.phase = 'invalidated'; epoch.error = 'Compiled script changed outside this CLI compilation.';
+      return { phase: epoch.phase, error: epoch.error };
+    }
     if (item.runtime_error) {
       epoch.phase = 'failed'; epoch.strategy_id = item.id; epoch.error = String(item.runtime_error); return { phase: 'failed', error: epoch.error };
     }
     if (!reportIsComplete(item.report) || (item.status_type != null && item.status_type !== 2)) continue;
+    if (!epoch.requires_compiled_change) {
+      const completed = epoch.calculation?.completed;
+      if (!completed || completed.cycle <= epoch.accepted_cycle
+        || completed.key !== calculationKey(item.inputs, readChartContext(window))) continue;
+    }
     if (!old || (old.stable_reference && item.report !== old.report) || reportFingerprint(item.report) !== old.fingerprint) {
       epoch.phase = 'ready'; epoch.strategy_id = item.id; epoch.baselines = [];
       epoch.context = readChartContext(window); epoch.report = item.report;
       epoch.fingerprint = reportFingerprint(item.report); epoch.inputs_fingerprint = JSON.stringify(item.inputs);
       epoch.compiled_identity = compiledIdentity(item.inputs);
+      if (epoch.requires_compiled_change) observeCalculation(window, epoch, item);
+      else epoch.accepted_cycle = epoch.calculation.completed.cycle;
       return { phase: 'ready', token: epoch.token, strategy_id: item.id, inputs: item.inputs };
     }
   }
@@ -169,7 +237,8 @@ export function readStrategyReport(window, options = {}) {
   };
 }
 
-export const STRATEGY_PAGE_CODE = [readChartContext, formatDiagnostic, pageStrategies, reportFingerprint, reportIsComplete, compiledIdentity, beginCompilation, compilationState, readStrategyReport].map(fn => fn.toString()).join('\n');
+export const STRATEGY_PAGE_CODE = [readChartContext, formatDiagnostic, pageStrategies, reportFingerprint, reportIsComplete, compiledIdentity,
+  calculationKey, observeCalculation, prepareInputChange, beginCompilation, compilationState, readStrategyReport].map(fn => fn.toString()).join('\n');
 
 export function reportExpression(options = {}) {
   return `(() => { ${STRATEGY_PAGE_CODE}; return readStrategyReport(window, ${JSON.stringify(options)}); })()`;

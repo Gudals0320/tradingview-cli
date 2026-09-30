@@ -108,14 +108,13 @@ async function restoreSnapshot(snapshot, api, explicitTargetId) {
 export async function runBatch(options, api = DEFAULT_API) {
   if (!options.recover && !options.chartId && !options.targetId) throw new Error('An explicit --chart-id or --target-id is required; use a separate disposable layout');
   const lease = (api.session || session).acquireSession({ recover: Boolean(options.recover) });
-  let snapshot = null, failure = null, restored = false, recoveryAttempted = false;
+  let snapshot = null, failure = null, restored = false, recoveryAttempted = Boolean(options.recover);
   const results = [];
   const stop = () => { if (options.signal?.aborted) throw new Error('Batch interrupted; restoring the saved snapshot.'); };
   try {
     if (options.recover) {
       snapshot = lease.pending()?.snapshot;
       if (!snapshot) throw new Error('There is no pending recovery snapshot.');
-      recoveryAttempted = true;
       await restoreSnapshot(snapshot, api, options.targetId); restored = true; snapshot = null;
       return { success: true, recovered: true, restored: true, results: [] };
     }

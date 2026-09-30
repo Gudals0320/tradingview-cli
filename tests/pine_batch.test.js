@@ -125,4 +125,12 @@ describe('Pine batch example', () => {
     await assert.rejects(runBatch({ recover: true }, f.api), /Open recorded layout gone/);
     assert.equal(attempts, 1); assert.deepEqual(released, { restored: false });
   });
+  it('never clears a recovery journal when its snapshot is absent or unreadable', async () => {
+    for (const pending of [() => ({ phase: 'interrupted' }), () => { throw new SyntaxError('Invalid journal JSON'); }]) {
+      const f = fixture(); let released;
+      f.api.session.acquireSession = () => ({ pending, release: value => { released = value; } });
+      await assert.rejects(runBatch({ recover: true }, f.api));
+      assert.deepEqual(released, { restored: false });
+    }
+  });
 });

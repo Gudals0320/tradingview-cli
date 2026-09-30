@@ -8,16 +8,27 @@ function fixture() {
   let report = { performance: { all: { netProfit: 10, netProfitPercent: 0.001, totalTrades: 2, numberOfWiningTrades: 1, numberOfLosingTrades: 0 } },
     settings: { dateRange: { backtest: { from: 1704067200000, to: 1704153600000 } } }, currency: 'USDT',
     trades: [{ e: { tm: 1704067200000, b: 0 }, x: { tm: 1704153600000, b: 1 } }] };
-  let error = null;
+  let error = null, statusType = 2;
+  const event = () => {
+    const listeners = [];
+    return { subscribe: (owner, fn) => listeners.push({ owner, fn }),
+      unsubscribe: (owner, fn) => { const index = listeners.findIndex(item => item.owner === owner && item.fn === fn); if (index >= 0) listeners.splice(index, 1); },
+      fire: () => listeners.slice().forEach(item => item.fn()) };
+  };
+  const statusEvent = event(), reportEvent = event();
   let inputs = [{ id: 'text', value: 'compiled-script-A' }, { id: 'in_0', value: 10 }];
   const series = { bars: () => ({ firstIndex: () => 0, lastIndex: () => 1, valueAt: (i) => [1704067200 + i * 86400] }), symbolInfo: () => ({ full_name: 'BINANCE:BTCUSDT' }) };
   const source = { id: () => 'strategy', metaInfo: () => ({ isTVScriptStrategy: true, description: 'Same title' }),
-    reportData: () => ({ value: () => report }), status: () => ({ value: () => ({ error }) }) };
+    reportData: () => ({ value: () => report }), status: () => ({ value: () => ({ error, type: statusType }) }),
+    onStatusChanged: () => statusEvent, reportChanged: () => reportEvent };
   const model = { mainSeries: () => series, model: () => ({ dataSources: () => [source] }) };
   const chart = { symbol: () => 'BINANCE:BTCUSDT', resolution: () => '1D', chartType: () => 1,
     getStudyById: () => ({ getInputValues: () => inputs }), _chartWidget: { model: () => model } };
   const window = { TradingViewApi: { _activeChartWidgetWV: { value: () => chart } } };
-  return { window, source, update: () => { report = { ...report, performance: { all: { ...report.performance.all, netProfit: 20 } } }; },
+  return { window, source, update: () => { report = { ...report, performance: { all: { ...report.performance.all, netProfit: 20 } } }; reportEvent.fire(); },
+    input: value => { inputs = inputs.map(input => input.id === 'in_0' ? { ...input, value } : input); },
+    status: type => { statusType = type; statusEvent.fire(); },
+    tick: () => { report = { ...report }; reportEvent.fire(); },
     compile: (text = 'compiled-script-B') => { inputs = [{ id: 'text', value: text }, { id: 'in_0', value: 30 }]; },
     fail: () => { inputs = [{ id: 'text', value: 'compiled-script-error' }]; error = 'Array index out of bounds'; } };
 }
@@ -54,6 +65,24 @@ describe('Strategy report identity and metadata', () => {
     assert.equal(compilationState(f.window).phase, 'ready');
     f.compile('external-script');
     assert.equal(readStrategyReport(f.window).code, 'REPORT_INVALIDATED');
+  });
+  it('rejects old real-time ticks after an input change until native recalculation finishes', () => {
+    const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
+    assert.equal(compilationState(f.window).phase, 'ready');
+    f.input(60); f.tick();
+    assert.equal(readStrategyReport(f.window).code, 'REPORT_PENDING');
+    f.status(1); f.tick();
+    assert.equal(readStrategyReport(f.window).code, 'REPORT_PENDING');
+    f.status(2); f.update();
+    assert.equal(readStrategyReport(f.window).strategy_inputs.find(input => input.id === 'in_0').value, 60);
+  });
+  it('records fast native transitions even when no CLI read runs during recalculation', () => {
+    const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
+    assert.equal(compilationState(f.window).phase, 'ready');
+    f.status(1); f.input(70); f.status(2); f.update();
+    assert.equal(readStrategyReport(f.window).success, true);
+    f.input(80); f.tick();
+    assert.equal(readStrategyReport(f.window).code, 'REPORT_PENDING');
   });
   it('does not treat a report getter that returns copies as proof of a fresh calculation', () => {
     const f = fixture(); const original = f.source.reportData;
