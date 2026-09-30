@@ -90,7 +90,7 @@ export function prepareInputChange(window, strategyId) {
   if (!epoch || epoch.strategy_id !== strategyId || epoch.phase !== 'ready') {
     epoch?.dispose?.();
     epoch = window.__tvCliCompilation = { strategy_mode: true, strategy_id: strategyId, strategy_name: item.name,
-      token: null, source_hash: null, phase: 'ready', context: readChartContext(window), report: item.report,
+      token: null, source_hash: null, phase: 'ready', report_verified: false, context: readChartContext(window), report: item.report,
       fingerprint: reportFingerprint(item.report), inputs_fingerprint: JSON.stringify(item.inputs), compiled_identity: compiledIdentity(item.inputs) };
   }
   observeCalculation(window, epoch, item);
@@ -102,7 +102,7 @@ export function beginCompilation(window, token, sourceHash, strategyMode, strate
   const strategies = pageStrategies(window);
   const applied = strategies.find(item => item.id === previous?.strategy_id);
   const context = readChartContext(window);
-  if (strategyMode && previous?.phase === 'ready' && previous.source_hash === sourceHash
+  if (strategyMode && previous?.phase === 'ready' && previous.report_verified && previous.source_hash === sourceHash
     && previous.compiled_identity && compiledIdentity(applied?.inputs || []) === previous.compiled_identity
     && JSON.stringify(applied?.inputs) === previous.inputs_fingerprint && !applied?.runtime_error
     && reportIsComplete(applied?.report) && (applied.status_type == null || applied.status_type === 2)
@@ -173,7 +173,7 @@ export function compilationState(window) {
         || completed.key !== calculationKey(item.inputs, readChartContext(window))) continue;
     }
     if (!old || (old.stable_reference && item.report !== old.report) || reportFingerprint(item.report) !== old.fingerprint) {
-      epoch.phase = 'ready'; epoch.strategy_id = item.id; epoch.baselines = [];
+      epoch.phase = 'ready'; epoch.report_verified = true; epoch.strategy_id = item.id; epoch.baselines = [];
       epoch.context = readChartContext(window); epoch.report = item.report;
       epoch.fingerprint = reportFingerprint(item.report); epoch.inputs_fingerprint = JSON.stringify(item.inputs);
       epoch.compiled_identity = compiledIdentity(item.inputs);
@@ -196,12 +196,18 @@ export function readStrategyReport(window, options = {}) {
     error: compile.error || 'Fresh strategy report is still pending after compilation.',
     code: compile.phase === 'pending' ? 'REPORT_PENDING' : compile.phase === 'invalidated' ? 'REPORT_INVALIDATED' : 'STRATEGY_RUNTIME_ERROR' };
   const strategies = pageStrategies(window);
-  const id = options.strategy_id || (compile.phase === 'ready' ? compile.strategy_id : null);
+  const id = options.strategy_id || (!options.strategy && compile.phase === 'ready' ? compile.strategy_id : null);
   const matching = strategies.filter((item) => (!id || item.id === id) && (!options.strategy || item.name === options.strategy));
   const ready = matching.filter((item) => reportIsComplete(item.report));
   if (ready.length !== 1) return { success: false, error: ready.length > 1 ? 'Strategy report is ambiguous; specify a strategy ID.' : 'Requested strategy report is not ready.', code: 'REPORT_PENDING' };
   const found = ready[0], report = found.report;
   if (found.runtime_error) return { success: false, code: 'STRATEGY_RUNTIME_ERROR', error: String(found.runtime_error) };
+  // A complete native report can still belong to the inputs before a GUI edit.
+  // Only the epoch that observed compilation/recalculation proves its identity.
+  if (compile.phase !== 'ready' || found.id !== compile.strategy_id || !window.__tvCliCompilation?.report_verified) {
+    return { success: false, code: 'REPORT_UNVERIFIED', strategy_id: found.id,
+      error: 'Strategy report has no verified calculation for its current inputs. Compile with tv pine compile or change a strategy input with tv indicator set, then retry.' };
+  }
   const perf = report.performance, all = perf.all || {};
   const metrics = {
     net_profit: all.netProfit, net_profit_percent: all.netProfitPercent, gross_profit: all.grossProfit,

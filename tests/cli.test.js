@@ -173,6 +173,13 @@ describe('CLI operation result exit contract', () => {
     const result = simulated('async()=>({success:false,error:"not ready"})');
     assert.equal(result.code, 1); assert.equal(JSON.parse(result.stdout).success, false);
   });
+  it('returns 1 for an unverified strategy report without exposing metrics', () => {
+    const result = simulated('async()=>({success:false,code:"REPORT_UNVERIFIED",error:"Compile or change an input before reading"})');
+    assert.equal(result.code, 1);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.code, 'REPORT_UNVERIFIED');
+    assert.equal(report.metrics, undefined);
+  });
   it('returns 1 for failed compilation', () => {
     assert.equal(simulated('async()=>({success:true,compiled:false})').code, 1);
   });
