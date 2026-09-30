@@ -1,7 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { runInNewContext } from 'node:vm';
-import { beginCompilation, compilationState, readStrategyReport, splitMarkers, reportExpression, formatDiagnostic } from '../src/strategy-state.js';
+import { beginCompilation, compilationState, readStrategyReport, splitMarkers, reportExpression, formatDiagnostic, prepareInputChange } from '../src/strategy-state.js';
+import { getStrategyResults, getTrades, getTradeLedger, getEquity } from '../src/core/data.js';
+import { smartCompile } from '../src/core/pine.js';
 import { normalizeTimeframe, symbolMatches } from '../src/chart-context.js';
 
 function fixture() {
@@ -34,6 +36,58 @@ function fixture() {
 }
 
 describe('Strategy report identity and metadata', () => {
+  it('rejects an unmonitored GUI input edit even when native status is ready', () => {
+    const f = fixture(); f.input(60);
+    const result = readStrategyReport(f.window);
+    assert.equal(result.success, false);
+    assert.equal(result.code, 'REPORT_UNVERIFIED');
+    assert.equal(result.metrics, undefined);
+  });
+  it('does not adopt a complete report just because monitoring starts', () => {
+    const f = fixture(); f.input(60);
+    prepareInputChange(f.window, 'strategy');
+    assert.equal(readStrategyReport(f.window).code, 'REPORT_UNVERIFIED');
+    f.tick();
+    assert.equal(readStrategyReport(f.window).success, false);
+    f.input(70); f.status(1); f.status(2); f.update();
+    const result = readStrategyReport(f.window);
+    assert.equal(result.success, true);
+    assert.equal(result.compilation_token, null);
+    assert.equal(result.source_hash, null);
+    assert.equal(result.strategy_inputs.find(input => input.id === 'in_0').value, 70);
+  });
+  it('loses report verification after a page reload', () => {
+    const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
+    assert.equal(readStrategyReport(f.window).success, true);
+    f.window.__tvCliCompilation.dispose();
+    delete f.window.__tvCliCompilation;
+    f.input(60);
+    assert.equal(readStrategyReport(f.window).code, 'REPORT_UNVERIFIED');
+  });
+  it('does not use another strategy verification for an explicit selection', () => {
+    const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
+    assert.equal(readStrategyReport(f.window).success, true);
+    const chart = f.window.TradingViewApi._activeChartWidgetWV.value();
+    const other = { ...f.source, id: () => 'other', metaInfo: () => ({ isTVScriptStrategy: true, description: 'Other title' }) };
+    chart._chartWidget.model().model = () => ({ dataSources: () => [f.source, other] });
+    for (const options of [{ strategy_id: 'other' }, { strategy: 'Other title' }]) {
+      const result = readStrategyReport(f.window, options);
+      assert.equal(result.success, false);
+      assert.equal(result.code, 'REPORT_UNVERIFIED');
+    }
+  });
+  it('blocks unverified reports across every strategy data endpoint', async () => {
+    const f = fixture(); f.input(60);
+    const _deps = { evaluate: expression => runInNewContext(expression, { window: f.window }) };
+    for (const read of [getStrategyResults, getTrades, getTradeLedger, getEquity]) {
+      const result = await read({ _deps });
+      assert.equal(result.success, false, read.name);
+      assert.equal(result.code, 'REPORT_UNVERIFIED', read.name);
+      assert.equal(result.metrics, undefined);
+      assert.equal(result.trades, undefined);
+      assert.equal(result.data, undefined);
+    }
+  });
   it('rejects real-time report changes until the compiled script also changes', () => {
     const f = fixture(); beginCompilation(f.window, 'run', 'hash', true);
     assert.equal(compilationState(f.window).phase, 'pending');
@@ -84,6 +138,108 @@ describe('Strategy report identity and metadata', () => {
     f.input(80); f.tick();
     assert.equal(readStrategyReport(f.window).code, 'REPORT_PENDING');
   });
+  for (const verification of ['compilation', 'input-change']) {
+    for (const beforeStatusEvent of [false, true]) {
+      it(`rejects GUI ABA after ${verification}, including before status event=${beforeStatusEvent}`, () => {
+        const f = fixture();
+        if (verification === 'compilation') {
+          beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
+        } else {
+          prepareInputChange(f.window, 'strategy'); f.input(30); f.status(1); f.status(2); f.update();
+        }
+        assert.equal(readStrategyReport(f.window).success, true);
+        // No CLI reads while B finishes, then inputs return to verified A.
+        f.input(60); f.status(1); f.status(2); f.update();
+        f.input(30);
+        if (!beforeStatusEvent) f.status(1);
+        assert.equal(readStrategyReport(f.window).code, 'REPORT_PENDING');
+        if (beforeStatusEvent) f.status(1);
+        f.status(2); f.update();
+        assert.equal(readStrategyReport(f.window).success, true);
+      });
+    }
+  }
+  it('does not skip identical-source compilation while an ABA calculation is pending', () => {
+    const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
+    assert.equal(readStrategyReport(f.window).success, true);
+    f.input(60); f.status(1); f.status(2); f.update(); f.input(30);
+    const epoch = f.window.__tvCliCompilation;
+    const begun = beginCompilation(f.window, 'new-run', 'hash', true);
+    assert.equal(begun.phase, 'awaiting'); assert.equal(begun.token, 'run');
+    assert.equal(f.window.__tvCliCompilation, epoch);
+    assert.equal(readStrategyReport(f.window).code, 'REPORT_PENDING');
+    f.status(1); f.status(2); f.update();
+    assert.equal(readStrategyReport(f.window).success, true);
+  });
+  it('rejects a native calculation in progress even when inputs do not change', () => {
+    const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
+    assert.equal(readStrategyReport(f.window).success, true);
+    f.status(1);
+    assert.equal(readStrategyReport(f.window).code, 'REPORT_PENDING');
+    f.status(2); f.update();
+    assert.equal(readStrategyReport(f.window).success, true);
+  });
+  it('fails closed when native calculation events are unavailable', () => {
+    const f = fixture(); delete f.source.onStatusChanged;
+    beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
+    assert.equal(readStrategyReport(f.window).code, 'REPORT_UNVERIFIED');
+    f.input(60); f.status(1); f.status(2); f.update(); f.input(30);
+    assert.equal(readStrategyReport(f.window).success, false);
+    assert.notEqual(beginCompilation(f.window, 'new-run', 'hash', true).phase, 'unchanged');
+  });
+  it('does not transfer verification to a replacement source with the same ID', () => {
+    const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
+    assert.equal(readStrategyReport(f.window).success, true);
+    const replacement = { ...f.source };
+    f.window.TradingViewApi._activeChartWidgetWV.value()._chartWidget.model().model = () => ({ dataSources: () => [replacement] });
+    assert.equal(readStrategyReport(f.window).code, 'REPORT_UNVERIFIED');
+    assert.equal(f.window.__tvCliCompilation.source_hash, null);
+    f.tick(); assert.equal(readStrategyReport(f.window).success, false);
+    // Reattached monitoring can prove the next real input calculation.
+    f.input(60); f.status(1); f.status(2); f.update();
+    const report = readStrategyReport(f.window);
+    assert.equal(report.success, true); assert.equal(report.source_hash, null);
+    assert.equal(report.compilation_token, null);
+  });
+  it('waits for an existing identical-source recalculation without clicking compile', async () => {
+    const f = fixture();
+    const source = '//@version=6\nstrategy("Same title")\nplot(close)';
+    const { sourceHash } = await import('../src/session.js');
+    beginCompilation(f.window, 'run', sourceHash(source), true); f.compile(); f.update();
+    assert.equal(readStrategyReport(f.window).success, true);
+    f.input(60); f.status(1); f.status(2); f.update(); f.input(30);
+    const epoch = f.window.__tvCliCompilation;
+    let clicks = 0, ticks = 0;
+    const result = await smartCompile({ _deps: { source,
+      evaluate: expression => {
+        if (expression.includes('getModelMarkers')) return [];
+        if (expression.includes('document')) { clicks++; return 'clicked'; }
+        return runInNewContext(expression, { window: f.window });
+      },
+      sleep: async () => { if (++ticks === 2) { f.status(1); f.status(2); f.update(); } },
+      now: () => ticks * 200,
+    } });
+    assert.equal(result.success, true); assert.equal(result.compilation_token, 'run');
+    assert.equal(result.compile_performed, false); assert.equal(clicks, 0);
+    assert.equal(f.window.__tvCliCompilation, epoch);
+    assert.equal(readStrategyReport(f.window).success, true);
+  });
+  it('preserves input monitoring when an identical-source wait times out', async () => {
+    const f = fixture(); const source = '//@version=6\nstrategy("Same title")\nplot(close)';
+    const { sourceHash } = await import('../src/session.js');
+    beginCompilation(f.window, 'run', sourceHash(source), true); f.compile(); f.update();
+    assert.equal(readStrategyReport(f.window).success, true);
+    f.input(60); f.status(1);
+    const epoch = f.window.__tvCliCompilation; let ticks = 0;
+    const result = await smartCompile({ timeout: 400, _deps: { source,
+      evaluate: expression => expression.includes('getModelMarkers') ? [] : runInNewContext(expression, { window: f.window }),
+      sleep: async () => { ticks++; }, now: () => ticks * 200,
+    } });
+    assert.equal(result.success, false); assert.equal(result.compile_performed, false);
+    assert.equal(f.window.__tvCliCompilation, epoch);
+    f.status(2); f.update();
+    assert.equal(readStrategyReport(f.window).success, true);
+  });
   it('does not treat a report getter that returns copies as proof of a fresh calculation', () => {
     const f = fixture(); const original = f.source.reportData;
     f.source.reportData = () => ({ value: () => structuredClone(original().value()) });
@@ -96,7 +252,8 @@ describe('Strategy report identity and metadata', () => {
     assert.equal(result.success, false); assert.equal(result.code, 'STRATEGY_RUNTIME_ERROR');
   });
   it('includes actual history bounds, UTC timestamps, units and native total trades', () => {
-    const result = readStrategyReport(fixture().window);
+    const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
+    const result = readStrategyReport(f.window);
     assert.equal(result.metrics.total_trades, 2);
     assert.equal(result.backtest_window.from, '2024-01-01T00:00:00.000Z');
     assert.equal(result.trade_window.to, '2024-01-02T00:00:00.000Z');
@@ -104,7 +261,9 @@ describe('Strategy report identity and metadata', () => {
     assert.equal(result.context.bar_count, 2);
   });
   it('executes the real serialized page report code', () => {
-    assert.equal(runInNewContext(reportExpression(), { window: fixture().window }).success, true);
+    const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
+    assert.equal(runInNewContext(reportExpression(), { window: f.window }).success, true);
+    assert.equal(runInNewContext(reportExpression(), { window: fixture().window }).code, 'REPORT_UNVERIFIED');
   });
   it('keeps warnings out of the fatal diagnostic list', () => {
     const result = splitMarkers([{ severity: 4, message: 'warning' }, { severity: 8, message: 'error' }]);

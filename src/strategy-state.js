@@ -90,7 +90,7 @@ export function prepareInputChange(window, strategyId) {
   if (!epoch || epoch.strategy_id !== strategyId || epoch.phase !== 'ready') {
     epoch?.dispose?.();
     epoch = window.__tvCliCompilation = { strategy_mode: true, strategy_id: strategyId, strategy_name: item.name,
-      token: null, source_hash: null, phase: 'ready', context: readChartContext(window), report: item.report,
+      token: null, source_hash: null, phase: 'ready', report_verified: false, context: readChartContext(window), report: item.report,
       fingerprint: reportFingerprint(item.report), inputs_fingerprint: JSON.stringify(item.inputs), compiled_identity: compiledIdentity(item.inputs) };
   }
   observeCalculation(window, epoch, item);
@@ -98,11 +98,20 @@ export function prepareInputChange(window, strategyId) {
 }
 
 export function beginCompilation(window, token, sourceHash, strategyMode, strategyName = null) {
+  // The identical-source shortcut must consume native calculation transitions
+  // too: matching inputs alone cannot distinguish an unobserved A -> B -> A edit.
+  if (window.__tvCliCompilation?.phase === 'ready') compilationState(window);
   const previous = window.__tvCliCompilation;
   const strategies = pageStrategies(window);
   const applied = strategies.find(item => item.id === previous?.strategy_id);
   const context = readChartContext(window);
-  if (strategyMode && previous?.phase === 'ready' && previous.source_hash === sourceHash
+  if (strategyMode && previous?.phase === 'pending' && previous.report_verified
+    && previous.requires_compiled_change === false && previous.source_hash === sourceHash
+    && previous.compiled_identity && compiledIdentity(applied?.inputs || []) === previous.compiled_identity
+    && previous.observer_source === applied?.source && !applied?.runtime_error) {
+    return { phase: 'awaiting', token: previous.token, strategy_id: applied.id };
+  }
+  if (strategyMode && previous?.phase === 'ready' && previous.report_verified && previous.source_hash === sourceHash
     && previous.compiled_identity && compiledIdentity(applied?.inputs || []) === previous.compiled_identity
     && JSON.stringify(applied?.inputs) === previous.inputs_fingerprint && !applied?.runtime_error
     && reportIsComplete(applied?.report) && (applied.status_type == null || applied.status_type === 2)
@@ -129,13 +138,21 @@ export function compilationState(window) {
     const context = readChartContext(window);
     const selected = pageStrategies(window).find(item => item.id === epoch.strategy_id);
     if (!selected) { epoch.dispose?.(); window.__tvCliCompilation = null; return { phase: 'not-strategy' }; }
+    if (epoch.observer_source !== selected.source) {
+      epoch.report_verified = false; epoch.token = null; epoch.source_hash = null;
+      observeCalculation(window, epoch, selected);
+      return { phase: 'unverified', strategy_id: selected.id };
+    }
     if (compiledIdentity(selected.inputs) !== epoch.compiled_identity) {
       epoch.phase = 'invalidated'; epoch.error = 'Compiled script changed outside this CLI compilation; its source hash is no longer verified.';
     }
     if (epoch.phase === 'invalidated') return { phase: epoch.phase, error: epoch.error };
+    const calculation = epoch.calculation;
     if (context?.symbol !== epoch.context?.symbol || context?.resolution !== epoch.context?.resolution
       || context?.chart_type !== epoch.context?.chart_type
-      || JSON.stringify(selected?.inputs) !== epoch.inputs_fingerprint) {
+      || JSON.stringify(selected?.inputs) !== epoch.inputs_fingerprint
+      || (selected.status_type != null && selected.status_type !== 2)
+      || calculation?.active || (calculation?.completed?.cycle > epoch.accepted_cycle)) {
       epoch.phase = 'pending'; epoch.baselines = [{ id: epoch.strategy_id, report: epoch.report,
         fingerprint: epoch.fingerprint, compiled_identity: epoch.compiled_identity, stable_reference: true, runtime_error: null }];
       // Old real-time ticks are not evidence of recalculation for new inputs.
@@ -179,6 +196,8 @@ export function compilationState(window) {
       epoch.compiled_identity = compiledIdentity(item.inputs);
       if (epoch.requires_compiled_change) observeCalculation(window, epoch, item);
       else epoch.accepted_cycle = epoch.calculation.completed.cycle;
+      epoch.report_verified = epoch.observer_source === item.source;
+      if (!epoch.report_verified) return { phase: 'unverified', strategy_id: item.id };
       return { phase: 'ready', token: epoch.token, strategy_id: item.id, inputs: item.inputs };
     }
   }
@@ -196,12 +215,18 @@ export function readStrategyReport(window, options = {}) {
     error: compile.error || 'Fresh strategy report is still pending after compilation.',
     code: compile.phase === 'pending' ? 'REPORT_PENDING' : compile.phase === 'invalidated' ? 'REPORT_INVALIDATED' : 'STRATEGY_RUNTIME_ERROR' };
   const strategies = pageStrategies(window);
-  const id = options.strategy_id || (compile.phase === 'ready' ? compile.strategy_id : null);
+  const id = options.strategy_id || (!options.strategy && compile.phase === 'ready' ? compile.strategy_id : null);
   const matching = strategies.filter((item) => (!id || item.id === id) && (!options.strategy || item.name === options.strategy));
   const ready = matching.filter((item) => reportIsComplete(item.report));
   if (ready.length !== 1) return { success: false, error: ready.length > 1 ? 'Strategy report is ambiguous; specify a strategy ID.' : 'Requested strategy report is not ready.', code: 'REPORT_PENDING' };
   const found = ready[0], report = found.report;
   if (found.runtime_error) return { success: false, code: 'STRATEGY_RUNTIME_ERROR', error: String(found.runtime_error) };
+  // A complete native report can still belong to the inputs before a GUI edit.
+  // Only the epoch that observed compilation/recalculation proves its identity.
+  if (compile.phase !== 'ready' || found.id !== compile.strategy_id || !window.__tvCliCompilation?.report_verified) {
+    return { success: false, code: 'REPORT_UNVERIFIED', strategy_id: found.id,
+      error: 'Strategy report has no verified calculation for its current inputs. Compile with tv pine compile or change a strategy input with tv indicator set, then retry.' };
+  }
   const perf = report.performance, all = perf.all || {};
   const metrics = {
     net_profit: all.netProfit, net_profit_percent: all.netProfitPercent, gross_profit: all.grossProfit,
