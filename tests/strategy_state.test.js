@@ -9,24 +9,51 @@ function fixture() {
     settings: { dateRange: { backtest: { from: 1704067200000, to: 1704153600000 } } }, currency: 'USDT',
     trades: [{ e: { tm: 1704067200000, b: 0 }, x: { tm: 1704153600000, b: 1 } }] };
   let error = null;
+  let inputs = [{ id: 'text', value: 'compiled-script-A' }, { id: 'in_0', value: 10 }];
   const series = { bars: () => ({ firstIndex: () => 0, lastIndex: () => 1, valueAt: (i) => [1704067200 + i * 86400] }), symbolInfo: () => ({ full_name: 'BINANCE:BTCUSDT' }) };
   const source = { id: () => 'strategy', metaInfo: () => ({ isTVScriptStrategy: true, description: 'Same title' }),
     reportData: () => ({ value: () => report }), status: () => ({ value: () => ({ error }) }) };
   const model = { mainSeries: () => series, model: () => ({ dataSources: () => [source] }) };
-  const chart = { symbol: () => 'BINANCE:BTCUSDT', resolution: () => '1D', chartType: () => 1, _chartWidget: { model: () => model } };
+  const chart = { symbol: () => 'BINANCE:BTCUSDT', resolution: () => '1D', chartType: () => 1,
+    getStudyById: () => ({ getInputValues: () => inputs }), _chartWidget: { model: () => model } };
   const window = { TradingViewApi: { _activeChartWidgetWV: { value: () => chart } } };
-  return { window, source, update: () => { report = { ...report, performance: { all: { ...report.performance.all, netProfit: 20 } } }; }, fail: () => { error = 'Array index out of bounds'; } };
+  return { window, source, update: () => { report = { ...report, performance: { all: { ...report.performance.all, netProfit: 20 } } }; },
+    compile: (text = 'compiled-script-B') => { inputs = [{ id: 'text', value: text }, { id: 'in_0', value: 30 }]; },
+    fail: () => { inputs = [{ id: 'text', value: 'compiled-script-error' }]; error = 'Array index out of bounds'; } };
 }
 
 describe('Strategy report identity and metadata', () => {
-  it('rejects the old same-title report until the calculation changes', () => {
+  it('rejects real-time report changes until the compiled script also changes', () => {
     const f = fixture(); beginCompilation(f.window, 'run', 'hash', true);
     assert.equal(compilationState(f.window).phase, 'pending');
     assert.equal(readStrategyReport(f.window).success, false);
     f.update();
+    assert.equal(readStrategyReport(f.window).success, false);
+    f.compile();
     const result = readStrategyReport(f.window);
     assert.equal(result.success, true); assert.equal(result.metrics.net_profit, 20);
     assert.equal(result.compilation_token, 'run');
+  });
+  it('waits for a new report even after compiled identity changes', () => {
+    const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile();
+    assert.equal(compilationState(f.window).phase, 'pending');
+    f.update(); assert.equal(compilationState(f.window).phase, 'ready');
+  });
+  it('reports already verified identical source as unchanged without a new token', () => {
+    const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
+    assert.equal(compilationState(f.window).phase, 'ready');
+    const result = beginCompilation(f.window, 'new-token', 'hash', true);
+    assert.equal(result.phase, 'unchanged'); assert.equal(result.token, 'run');
+  });
+  it('does not attribute another strategy title to the requested compile', () => {
+    const f = fixture(); beginCompilation(f.window, 'run', 'hash', true, 'Requested title');
+    f.compile(); f.update(); assert.equal(compilationState(f.window).phase, 'pending');
+  });
+  it('invalidates source verification when an external editor replaces the script', () => {
+    const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
+    assert.equal(compilationState(f.window).phase, 'ready');
+    f.compile('external-script');
+    assert.equal(readStrategyReport(f.window).code, 'REPORT_INVALIDATED');
   });
   it('does not treat a report getter that returns copies as proof of a fresh calculation', () => {
     const f = fixture(); const original = f.source.reportData;

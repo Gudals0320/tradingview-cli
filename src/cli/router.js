@@ -4,7 +4,7 @@
  */
 import { parseArgs } from 'node:util';
 import { disconnect, configureTarget } from '../connection.js';
-import { assertSessionAccess } from '../session.js';
+import { assertSessionAccess, withReadOnlySession } from '../session.js';
 
 /** @type {Map<string, { description: string, options?: object, handler: Function, subcommands?: Map<string, object> }>} */
 const commands = new Map();
@@ -67,6 +67,9 @@ export async function run(argv) {
   const cmdName = args[0];
   const offline = cmdName === 'update' || cmdName === 'session'
     || (cmdName === 'pine' && ['analyze', 'check'].includes(args[1]));
+  // These handlers only inspect existing state. Data/Pine reads can open panels
+  // or trigger recalculation, so they deliberately remain blocked in recovery.
+  const readOnly = ['status', 'state'].includes(cmdName) || (cmdName === 'tab' && args[1] === 'list');
   const cmd = commands.get(cmdName);
 
   if (!cmd) {
@@ -111,7 +114,7 @@ export async function run(argv) {
         }
         process.exit(0);
       }
-      await execute(handler, values, positionals, offline);
+      await execute(handler, values, positionals, offline, readOnly);
     } catch (err) {
       handleError(err);
     }
@@ -129,17 +132,20 @@ export async function run(argv) {
         printCommandHelp(cmdName, cmd);
         process.exit(0);
       }
-      await execute(handler, values, positionals, offline);
+      await execute(handler, values, positionals, offline, readOnly);
     } catch (err) {
       handleError(err);
     }
   }
 }
 
-async function execute(handler, values, positionals, offline = false) {
+async function execute(handler, values, positionals, offline = false, readOnly = false) {
   try {
-    if (!offline) assertSessionAccess();
-    const result = await handler(values, positionals);
+    const action = async () => {
+      if (!offline) assertSessionAccess();
+      return handler(values, positionals);
+    };
+    const result = await (readOnly ? withReadOnlySession(action) : action());
     console.log(JSON.stringify(result, null, 2));
     process.exitCode = result?.success === false || result?.compiled === false || result?.has_errors === true ? 1 : 0;
   } catch (err) {

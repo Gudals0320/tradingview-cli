@@ -21,13 +21,15 @@ The runner exclusively owns the Desktop session, selects the explicit layout, tr
 
 After success or failure, it removes only this run's example studies and verifies restoration of the selected chart's symbol, timeframe, type and editor draft. It restores the previously active tab. Cleanup failures produce a nonzero exit code and retain the recovery journal. The selected layout tab remains open. TradingView may share the editor draft between tabs, so do not edit Pine elsewhere while the batch is running. External draft/chart changes are not overwritten silently.
 
-Duplicate open layouts are rejected; use a uniquely resolved `--target-id` from `tv tab list` when appropriate. Signal interruption requests cooperative cleanup. Forced termination cannot run cleanup, but the next batch refuses to adopt the interrupted state as a new baseline. After inspecting `tv session status`, run explicit recovery against the still-open recorded target:
+Duplicate open layouts are rejected; use a uniquely resolved `--target-id` from `tv tab list` when appropriate. Signal interruption requests cooperative cleanup. Forced termination cannot run cleanup, but the next batch refuses to adopt the interrupted state as a new baseline. After inspecting `tv session status`, run explicit recovery:
 
 ```powershell
-node examples/pine-batch.js --chart-id YOUR_DISPOSABLE_CHART_ID --recover --out results/recovery.json
+node examples/pine-batch.js --recover --out results/recovery.json
 ```
 
-Recovery refuses missing targets and unrelated draft/chart changes. Keep the recorded layout open until recovery completes. Recovery snapshots contain the draft and are stored in the operating-system user's temporary directory; they are not committed or uploaded.
+Recovery first uses the recorded target, then the native tab identity or a uniquely open recorded layout. This allows recovery after CDP target IDs change. Reopen a missing layout; if duplicates are open, pass `--target-id` with a resolved ID from `tv tab list`. Recovery refuses unrelated draft/chart changes and reports the allowed chart states. `tv status`, `tv state` and `tv tab list` remain read-only and available during recovery; they are still blocked while another batch is alive.
+
+To explicitly abandon restoration, copy `recovery_run_id` from `tv session status` and run `tv session discard --run-id RECOVERY_RUN_ID`. This leaves Desktop as it is and archives the journal, including its saved draft, for manual recovery. A missing or mismatched run ID fails without discarding anything. Recovery snapshots are stored in the operating-system user's temporary directory; they are not committed or uploaded. Processes with different users or temporary directories do not share the cooperative lock. A killed acquisition process can leave an `.acquire` gate; inspect its recorded PID before manually removing that gate.
 
 Requested history coverage is checked against the actual report range. Insufficient or unavailable coverage fails by default. `--allow-partial-history` explicitly permits a shorter range, marks `history_coverage.complete:false`, and records the actual range and warning. This is independent of the entry-signal window described above. For calendar intervals, coverage accounts for the final bar's duration.
 

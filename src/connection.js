@@ -1,7 +1,7 @@
 import CDP from 'chrome-remote-interface';
 import { CDP_HOST, CDP_PORT } from './config.js';
 import { getDesktopInventory, activeTarget, bindShellTab } from './desktop.js';
-import { assertSessionAccess } from './session.js';
+import { assertSessionAccess, isReadOnlySession } from './session.js';
 
 let client = null;
 let targetInfo = null;
@@ -124,7 +124,7 @@ async function findChartTarget() {
   const inventory = await getDesktopInventory();
   const target = activeTarget(inventory);
   const tab = inventory.tabs.find((item) => item.id === target.id && item.active);
-  if (tab?.shell_tab_id) await bindShellTab(target.id, tab.shell_tab_id);
+  if (tab?.shell_tab_id && !isReadOnlySession()) await bindShellTab(target.id, tab.shell_tab_id);
   return target;
 }
 

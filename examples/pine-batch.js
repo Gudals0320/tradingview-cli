@@ -41,12 +41,30 @@ export function verifyHistory(report, options) {
   return { complete, actual: { from: from || null, to: to || null }, warnings: complete ? [] : ['Requested history is only partially covered.'] };
 }
 
-async function restoreSnapshot(snapshot, api) {
+export function resolveRecoveryTarget(snapshot, tabs, explicitTargetId) {
+  const usable = tabs.filter(tab => tab.id && tab.resolved !== false);
+  if (explicitTargetId) {
+    const explicit = usable.find(tab => tab.id === explicitTargetId);
+    if (!explicit || (snapshot.chart_id && explicit.chart_id !== snapshot.chart_id)) throw new Error('The recovery --target-id must identify an open tab of the recorded chart layout.');
+    return explicit;
+  }
+  const recorded = usable.find(tab => tab.id === snapshot.target_id && (!snapshot.chart_id || tab.chart_id === snapshot.chart_id));
+  if (recorded) return recorded;
+  const native = usable.filter(tab => snapshot.shell_tab_id && tab.shell_tab_id === snapshot.shell_tab_id
+    && (!snapshot.window_id || tab.window_id === snapshot.window_id)
+    && (!snapshot.chart_id || tab.chart_id === snapshot.chart_id));
+  if (native.length === 1) return native[0];
+  const layouts = usable.filter(tab => snapshot.chart_id && tab.chart_id === snapshot.chart_id);
+  if (layouts.length === 1) return layouts[0];
+  throw new Error(layouts.length ? `Recovery layout is ambiguous. Repeat --recover with --target-id chosen from: ${layouts.map(tab => tab.id).join(', ')}`
+    : `Recovery target is unavailable. Open recorded layout ${snapshot.chart_id || snapshot.target_id}, inspect tv tab list, then retry --recover; or abandon restoration with tv session discard --run-id ${snapshot.run_id}`);
+}
+
+async function restoreSnapshot(snapshot, api, explicitTargetId) {
   const errors = [];
   const attempt = async (name, action) => { try { await action(); } catch (error) { errors.push(`${name}: ${error.message}`); } };
   const available = await api.tabs.list();
-  const target = available.tabs.find(tab => tab.id === snapshot.target_id);
-  if (!target) throw new Error('Recovery target disappeared; restore the recorded layout manually before starting another batch.');
+  const target = resolveRecoveryTarget(snapshot, available.tabs, explicitTargetId);
   await api.tabs.switchTab({ target_id: target.id });
   if (snapshot.before_chart) {
     await attempt('owned studies', async () => {
@@ -58,7 +76,7 @@ async function restoreSnapshot(snapshot, api) {
     if (typeof snapshot.source_before === 'string') await attempt('editor draft', async () => {
       const current = (await api.pine.getSource()).source;
       const hash = session.sourceHash(current);
-      if (!(snapshot.owned_source_hashes || [snapshot.last_source_hash]).includes(hash) && hash !== session.sourceHash(snapshot.source_before)) throw new Error('Draft changed outside this run; refusing to overwrite it.');
+      if (!(snapshot.owned_source_hashes || [snapshot.last_source_hash]).includes(hash) && hash !== session.sourceHash(snapshot.source_before)) throw new Error(`Draft changed outside this run; refusing to overwrite it. Preserve the current draft manually before restoring the recorded one, or abandon restoration with tv session discard --run-id ${snapshot.run_id}`);
       await api.pine.setSource({ source: snapshot.source_before });
       if ((await api.pine.getSource()).source !== snapshot.source_before) throw new Error('Restored draft did not match.');
     });
@@ -67,7 +85,7 @@ async function restoreSnapshot(snapshot, api) {
       const old = snapshot.before_chart;
       const matches = value => current.symbol === value.symbol && normalizeTimeframe(current.resolution) === normalizeTimeframe(value.resolution) && current.chartType === value.chartType;
       const allowed = [old, ...(snapshot.owned_chart_states || []), snapshot.owned_chart].filter(Boolean);
-      if (!allowed.some(matches)) throw new Error('Chart changed outside this run; refusing to overwrite it.');
+      if (!allowed.some(matches)) throw new Error(`Chart changed outside this run; refusing to overwrite it. Current: ${JSON.stringify({ symbol: current.symbol, resolution: current.resolution, chartType: current.chartType })}. Set the chart manually to one of the recorded allowed states before retrying --recover: ${JSON.stringify(allowed.map(value => ({ symbol: value.symbol, resolution: value.resolution, chartType: value.chartType })))}; or abandon restoration with tv session discard --run-id ${snapshot.run_id}`);
       if (current.symbol !== old.symbol) await api.chart.setSymbol({ symbol: old.symbol });
       if (current.resolution !== old.resolution) await api.chart.setTimeframe({ timeframe: old.resolution });
       if (current.chartType !== old.chartType) await api.chart.setType({ chart_type: String(old.chartType) });
@@ -79,22 +97,26 @@ async function restoreSnapshot(snapshot, api) {
     if (snapshot.pine_panel_before === false && api.pine.closePanel) {
       const closed = await api.pine.closePanel(); if (!closed.closed) throw new Error(closed.error);
     }
-    if (snapshot.original_active_target_id && snapshot.original_active_target_id !== snapshot.target_id) await api.tabs.switchTab({ target_id: snapshot.original_active_target_id });
+    if (snapshot.original_active_target_id && snapshot.original_active_target_id !== snapshot.target_id) {
+      const original = resolveRecoveryTarget(snapshot.original_active_tab || { target_id: snapshot.original_active_target_id }, available.tabs);
+      await api.tabs.switchTab({ target_id: original.id });
+    }
   });
   if (errors.length) throw new Error(errors.join('; '));
 }
 
 export async function runBatch(options, api = DEFAULT_API) {
-  if (!options.chartId && !options.targetId) throw new Error('An explicit --chart-id or --target-id is required; use a separate disposable layout');
+  if (!options.recover && !options.chartId && !options.targetId) throw new Error('An explicit --chart-id or --target-id is required; use a separate disposable layout');
   const lease = (api.session || session).acquireSession({ recover: Boolean(options.recover) });
-  let snapshot = null, failure = null, restored = false;
+  let snapshot = null, failure = null, restored = false, recoveryAttempted = false;
   const results = [];
   const stop = () => { if (options.signal?.aborted) throw new Error('Batch interrupted; restoring the saved snapshot.'); };
   try {
     if (options.recover) {
       snapshot = lease.pending()?.snapshot;
       if (!snapshot) throw new Error('There is no pending recovery snapshot.');
-      await restoreSnapshot(snapshot, api); restored = true; snapshot = null;
+      recoveryAttempted = true;
+      await restoreSnapshot(snapshot, api, options.targetId); restored = true; snapshot = null;
       return { success: true, recovered: true, restored: true, results: [] };
     }
     const listed = await api.tabs.list();
@@ -102,8 +124,10 @@ export async function runBatch(options, api = DEFAULT_API) {
     if (matching.length !== 1) throw new Error(matching.length ? 'Duplicate chart layouts are open; use a unique --target-id.' : 'The specified chart layout is not open in TradingView Desktop');
     const target = matching[0];
     if (!target.id || target.resolved === false) throw new Error('The requested tab cannot be resolved unambiguously.');
-    snapshot = { run_id: lease.run_id, target_id: target.id, chart_id: target.chart_id,
-      original_active_target_id: listed.tabs.find(tab => tab.active && tab.window_id === target.window_id)?.id || null };
+    const active = listed.tabs.find(tab => tab.active && tab.window_id === target.window_id);
+    const identity = tab => tab ? { target_id: tab.id, chart_id: tab.chart_id, shell_tab_id: tab.shell_tab_id, window_id: tab.window_id } : null;
+    snapshot = { run_id: lease.run_id, ...identity(target),
+      original_active_target_id: active?.id || null, original_active_tab: identity(active) };
     lease.checkpoint({ phase: 'selecting', snapshot });
     await api.tabs.switchTab({ target_id: target.id });
     const viewport = await api.connection.evaluate('({width:innerWidth,height:innerHeight})');
@@ -174,8 +198,8 @@ export async function runBatch(options, api = DEFAULT_API) {
     }
   } catch (error) { failure = error; }
   finally {
-    try { if (snapshot) await restoreSnapshot(snapshot, api); restored = true; }
-    catch (error) { failure = new Error([failure?.message, `Recovery failed: ${error.message}. Use --recover after inspecting the saved journal.`].filter(Boolean).join('; ')); }
+    try { if (!recoveryAttempted) { if (snapshot) await restoreSnapshot(snapshot, api); restored = true; } }
+    catch (error) { failure = new Error([failure?.message, `Recovery failed: ${error.message}. Inspect tv session status / tv tab list before retrying --recover.`].filter(Boolean).join('; ')); }
     lease.release({ restored });
   }
   if (failure) throw failure;

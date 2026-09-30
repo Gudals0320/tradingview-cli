@@ -3,8 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { CDP_HOST, CDP_PORT } from './config.js';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 const owned = new Map();
+const access = new AsyncLocalStorage();
+export function withReadOnlySession(action) { return access.run({ readOnly: true }, action); }
+export function isReadOnlySession() { return access.getStore()?.readOnly === true; }
 export function sessionPaths({ host = CDP_HOST, port = CDP_PORT, directory = join(tmpdir(), 'tradingview-cli-sessions') } = {}) {
   const endpoint = `${host === 'localhost' ? '127.0.0.1' : host}:${port}`;
   const key = createHash('sha256').update(endpoint).digest('hex');
@@ -21,8 +25,12 @@ export function sessionStatus(options = {}) {
   const paths = sessionPaths(options);
   let lock = null;
   if (existsSync(paths.lock)) { try { lock = read(paths.lock); } catch { lock = { malformed: true }; } }
+  let pending = null;
+  if (existsSync(paths.journal)) { try { pending = read(paths.journal); } catch { /* report existence without exposing draft */ } }
   return { locked: Boolean(lock), owner_pid: lock?.pid || null, run_id: lock?.run_id || null,
     owner_alive: lock ? alive(lock.pid) : false, recovery_required: existsSync(paths.journal), journal_path: paths.journal,
+    recovery_run_id: pending?.run_id || pending?.snapshot?.run_id || null,
+    recovery_target: pending?.snapshot ? { target_id: pending.snapshot.target_id, chart_id: pending.snapshot.chart_id } : null,
     acquisition_in_progress: existsSync(paths.gate) };
 }
 
@@ -32,7 +40,8 @@ export function assertSessionAccess(options = {}) {
   if (owned.has(paths.key)) return;
   const state = sessionStatus(options);
   if (state.locked && state.owner_alive) throw failure('SESSION_BUSY', 'Another TradingView CLI process owns this Desktop session.');
-  if (state.recovery_required) throw failure('RECOVERY_REQUIRED', `An interrupted batch needs explicit recovery: ${paths.journal}`);
+  if (state.recovery_required && !(options.readOnly || isReadOnlySession())) throw failure('RECOVERY_REQUIRED',
+    `An interrupted batch needs recovery. Inspect with tv session status, tv tab list or tv state. Recover with pine-batch --recover, or explicitly abandon restoration with tv session discard --run-id ${state.recovery_run_id || '<recorded-run-id>'}. Journal: ${paths.journal}`);
 }
 
 export function acquireSession(options = {}) {
@@ -76,6 +85,21 @@ export function acquireSession(options = {}) {
     },
   };
   } finally { unlinkSync(paths.gate); }
+}
+
+/** Explicitly abandon restoration; archive the draft for manual recovery. */
+export function discardSession({ runId, ...options } = {}) {
+  if (!runId) throw failure('RUN_ID_REQUIRED', 'Pass the exact recovery_run_id from tv session status with --run-id.');
+  const lease = acquireSession({ ...options, recover: true });
+  try {
+    const pending = lease.pending();
+    if (!pending) throw failure('RECOVERY_NOT_FOUND', 'There is no recovery journal to discard.');
+    if (runId !== (pending.run_id || pending.snapshot?.run_id)) throw failure('RUN_ID_MISMATCH', 'The run ID does not match the saved recovery journal; nothing was discarded.');
+    const backup = `${lease.paths.journal}.${randomUUID()}.discarded`;
+    renameSync(lease.paths.journal, backup);
+    return { success: true, discarded: true, restored: false, run_id: runId, backup_path: backup,
+      warning: 'Desktop changes were left in place. The saved draft remains in the archived journal.' };
+  } finally { lease.release(); }
 }
 
 export function sourceHash(source) { return createHash('sha256').update(source).digest('hex'); }

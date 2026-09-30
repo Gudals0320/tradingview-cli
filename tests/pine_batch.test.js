@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { createStrategy, runBatch, verifyHistory } from '../examples/pine-batch.js';
+import { createStrategy, runBatch, verifyHistory, resolveRecoveryTarget } from '../examples/pine-batch.js';
 import { sourceHash } from '../src/session.js';
 
 const options = { chartId: 'fixture-layout', symbol: 'BINANCE:BTCUSDT', timeframe: '60', start: '2026-08-01T00:00:00Z', end: '2026-09-30T00:00:00Z' };
@@ -105,5 +105,24 @@ describe('Pine batch example', () => {
     assert.equal(result.complete, false);
     assert.equal(result.actual.from, report.backtest_window.from);
     assert.equal(result.warnings.length, 1);
+  });
+  it('recovers a recreated CDP target by native tab or unique chart ID', () => {
+    const snapshot = { target_id: 'old-target', chart_id: 'layout', shell_tab_id: 'native', window_id: 'window' };
+    const tab = { id: 'new-target', chart_id: 'layout', shell_tab_id: 'native', window_id: 'window' };
+    assert.equal(resolveRecoveryTarget(snapshot, [tab]).id, 'new-target');
+    assert.equal(resolveRecoveryTarget(snapshot, [{ ...tab, shell_tab_id: 'new-native' }]).id, 'new-target');
+    const duplicate = { ...tab, id: 'duplicate', shell_tab_id: 'other' };
+    assert.equal(resolveRecoveryTarget(snapshot, [tab, duplicate]).id, 'new-target');
+    assert.throws(() => resolveRecoveryTarget({ ...snapshot, shell_tab_id: null }, [tab, duplicate]), /ambiguous/);
+    assert.equal(resolveRecoveryTarget(snapshot, [tab, duplicate], 'duplicate').id, 'duplicate');
+    assert.throws(() => resolveRecoveryTarget(snapshot, [], 'missing'), /recorded chart/);
+  });
+  it('attempts failed recovery once and preserves the journal', async () => {
+    const f = fixture(); let attempts = 0, released = null;
+    f.api.session.acquireSession = () => ({ pending: () => ({ snapshot: { target_id: 'gone', chart_id: 'gone', run_id: 'saved' } }),
+      release: value => { released = value; } });
+    f.api.tabs.list = async () => { attempts++; return { tabs: [] }; };
+    await assert.rejects(runBatch({ recover: true }, f.api), /Open recorded layout gone/);
+    assert.equal(attempts, 1); assert.deepEqual(released, { restored: false });
   });
 });

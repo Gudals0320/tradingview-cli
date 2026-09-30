@@ -368,7 +368,12 @@ export async function smartCompile({ timeout = 30000, _deps } = {}) {
   const source = _deps?.source || (await getSource()).source;
   const token = randomUUID();
   const strategyMode = /^\s*strategy\s*\(/m.test(source);
-  await inspect(`(() => { ${STRATEGY_PAGE_CODE}; return beginCompilation(window, ${JSON.stringify(token)}, ${JSON.stringify(sourceHash(source))}, ${strategyMode}); })()`);
+  const literal = source.match(/^\s*strategy\s*\(\s*(?:title\s*=\s*)?("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/m)?.[1];
+  const strategyName = literal ? literal.slice(1, -1).replace(/\\([\\"'nrt])/g, (_, ch) => ({ n: '\n', r: '\r', t: '\t' }[ch] || ch)) : null;
+  const begun = await inspect(`(() => { ${STRATEGY_PAGE_CODE}; return beginCompilation(window, ${JSON.stringify(token)}, ${JSON.stringify(sourceHash(source))}, ${strategyMode}, ${JSON.stringify(strategyName)}); })()`);
+  if (begun?.phase === 'unchanged') return { success: true, compiled: true, compile_performed: false, unchanged: true,
+    has_errors: false, errors: [], warnings: [], strategy_id: begun.strategy_id, strategy_inputs: begun.inputs,
+    compilation_token: begun.token, report_ready: true };
   const button = await inspect(CLICK_COMPILE);
   if (!button && !_deps) {
     const client = await getClient();
