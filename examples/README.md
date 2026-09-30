@@ -31,6 +31,8 @@ Recovery first uses the recorded target, then the native tab identity or a uniqu
 
 To explicitly abandon restoration, copy `recovery_run_id` from `tv session status` and run `tv session discard --run-id RECOVERY_RUN_ID`. This leaves Desktop as it is and archives the journal, including its saved draft, for manual recovery. A missing or mismatched run ID fails without discarding anything. Recovery snapshots are stored in the operating-system user's temporary directory; they are not committed or uploaded. Processes with different users or temporary directories do not share the cooperative lock. A killed acquisition process can leave an `.acquire` gate; inspect its recorded PID before manually removing that gate.
 
+A corrupted journal or one without a run ID is preserved on recovery failure and cannot be discarded through the run-ID command. Inspect `journal_path` from `session status` and manually archive that file before continuing; keep its saved draft for manual restoration.
+
 Requested history coverage is checked against the actual report range. Insufficient or unavailable coverage fails by default. `--allow-partial-history` explicitly permits a shorter range, marks `history_coverage.complete:false`, and records the actual range and warning. This is independent of the entry-signal window described above. For calendar intervals, coverage accounts for the final bar's duration.
 
 ## Result interpretation
