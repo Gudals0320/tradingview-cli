@@ -9,7 +9,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'child_process';
 import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { writeFileSync, unlinkSync } from 'fs';
 
 function require_fs() { return { writeFileSync, unlinkSync }; }
@@ -150,9 +150,33 @@ describe('CLI — pine check (server compile)', { skip: process.env.TRADINGVIEW_
   it('returns errors for invalid Pine Script', () => {
     const source = '//@version=6\nindicator("test")\nplot(nonexistent_var)';
     const { stdout, exitCode } = run(['pine', 'check'], { input: source });
-    assert.equal(exitCode, 0);
+    assert.equal(exitCode, 1);
     const result = JSON.parse(stdout);
     assert.equal(result.compiled, false);
     assert.ok(result.error_count > 0);
+  });
+});
+
+describe('CLI operation result exit contract', () => {
+  function simulated(handler) {
+    const router = pathToFileURL(join(__dirname, '..', 'src', 'cli', 'router.js')).href;
+    try {
+      const stdout = execFileSync(process.execPath, ['--input-type=module', '-e',
+        `import {register,run} from ${JSON.stringify(router)};register('fixture',{handler:${handler}});await run(['node','tv','fixture']);`], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+      return { code: 0, stdout };
+    } catch (error) { return { code: error.status, stdout: error.stdout, stderr: error.stderr }; }
+  }
+  it('returns 1 for structured operation failure', () => {
+    const result = simulated('async()=>({success:false,error:"not ready"})');
+    assert.equal(result.code, 1); assert.equal(JSON.parse(result.stdout).success, false);
+  });
+  it('returns 1 for failed compilation', () => {
+    assert.equal(simulated('async()=>({success:true,compiled:false})').code, 1);
+  });
+  it('does not misclassify a generic message containing connection', () => {
+    assert.equal(simulated('async()=>{throw new Error("connection field is invalid")}').code, 1);
+  });
+  it('returns 2 only for a typed connection failure', () => {
+    assert.equal(simulated('async()=>{const e=new Error("offline");e.code="CDP_CONNECTION";throw e}').code, 2);
   });
 });

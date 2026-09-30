@@ -3,6 +3,7 @@
  */
 import { evaluate as _evaluate, evaluateAsync as _evaluateAsync, safeString, requireFinite } from '../connection.js';
 import { waitForChartReady as _waitForChartReady } from '../wait.js';
+import { normalizeTimeframe } from '../chart-context.js';
 
 const CHART_API = 'window.TradingViewApi._activeChartWidgetWV.value()';
 
@@ -49,10 +50,11 @@ export async function setSymbol({ symbol, _deps }) {
     })()
   `);
   const ready = await waitForChartReady(symbol);
-  return { success: true, symbol, chart_ready: ready };
+  return { success: ready, symbol, chart_ready: ready, ...(!ready && { error: `Chart did not become ready for ${symbol}.` }) };
 }
 
 export async function setTimeframe({ timeframe, _deps }) {
+  timeframe = normalizeTimeframe(timeframe);
   const { evaluate, waitForChartReady } = _resolve(_deps);
   await evaluate(`
     (function() {
@@ -61,7 +63,7 @@ export async function setTimeframe({ timeframe, _deps }) {
     })()
   `);
   const ready = await waitForChartReady(null, timeframe);
-  return { success: true, timeframe, chart_ready: ready };
+  return { success: ready, timeframe, chart_ready: ready, ...(!ready && { error: `Chart did not reach timeframe ${timeframe}.` }) };
 }
 
 export async function setType({ chart_type, _deps }) {

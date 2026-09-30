@@ -3,7 +3,8 @@
  * Zero dependencies — uses only Node.js built-ins.
  */
 import { parseArgs } from 'node:util';
-import { disconnect } from '../connection.js';
+import { disconnect, configureTarget } from '../connection.js';
+import { assertSessionAccess } from '../session.js';
 
 /** @type {Map<string, { description: string, options?: object, handler: Function, subcommands?: Map<string, object> }>} */
 const commands = new Map();
@@ -13,7 +14,7 @@ export function register(name, config) {
 }
 
 function printHelp() {
-  console.log('Usage: tv <command> [options]\n');
+  console.log('Usage: tv [--target CDP_ID] <command> [options]\n');
   console.log('Commands:');
   const maxLen = Math.max(...[...commands.keys()].map(k => k.length));
   for (const [name, cmd] of commands) {
@@ -53,6 +54,10 @@ function printCommandHelp(name, cmd) {
 
 export async function run(argv) {
   const args = argv.slice(2);
+  if (args[0] === '--target') {
+    if (!args[1] || args[1].startsWith('--')) { handleError(new Error('--target requires a CDP target ID.')); return; }
+    configureTarget(args[1]); args.splice(0, 2);
+  }
 
   if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
     printHelp();
@@ -60,6 +65,8 @@ export async function run(argv) {
   }
 
   const cmdName = args[0];
+  const offline = cmdName === 'update' || cmdName === 'session'
+    || (cmdName === 'pine' && ['analyze', 'check'].includes(args[1]));
   const cmd = commands.get(cmdName);
 
   if (!cmd) {
@@ -104,7 +111,7 @@ export async function run(argv) {
         }
         process.exit(0);
       }
-      await execute(handler, values, positionals);
+      await execute(handler, values, positionals, offline);
     } catch (err) {
       handleError(err);
     }
@@ -122,18 +129,19 @@ export async function run(argv) {
         printCommandHelp(cmdName, cmd);
         process.exit(0);
       }
-      await execute(handler, values, positionals);
+      await execute(handler, values, positionals, offline);
     } catch (err) {
       handleError(err);
     }
   }
 }
 
-async function execute(handler, values, positionals) {
+async function execute(handler, values, positionals, offline = false) {
   try {
+    if (!offline) assertSessionAccess();
     const result = await handler(values, positionals);
     console.log(JSON.stringify(result, null, 2));
-    process.exitCode = 0;
+    process.exitCode = result?.success === false || result?.compiled === false || result?.has_errors === true ? 1 : 0;
   } catch (err) {
     handleError(err);
   } finally {
@@ -146,7 +154,8 @@ async function execute(handler, values, positionals) {
 function handleError(err) {
   const message = err.message || String(err);
   // Connection failures get exit code 2
-  if (/CDP|connection|ECONNREFUSED|not running/i.test(message)) {
+  if (['CDP_CONNECTION', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND'].includes(err.code)
+    || ['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND'].includes(err.cause?.code)) {
     console.error(JSON.stringify({ success: false, error: message }, null, 2));
     process.exitCode = 2;
     return;

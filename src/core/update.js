@@ -24,7 +24,8 @@ function _resolve(deps) {
 export async function update({ _deps } = {}) {
   const { execSync, existsSync, repoRoot } = _resolve(_deps);
   const git = (args, timeout = 15000) =>
-    execSync(`git ${args}`, { cwd: repoRoot, timeout, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
+    execSync(`git ${args}`, { cwd: repoRoot, timeout, stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'Never' } }).toString().trim();
 
   if (!existsSync(join(repoRoot, '.git'))) {
     return {

@@ -117,6 +117,14 @@ For a sequential Pine parameter sweep with source verification and cleanup, see 
 
 Most commands operate on the currently active TradingView chart. Entity IDs returned by `tv state`, `tv draw list`, or related commands are session-specific.
 
+Desktop selection follows the shell's active tab, not CDP list order or page visibility. `tv tab list` reports shell order, native tab IDs, and `resolved`. Ambiguous duplicate layouts are rejected. Use `tv --target CDP_ID state` for an explicit page; the ID is session-specific. `tab switch` verifies the actual shell selection and does not scan through unrelated tabs.
+
+Operation results with `success:false`, failed compilation, and fatal editor diagnostics exit with code 1. Typed CDP transport failures exit with code 2. Warning-only Pine diagnostics do not fail compilation. `pine analyze` is a limited offline heuristic, not a Pine compiler; use `pine check` or Desktop compilation for syntax validation.
+
+After CLI compilation, strategy data waits for a provably changed report instead of accepting a matching title or a fixed delay. Strategy JSON includes actual backtest/trade/loaded ranges, input values and unit metadata. `data trades` exposes `order_seq`; `time_index` remains a deprecated ordinal alias. `data ledger --offset 0 --limit 100` provides paginated native trades with UTC entry/exit times and raw profit/commission fields.
+
+Batch jobs own a Desktop-wide lock because Pine drafts can be shared across layouts. Conflicting CLI operations are rejected. `tv session status` shows ownership and recovery status without revealing the saved draft. Abruptly killed batches leave a private temporary recovery journal and refuse subsequent experiments until explicit recovery. See the example documentation for `--recover` and history-coverage options.
+
 ## JSON Output and Exit Codes
 
 Successful commands write formatted JSON to stdout:

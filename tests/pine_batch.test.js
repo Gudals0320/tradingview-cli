@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { createStrategy, runBatch } from '../examples/pine-batch.js';
+import { createStrategy, runBatch, verifyHistory } from '../examples/pine-batch.js';
+import { sourceHash } from '../src/session.js';
 
 const options = { chartId: 'fixture-layout', symbol: 'BINANCE:BTCUSDT', timeframe: '60', start: '2026-08-01T00:00:00Z', end: '2026-09-30T00:00:00Z' };
 
@@ -11,8 +12,10 @@ function fixture({ compileError = false, staleReport = false, foreign = [], rest
   let writes = 0, reports = 0;
   const api = {
     sleep: async () => {},
-    tabs: { list: async () => ({ tabs: [{ chart_id: options.chartId }] }), switchTab: async () => {} },
-    connection: { evaluate: async (expression) => expression.includes('innerWidth') ? { width: 1280, height: 720 } : foreign },
+    session: { acquireSession: () => ({ run_id: 'fixture-run', checkpoint: () => {}, release: () => {}, pending: () => null }) },
+    tabs: { list: async () => ({ tabs: [{ id: 'target', chart_id: options.chartId, active: true, resolved: true }] }), switchTab: async () => {} },
+    connection: { evaluate: async (expression) => expression.includes('innerWidth') ? { width: 1280, height: 720 }
+      : expression.includes('readChartContext') ? { symbol: state.symbol, resolution: state.resolution, chart_type: state.chartType, bar_count: 100, aliases: [] } : foreign },
     chart: {
       getState: async () => structuredClone(state),
       setSymbol: async ({ symbol }) => { state.symbol = symbol; },
@@ -27,15 +30,18 @@ function fixture({ compileError = false, staleReport = false, foreign = [], rest
         writes++; source = next;
       },
       smartCompile: async () => {
-        if (compileError) return { has_errors: true, errors: ['invalid fixture'] };
+        if (compileError) return { success: false, has_errors: true, errors: ['invalid fixture'] };
         state.studies.push({ id: 'example', name: source.match(/strategy\("([^"]+)"/)[1] });
-        return { has_errors: false };
+        return { success: true, has_errors: false, strategy_id: 'example', compilation_token: 'fixture-token', strategy_inputs: [] };
       },
     },
     data: {
       getStrategyResults: async () => {
         reports++;
-        return { success: true, strategy: staleReport ? 'another strategy' : state.studies.at(-1).name, currency: 'USDT', metrics: { total_trades: 0 } };
+        return { success: true, strategy: staleReport ? 'another strategy' : state.studies.at(-1).name,
+          strategy_id: 'example', compilation_token: 'fixture-token', source_hash: sourceHash(source), strategy_inputs: [],
+          context: { symbol: state.symbol, resolution: state.resolution, chart_type: state.chartType, aliases: [], bar_count: 100 },
+          backtest_window: { from: options.start, to: options.end }, currency: 'USDT', metrics: { total_trades: 0 } };
       },
       getTrades: async () => ({ trades: [], total_orders: 0 }),
     },
@@ -59,7 +65,7 @@ describe('Pine batch example', () => {
 
   it('does not overwrite a layout containing another strategy', async () => {
     const f = fixture({ foreign: ['Personal strategy'] });
-    await assert.rejects(runBatch(options, f.api), /Remove other strategies/);
+    await assert.rejects(runBatch(options, f.api), /Remove existing strategies/);
     assert.equal(f.writes(), 0);
   });
 
@@ -82,7 +88,7 @@ describe('Pine batch example', () => {
   it('rejects stale reports after bounded polling and still restores the original draft', async () => {
     const f = fixture({ staleReport: true });
     await assert.rejects(runBatch(options, f.api), /refusing stale results/);
-    assert.equal(f.reports(), 12);
+    assert.equal(f.reports(), 1);
     assert.equal(f.source(), 'original editor draft');
     assert.deepEqual(f.state, f.initial);
   });
@@ -91,5 +97,13 @@ describe('Pine batch example', () => {
     const f = fixture({ restoreError: true });
     await assert.rejects(runBatch(options, f.api), /editor draft: restore failed/);
     assert.deepEqual(f.state, f.initial);
+  });
+  it('rejects insufficient actual history unless partial history is explicitly allowed', () => {
+    const report = { backtest_window: { from: '2026-09-14T00:00:00Z', to: options.end } };
+    assert.throws(() => verifyHistory(report, options), /not covered/);
+    const result = verifyHistory(report, { ...options, allowPartialHistory: true });
+    assert.equal(result.complete, false);
+    assert.equal(result.actual.from, report.backtest_window.from);
+    assert.equal(result.warnings.length, 1);
   });
 });

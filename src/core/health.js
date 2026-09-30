@@ -2,7 +2,9 @@
  * Core health/discovery/launch logic.
  */
 import { getClient, getTargetInfo, evaluate, CDP_HOST, CDP_PORT } from '../connection.js';
-import { existsSync, cpSync, rmSync, readdirSync } from 'fs';
+import { existsSync, cpSync, rmSync, readdirSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { createHash } from 'crypto';
 import { execSync, execFileSync, spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { isPersonalOrigin } from '../repository.js';
@@ -23,10 +25,21 @@ export async function checkForUpdate({ _deps } = {}) {
     const local = git(['rev-parse', 'HEAD']);
     const origin = git(['remote', 'get-url', 'origin']);
     if (local && isPersonalOrigin(origin)) {
+      const cacheDirectory = join(tmpdir(), 'tradingview-cli-update-cache');
+      const cacheFile = join(cacheDirectory, `${createHash('sha256').update(opts.cwd + origin).digest('hex')}.json`);
+      if (!_deps) {
+        try {
+          const cached = JSON.parse(readFileSync(cacheFile, 'utf8'));
+          if (cached.local === local && Date.now() - cached.at < 3600_000) return cached.value;
+        } catch { /* no cache */ }
+      }
       const remote = git(['ls-remote', '--exit-code', 'origin', 'refs/heads/main']).split(/\s+/)[0];
       if (/^[0-9a-f]{40}$/.test(remote)) value = { update_available: remote !== local,
         local_commit: local.slice(0, 8), latest_commit: remote.slice(0, 8),
         ...(remote !== local && { hint: 'Run tv update, then restart the tv command.' }) };
+      if (!_deps && value) {
+        try { mkdirSync(cacheDirectory, { recursive: true }); writeFileSync(cacheFile, JSON.stringify({ local, at: Date.now(), value })); } catch { /* best effort */ }
+      }
     }
   } catch { /* Missing credentials or network make the update check unavailable. */ }
   if (!_deps) _updateCache = { at: Date.now(), value };
@@ -139,12 +152,12 @@ export async function uiState() {
       for (var i = 0; i < btns.length; i++) {
         var b = btns[i];
         if (b.offsetParent === null || b.offsetWidth < 15) continue;
-        var text = b.textContent.trim();
+        var text = (b.innerText || b.textContent).trim();
         var aria = b.getAttribute('aria-label') || '';
         var dn = b.getAttribute('data-name') || '';
         var label = text || aria || dn;
         if (!label || label.length > 60) continue;
-        var key = label.replace(/[^a-zA-Z0-9 ]/g, '').substring(0, 40);
+        var key = label.substring(0, 60);
         if (seen[key]) continue;
         seen[key] = true;
         var rect = b.getBoundingClientRect();
@@ -159,15 +172,15 @@ export async function uiState() {
       }
       ui.key_buttons = {};
       var keyLabels = {
-        'add_to_chart': /add to chart/i, 'save_and_add': /save and add/i,
-        'update_on_chart': /update on chart/i, 'save': /^Save(Save)?$/,
-        'saved': /^Saved/, 'publish_script': /publish script/i,
+        'add_to_chart': /add to chart|차트에 넣기/i, 'save_and_add': /save and add|저장.*차트/i,
+        'update_on_chart': /update on chart|차트.*업데이트/i, 'save': /^(Save|저장)$/,
+        'saved': /^Saved|저장됨/, 'publish_script': /publish script|스크립트 퍼블리쉬/i,
         'compile_errors': /error/i, 'unsaved_version': /unsaved version/i,
       };
       for (var i = 0; i < btns.length; i++) {
         var b = btns[i];
         if (b.offsetParent === null) continue;
-        var text = b.textContent.trim();
+        var text = (b.innerText || b.textContent).trim();
         for (var k in keyLabels) {
           if (keyLabels[k].test(text)) {
             ui.key_buttons[k] = { text: text.substring(0, 40), disabled: b.disabled, visible: b.offsetWidth > 0 };

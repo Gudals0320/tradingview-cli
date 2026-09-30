@@ -1,73 +1,29 @@
 import { evaluate } from './connection.js';
+import { readChartContext, normalizeTimeframe, symbolMatches } from './chart-context.js';
 
 const DEFAULT_TIMEOUT = 10000;
 const POLL_INTERVAL = 200;
 
-export async function waitForChartReady(expectedSymbol = null, expectedTf = null, timeout = DEFAULT_TIMEOUT) {
-  const start = Date.now();
-  let lastBarCount = -1;
-  let stableCount = 0;
-
-  while (Date.now() - start < timeout) {
-    const state = await evaluate(`
-      (function() {
-        // Check for loading spinner
-        var spinner = document.querySelector('[class*="loader"]')
-          || document.querySelector('[class*="loading"]')
-          || document.querySelector('[data-name="loading"]');
-        var isLoading = spinner && spinner.offsetParent !== null;
-
-        // Try to get bar count from data window or chart
-        var barCount = -1;
-        try {
-          var bars = document.querySelectorAll('[class*="bar"]');
-          barCount = bars.length;
-        } catch {}
-
-        // Get current symbol from header
-        var symbolEl = document.querySelector('[data-name="legend-source-title"]')
-          || document.querySelector('[class*="title"] [class*="apply-common-tooltip"]');
-        var currentSymbol = symbolEl ? symbolEl.textContent.trim() : '';
-
-        return { isLoading: !!isLoading, barCount: barCount, currentSymbol: currentSymbol };
-      })()
-    `);
-
-    if (!state) {
-      await new Promise(r => setTimeout(r, POLL_INTERVAL));
-      continue;
+export async function waitForChartReady(expectedSymbol = null, expectedTf = null, timeout = DEFAULT_TIMEOUT, _deps = {}) {
+  const inspect = _deps.evaluate || evaluate;
+  const sleep = _deps.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
+  const now = _deps.now || Date.now;
+  const start = now(); let signature = null, stable = 0, last = null;
+  while (now() - start < timeout) {
+    last = await inspect(`(${readChartContext.toString()})(window)`);
+    if (last?.feed_error) throw new Error(`Chart feed failed: ${last.feed_error}`);
+    if (last && !last.loading && last.bar_count === 0 && (!expectedSymbol || last.symbol === expectedSymbol)) {
+      throw new Error(`No chart bars are available for ${expectedSymbol || last.symbol}.`);
     }
-
-    // Not ready if still loading
-    if (state.isLoading) {
-      stableCount = 0;
-      await new Promise(r => setTimeout(r, POLL_INTERVAL));
-      continue;
-    }
-
-    // Check symbol match if expected
-    if (expectedSymbol && state.currentSymbol && !state.currentSymbol.toUpperCase().includes(expectedSymbol.toUpperCase())) {
-      stableCount = 0;
-      await new Promise(r => setTimeout(r, POLL_INTERVAL));
-      continue;
-    }
-
-    // Check bar count stability
-    if (state.barCount === lastBarCount && state.barCount > 0) {
-      stableCount++;
-    } else {
-      stableCount = 0;
-    }
-    lastBarCount = state.barCount;
-
-    if (stableCount >= 2) {
-      return true;
-    }
-
-    await new Promise(r => setTimeout(r, POLL_INTERVAL));
+    const ready = last && !last.loading && last.bar_count > 0 && symbolMatches(expectedSymbol, last)
+      && (!expectedTf || normalizeTimeframe(last.resolution) === normalizeTimeframe(expectedTf));
+    if (ready) {
+      const next = [last.symbol, last.resolution, last.bar_count, last.last_bar_time].join('|');
+      if (next === signature) stable++; else { signature = next; stable = 0; }
+      if (stable >= 2) return true;
+    } else { stable = 0; signature = null; }
+    await sleep(POLL_INTERVAL);
   }
-
-  // Timeout — return true anyway, caller should verify
   return false;
 }
 

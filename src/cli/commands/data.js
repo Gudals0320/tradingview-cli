@@ -69,6 +69,14 @@ register('data', {
       },
       handler: (opts) => core.getTrades({ max_trades: opts.max ? Number(opts.max) : undefined }),
     }],
+    ['ledger', {
+      description: 'Get paginated closed/open trade ledger with UTC entry/exit times',
+      options: {
+        offset: { type: 'string', description: 'First trade ordinal (default 0)' },
+        limit: { type: 'string', description: 'Page size (default 100, max 500)' },
+      },
+      handler: (opts) => core.getTradeLedger({ offset: Number(opts.offset || 0), limit: Number(opts.limit || 100) }),
+    }],
     ['equity', {
       description: 'Get strategy equity curve',
       handler: () => core.getEquity(),

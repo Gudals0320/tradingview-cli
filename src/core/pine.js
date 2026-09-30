@@ -5,6 +5,9 @@
  */
 import { evaluate, evaluateAsync, getClient } from '../connection.js';
 import { findPineEditor, requestPineEditor, clickPineCompileButton } from './desktop-dom.js';
+import { STRATEGY_PAGE_CODE, splitMarkers, formatDiagnostic } from '../strategy-state.js';
+import { sourceHash } from '../session.js';
+import { randomUUID } from 'node:crypto';
 
 // Shared helpers execute unchanged in the page and in offline DOM regression tests.
 const FIND_MONACO = `(${findPineEditor.toString()})(document)`;
@@ -166,13 +169,13 @@ export async function check({ source }) {
         errors.push({
           line: e.start?.line, column: e.start?.column,
           end_line: e.end?.line, end_column: e.end?.column,
-          message: e.message,
+          message: formatDiagnostic(e.message, e.ctx),
         });
       }
     }
     if (inner.warnings2 && inner.warnings2.length > 0) {
       for (const w of inner.warnings2) {
-        warnings.push({ line: w.start?.line, column: w.start?.column, message: w.message });
+        warnings.push({ line: w.start?.line, column: w.start?.column, message: formatDiagnostic(w.message, w.ctx) });
       }
     }
   }
@@ -194,6 +197,24 @@ export async function check({ source }) {
 }
 
 // ── Functions requiring TradingView connection ──
+
+export async function getPanelState() {
+  return evaluate(`(() => { const editor=document.querySelector('.monaco-editor.pine-editor-monaco');
+    return {open:Boolean(editor && editor.offsetParent!==null && editor.getBoundingClientRect().width>0)}; })()`);
+}
+
+export async function closePanel() {
+  return evaluate(`(() => {
+    const element=document.querySelector('.monaco-editor.pine-editor-monaco');
+    if(!element) return {closed:true};
+    let node=element,fiber;
+    for(let i=0;i<20&&node;i++,node=node.parentElement){const key=Object.keys(node).find(name=>name.startsWith('__reactFiber$'));if(key){fiber=node[key];break;}}
+    for(let i=0;i<30&&fiber;i++,fiber=fiber.return){for(const props of [fiber.memoizedProps,fiber.alternate?.memoizedProps]){
+      const value=props?.value;if(value?.monacoEnv&&typeof value.close==='function'){value.close();return {closed:true};}
+    }}
+    return {closed:false,error:'Pine panel close control is unavailable.'};
+  })()`);
+}
 
 export async function getSource() {
   const editorReady = await ensurePineEditorOpen();
@@ -232,21 +253,7 @@ export async function setSource({ source }) {
   return { success: true, lines_set: source.split('\n').length };
 }
 
-export async function compile() {
-  const editorReady = await ensurePineEditorOpen();
-  if (!editorReady) throw new Error('Could not open Pine Editor.');
-
-  const clicked = await evaluate(CLICK_COMPILE);
-
-  if (!clicked) {
-    const c = await getClient();
-    await c.Input.dispatchKeyEvent({ type: 'keyDown', modifiers: 2, key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
-    await c.Input.dispatchKeyEvent({ type: 'keyUp', key: 'Enter', code: 'Enter' });
-  }
-
-  await new Promise(r => setTimeout(r, 2000));
-  return { success: true, button_clicked: clicked || 'keyboard_shortcut', source: 'dom_fallback' };
-}
+export async function compile() { return smartCompile(); }
 
 export async function getErrors() {
   const editorReady = await ensurePineEditorOpen();
@@ -355,62 +362,35 @@ export async function getConsole() {
   return { success: true, entries: entries || [], entry_count: entries?.length || 0 };
 }
 
-export async function smartCompile() {
-  const editorReady = await ensurePineEditorOpen();
-  if (!editorReady) throw new Error('Could not open Pine Editor.');
-
-  const studiesBefore = await evaluate(`
-    (function() {
-      try {
-        var chart = window.TradingViewApi._activeChartWidgetWV.value();
-        if (chart && typeof chart.getAllStudies === 'function') return chart.getAllStudies().length;
-      } catch(e) {}
-      return null;
-    })()
-  `);
-
-  const buttonClicked = await evaluate(CLICK_COMPILE);
-
-  if (!buttonClicked) {
-    const c = await getClient();
-    await c.Input.dispatchKeyEvent({ type: 'keyDown', modifiers: 2, key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
-    await c.Input.dispatchKeyEvent({ type: 'keyUp', key: 'Enter', code: 'Enter' });
+export async function smartCompile({ timeout = 30000, _deps } = {}) {
+  const inspect = _deps?.evaluate || evaluate;
+  if (!_deps && !await ensurePineEditorOpen()) throw new Error('Could not open Pine Editor.');
+  const source = _deps?.source || (await getSource()).source;
+  const token = randomUUID();
+  const strategyMode = /^\s*strategy\s*\(/m.test(source);
+  await inspect(`(() => { ${STRATEGY_PAGE_CODE}; return beginCompilation(window, ${JSON.stringify(token)}, ${JSON.stringify(sourceHash(source))}, ${strategyMode}); })()`);
+  const button = await inspect(CLICK_COMPILE);
+  if (!button && !_deps) {
+    const client = await getClient();
+    await client.Input.dispatchKeyEvent({ type: 'keyDown', modifiers: 2, key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+    await client.Input.dispatchKeyEvent({ type: 'keyUp', key: 'Enter', code: 'Enter' });
   }
-
-  await new Promise(r => setTimeout(r, 2500));
-
-  const errors = await evaluate(`
-    (function() {
-      var m = ${FIND_MONACO};
-      if (!m) return [];
-      var model = m.editor.getModel();
-      if (!model) return [];
-      var markers = m.env.editor.getModelMarkers({ resource: model.uri });
-      return markers.map(function(mk) {
-        return { line: mk.startLineNumber, column: mk.startColumn, message: mk.message, severity: mk.severity };
-      });
-    })()
-  `);
-
-  const studiesAfter = await evaluate(`
-    (function() {
-      try {
-        var chart = window.TradingViewApi._activeChartWidgetWV.value();
-        if (chart && typeof chart.getAllStudies === 'function') return chart.getAllStudies().length;
-      } catch(e) {}
-      return null;
-    })()
-  `);
-
-  const studyAdded = (studiesBefore !== null && studiesAfter !== null) ? studiesAfter > studiesBefore : null;
-
-  return {
-    success: true,
-    button_clicked: buttonClicked || 'keyboard_shortcut',
-    has_errors: errors?.length > 0,
-    errors: errors || [],
-    study_added: studyAdded,
-  };
+  const sleep = _deps?.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
+  const now = _deps?.now || Date.now; const start = now(); let markers = [], state = null;
+  do {
+    await sleep(200);
+    markers = await inspect(`(() => { const m = ${FIND_MONACO}; const model = m?.editor.getModel();
+      return model ? m.env.editor.getModelMarkers({resource:model.uri}).map(marker => ({line:marker.startLineNumber,column:marker.startColumn,message:marker.message,severity:marker.severity})) : []; })()`);
+    const diagnostics = splitMarkers(markers || []);
+    if (diagnostics.errors.length) return { success: false, compiled: false, has_errors: true, ...diagnostics, compilation_token: token };
+    if (!strategyMode) return { success: true, compiled: true, has_errors: false, ...diagnostics, button_clicked: button || 'keyboard_shortcut', compilation_token: token };
+    state = await inspect(`(() => { ${STRATEGY_PAGE_CODE}; return compilationState(window); })()`);
+    if (state.phase === 'failed') return { success: false, compiled: true, has_errors: false, ...diagnostics, runtime_error: state.error, error: state.error };
+    if (state.phase === 'ready') return { success: true, compiled: true, has_errors: false, ...diagnostics,
+      button_clicked: button || 'keyboard_shortcut', strategy_id: state.strategy_id, strategy_inputs: state.inputs, compilation_token: token, report_ready: true };
+  } while (now() - start < timeout);
+  return { success: false, compiled: false, has_errors: false, ...splitMarkers(markers || []),
+    error: 'Compilation did not produce a provably fresh report before timeout.', compilation_token: token, report_ready: false };
 }
 
 export async function newScript({ type }) {

@@ -1,12 +1,16 @@
 import CDP from 'chrome-remote-interface';
+import { CDP_HOST, CDP_PORT } from './config.js';
+import { getDesktopInventory, activeTarget, bindShellTab } from './desktop.js';
+import { assertSessionAccess } from './session.js';
 
 let client = null;
 let targetInfo = null;
 // Overridable via TV_CDP_HOST/TV_CDP_PORT (or CDP_HOST/CDP_PORT) env vars.
 // Default is 127.0.0.1, not localhost: on some Windows machines localhost
 // resolves to ::1 first, and Electron's --remote-debugging-port only listens on IPv4.
-export const CDP_HOST = process.env.TV_CDP_HOST || process.env.CDP_HOST || '127.0.0.1';
-export const CDP_PORT = Number(process.env.TV_CDP_PORT || process.env.CDP_PORT) || 9222;
+export { CDP_HOST, CDP_PORT };
+let preferredTarget = null;
+export function configureTarget(id) { preferredTarget = id || null; }
 const MAX_RETRIES = 5;
 const BASE_DELAY = 500;
 
@@ -51,6 +55,8 @@ export function requireFinite(value, name) {
 }
 
 export async function getClient() {
+  assertSessionAccess();
+  if (client && preferredTarget && targetInfo?.id !== preferredTarget) await disconnect();
   if (client) {
     try {
       // Quick liveness check
@@ -65,14 +71,18 @@ export async function getClient() {
 }
 
 export async function connect(targetId = null) {
+  assertSessionAccess();
+  targetId ||= preferredTarget || process.env.TV_CDP_TARGET || null;
   let lastError;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
       const target = targetId ? await findTargetById(targetId) : await findChartTarget();
       if (!target) {
-        throw new Error(targetId
+        const error = new Error(targetId
           ? `CDP target ${targetId} not found — is the tab still open?`
           : 'No TradingView chart target found. Is TradingView open with a chart?');
+        error.code = 'TARGET_NOT_FOUND';
+        throw error;
       }
       targetInfo = target;
       client = await CDP({ host: CDP_HOST, port: CDP_PORT, target: target.id });
@@ -84,12 +94,15 @@ export async function connect(targetId = null) {
 
       return client;
     } catch (err) {
+      if (['TARGET_AMBIGUOUS', 'TARGET_NOT_FOUND'].includes(err.code)) throw err;
       lastError = err;
       const delay = Math.min(BASE_DELAY * Math.pow(2, attempt), 30000);
       await new Promise(r => setTimeout(r, delay));
     }
   }
-  throw new Error(`CDP connection failed after ${MAX_RETRIES} attempts: ${lastError?.message}`);
+  const error = new Error(`CDP connection failed after ${MAX_RETRIES} attempts: ${lastError?.message}`);
+  error.code = 'CDP_CONNECTION';
+  throw error;
 }
 
 /**
@@ -108,12 +121,11 @@ export async function reconnectTo(targetId) {
 }
 
 async function findChartTarget() {
-  const resp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`);
-  const targets = await resp.json();
-  // Prefer targets with tradingview.com/chart in the URL
-  return targets.find(t => t.type === 'page' && /tradingview\.com\/chart/i.test(t.url))
-    || targets.find(t => t.type === 'page' && /tradingview/i.test(t.url))
-    || null;
+  const inventory = await getDesktopInventory();
+  const target = activeTarget(inventory);
+  const tab = inventory.tabs.find((item) => item.id === target.id && item.active);
+  if (tab?.shell_tab_id) await bindShellTab(target.id, tab.shell_tab_id);
+  return target;
 }
 
 async function findTargetById(id) {
