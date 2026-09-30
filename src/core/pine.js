@@ -374,8 +374,10 @@ export async function smartCompile({ timeout = 30000, _deps } = {}) {
   if (begun?.phase === 'unchanged') return { success: true, compiled: true, compile_performed: false, unchanged: true,
     has_errors: false, errors: [], warnings: [], strategy_id: begun.strategy_id, strategy_inputs: begun.inputs,
     compilation_token: begun.token, report_ready: true };
-  const button = await inspect(CLICK_COMPILE);
-  if (!button && !_deps) {
+  const awaiting = begun?.phase === 'awaiting';
+  const activeToken = awaiting ? begun.token : token;
+  const button = awaiting ? null : await inspect(CLICK_COMPILE);
+  if (!awaiting && !button && !_deps) {
     const client = await getClient();
     await client.Input.dispatchKeyEvent({ type: 'keyDown', modifiers: 2, key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
     await client.Input.dispatchKeyEvent({ type: 'keyUp', key: 'Enter', code: 'Enter' });
@@ -387,15 +389,17 @@ export async function smartCompile({ timeout = 30000, _deps } = {}) {
     markers = await inspect(`(() => { const m = ${FIND_MONACO}; const model = m?.editor.getModel();
       return model ? m.env.editor.getModelMarkers({resource:model.uri}).map(marker => ({line:marker.startLineNumber,column:marker.startColumn,message:marker.message,severity:marker.severity})) : []; })()`);
     const diagnostics = splitMarkers(markers || []);
-    if (diagnostics.errors.length) return { success: false, compiled: false, has_errors: true, ...diagnostics, compilation_token: token };
+    if (diagnostics.errors.length) return { success: false, compiled: false, has_errors: true, ...diagnostics, compilation_token: activeToken };
     if (!strategyMode) return { success: true, compiled: true, has_errors: false, ...diagnostics, button_clicked: button || 'keyboard_shortcut', compilation_token: token };
     state = await inspect(`(() => { ${STRATEGY_PAGE_CODE}; return compilationState(window); })()`);
     if (state.phase === 'failed') return { success: false, compiled: true, has_errors: false, ...diagnostics, runtime_error: state.error, error: state.error };
     if (state.phase === 'ready') return { success: true, compiled: true, has_errors: false, ...diagnostics,
-      button_clicked: button || 'keyboard_shortcut', strategy_id: state.strategy_id, strategy_inputs: state.inputs, compilation_token: token, report_ready: true };
+      button_clicked: awaiting ? null : button || 'keyboard_shortcut', ...(awaiting && { compile_performed: false }),
+      strategy_id: state.strategy_id, strategy_inputs: state.inputs, compilation_token: activeToken, report_ready: true };
   } while (now() - start < timeout);
   return { success: false, compiled: false, has_errors: false, ...splitMarkers(markers || []),
-    error: 'Compilation did not produce a provably fresh report before timeout.', compilation_token: token, report_ready: false };
+    error: awaiting ? 'Strategy recalculation did not produce a verified report before timeout.' : 'Compilation did not produce a provably fresh report before timeout.',
+    compilation_token: activeToken, report_ready: false, ...(awaiting && { compile_performed: false }) };
 }
 
 export async function newScript({ type }) {

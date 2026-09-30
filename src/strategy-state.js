@@ -105,6 +105,12 @@ export function beginCompilation(window, token, sourceHash, strategyMode, strate
   const strategies = pageStrategies(window);
   const applied = strategies.find(item => item.id === previous?.strategy_id);
   const context = readChartContext(window);
+  if (strategyMode && previous?.phase === 'pending' && previous.report_verified
+    && previous.requires_compiled_change === false && previous.source_hash === sourceHash
+    && previous.compiled_identity && compiledIdentity(applied?.inputs || []) === previous.compiled_identity
+    && previous.observer_source === applied?.source && !applied?.runtime_error) {
+    return { phase: 'awaiting', token: previous.token, strategy_id: applied.id };
+  }
   if (strategyMode && previous?.phase === 'ready' && previous.report_verified && previous.source_hash === sourceHash
     && previous.compiled_identity && compiledIdentity(applied?.inputs || []) === previous.compiled_identity
     && JSON.stringify(applied?.inputs) === previous.inputs_fingerprint && !applied?.runtime_error
@@ -132,6 +138,11 @@ export function compilationState(window) {
     const context = readChartContext(window);
     const selected = pageStrategies(window).find(item => item.id === epoch.strategy_id);
     if (!selected) { epoch.dispose?.(); window.__tvCliCompilation = null; return { phase: 'not-strategy' }; }
+    if (epoch.observer_source !== selected.source) {
+      epoch.report_verified = false; epoch.token = null; epoch.source_hash = null;
+      observeCalculation(window, epoch, selected);
+      return { phase: 'unverified', strategy_id: selected.id };
+    }
     if (compiledIdentity(selected.inputs) !== epoch.compiled_identity) {
       epoch.phase = 'invalidated'; epoch.error = 'Compiled script changed outside this CLI compilation; its source hash is no longer verified.';
     }
@@ -179,12 +190,14 @@ export function compilationState(window) {
         || completed.key !== calculationKey(item.inputs, readChartContext(window))) continue;
     }
     if (!old || (old.stable_reference && item.report !== old.report) || reportFingerprint(item.report) !== old.fingerprint) {
-      epoch.phase = 'ready'; epoch.report_verified = true; epoch.strategy_id = item.id; epoch.baselines = [];
+      epoch.phase = 'ready'; epoch.strategy_id = item.id; epoch.baselines = [];
       epoch.context = readChartContext(window); epoch.report = item.report;
       epoch.fingerprint = reportFingerprint(item.report); epoch.inputs_fingerprint = JSON.stringify(item.inputs);
       epoch.compiled_identity = compiledIdentity(item.inputs);
       if (epoch.requires_compiled_change) observeCalculation(window, epoch, item);
       else epoch.accepted_cycle = epoch.calculation.completed.cycle;
+      epoch.report_verified = epoch.observer_source === item.source;
+      if (!epoch.report_verified) return { phase: 'unverified', strategy_id: item.id };
       return { phase: 'ready', token: epoch.token, strategy_id: item.id, inputs: item.inputs };
     }
   }

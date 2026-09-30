@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { runInNewContext } from 'node:vm';
 import { beginCompilation, compilationState, readStrategyReport, splitMarkers, reportExpression, formatDiagnostic, prepareInputChange } from '../src/strategy-state.js';
 import { getStrategyResults, getTrades, getTradeLedger, getEquity } from '../src/core/data.js';
+import { smartCompile } from '../src/core/pine.js';
 import { normalizeTimeframe, symbolMatches } from '../src/chart-context.js';
 
 function fixture() {
@@ -162,13 +163,80 @@ describe('Strategy report identity and metadata', () => {
     const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
     assert.equal(readStrategyReport(f.window).success, true);
     f.input(60); f.status(1); f.status(2); f.update(); f.input(30);
-    assert.equal(beginCompilation(f.window, 'new-run', 'hash', true).phase, 'pending');
+    const epoch = f.window.__tvCliCompilation;
+    const begun = beginCompilation(f.window, 'new-run', 'hash', true);
+    assert.equal(begun.phase, 'awaiting'); assert.equal(begun.token, 'run');
+    assert.equal(f.window.__tvCliCompilation, epoch);
+    assert.equal(readStrategyReport(f.window).code, 'REPORT_PENDING');
+    f.status(1); f.status(2); f.update();
+    assert.equal(readStrategyReport(f.window).success, true);
   });
   it('rejects a native calculation in progress even when inputs do not change', () => {
     const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
     assert.equal(readStrategyReport(f.window).success, true);
     f.status(1);
     assert.equal(readStrategyReport(f.window).code, 'REPORT_PENDING');
+    f.status(2); f.update();
+    assert.equal(readStrategyReport(f.window).success, true);
+  });
+  it('fails closed when native calculation events are unavailable', () => {
+    const f = fixture(); delete f.source.onStatusChanged;
+    beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
+    assert.equal(readStrategyReport(f.window).code, 'REPORT_UNVERIFIED');
+    f.input(60); f.status(1); f.status(2); f.update(); f.input(30);
+    assert.equal(readStrategyReport(f.window).success, false);
+    assert.notEqual(beginCompilation(f.window, 'new-run', 'hash', true).phase, 'unchanged');
+  });
+  it('does not transfer verification to a replacement source with the same ID', () => {
+    const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
+    assert.equal(readStrategyReport(f.window).success, true);
+    const replacement = { ...f.source };
+    f.window.TradingViewApi._activeChartWidgetWV.value()._chartWidget.model().model = () => ({ dataSources: () => [replacement] });
+    assert.equal(readStrategyReport(f.window).code, 'REPORT_UNVERIFIED');
+    assert.equal(f.window.__tvCliCompilation.source_hash, null);
+    f.tick(); assert.equal(readStrategyReport(f.window).success, false);
+    // Reattached monitoring can prove the next real input calculation.
+    f.input(60); f.status(1); f.status(2); f.update();
+    const report = readStrategyReport(f.window);
+    assert.equal(report.success, true); assert.equal(report.source_hash, null);
+    assert.equal(report.compilation_token, null);
+  });
+  it('waits for an existing identical-source recalculation without clicking compile', async () => {
+    const f = fixture();
+    const source = '//@version=6\nstrategy("Same title")\nplot(close)';
+    const { sourceHash } = await import('../src/session.js');
+    beginCompilation(f.window, 'run', sourceHash(source), true); f.compile(); f.update();
+    assert.equal(readStrategyReport(f.window).success, true);
+    f.input(60); f.status(1); f.status(2); f.update(); f.input(30);
+    const epoch = f.window.__tvCliCompilation;
+    let clicks = 0, ticks = 0;
+    const result = await smartCompile({ _deps: { source,
+      evaluate: expression => {
+        if (expression.includes('getModelMarkers')) return [];
+        if (expression.includes('document')) { clicks++; return 'clicked'; }
+        return runInNewContext(expression, { window: f.window });
+      },
+      sleep: async () => { if (++ticks === 2) { f.status(1); f.status(2); f.update(); } },
+      now: () => ticks * 200,
+    } });
+    assert.equal(result.success, true); assert.equal(result.compilation_token, 'run');
+    assert.equal(result.compile_performed, false); assert.equal(clicks, 0);
+    assert.equal(f.window.__tvCliCompilation, epoch);
+    assert.equal(readStrategyReport(f.window).success, true);
+  });
+  it('preserves input monitoring when an identical-source wait times out', async () => {
+    const f = fixture(); const source = '//@version=6\nstrategy("Same title")\nplot(close)';
+    const { sourceHash } = await import('../src/session.js');
+    beginCompilation(f.window, 'run', sourceHash(source), true); f.compile(); f.update();
+    assert.equal(readStrategyReport(f.window).success, true);
+    f.input(60); f.status(1);
+    const epoch = f.window.__tvCliCompilation; let ticks = 0;
+    const result = await smartCompile({ timeout: 400, _deps: { source,
+      evaluate: expression => expression.includes('getModelMarkers') ? [] : runInNewContext(expression, { window: f.window }),
+      sleep: async () => { ticks++; }, now: () => ticks * 200,
+    } });
+    assert.equal(result.success, false); assert.equal(result.compile_performed, false);
+    assert.equal(f.window.__tvCliCompilation, epoch);
     f.status(2); f.update();
     assert.equal(readStrategyReport(f.window).success, true);
   });
