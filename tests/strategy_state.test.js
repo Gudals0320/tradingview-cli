@@ -137,6 +137,41 @@ describe('Strategy report identity and metadata', () => {
     f.input(80); f.tick();
     assert.equal(readStrategyReport(f.window).code, 'REPORT_PENDING');
   });
+  for (const verification of ['compilation', 'input-change']) {
+    for (const beforeStatusEvent of [false, true]) {
+      it(`rejects GUI ABA after ${verification}, including before status event=${beforeStatusEvent}`, () => {
+        const f = fixture();
+        if (verification === 'compilation') {
+          beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
+        } else {
+          prepareInputChange(f.window, 'strategy'); f.input(30); f.status(1); f.status(2); f.update();
+        }
+        assert.equal(readStrategyReport(f.window).success, true);
+        // No CLI reads while B finishes, then inputs return to verified A.
+        f.input(60); f.status(1); f.status(2); f.update();
+        f.input(30);
+        if (!beforeStatusEvent) f.status(1);
+        assert.equal(readStrategyReport(f.window).code, 'REPORT_PENDING');
+        if (beforeStatusEvent) f.status(1);
+        f.status(2); f.update();
+        assert.equal(readStrategyReport(f.window).success, true);
+      });
+    }
+  }
+  it('does not skip identical-source compilation while an ABA calculation is pending', () => {
+    const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
+    assert.equal(readStrategyReport(f.window).success, true);
+    f.input(60); f.status(1); f.status(2); f.update(); f.input(30);
+    assert.equal(beginCompilation(f.window, 'new-run', 'hash', true).phase, 'pending');
+  });
+  it('rejects a native calculation in progress even when inputs do not change', () => {
+    const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
+    assert.equal(readStrategyReport(f.window).success, true);
+    f.status(1);
+    assert.equal(readStrategyReport(f.window).code, 'REPORT_PENDING');
+    f.status(2); f.update();
+    assert.equal(readStrategyReport(f.window).success, true);
+  });
   it('does not treat a report getter that returns copies as proof of a fresh calculation', () => {
     const f = fixture(); const original = f.source.reportData;
     f.source.reportData = () => ({ value: () => structuredClone(original().value()) });

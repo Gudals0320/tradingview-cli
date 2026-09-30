@@ -98,6 +98,9 @@ export function prepareInputChange(window, strategyId) {
 }
 
 export function beginCompilation(window, token, sourceHash, strategyMode, strategyName = null) {
+  // The identical-source shortcut must consume native calculation transitions
+  // too: matching inputs alone cannot distinguish an unobserved A -> B -> A edit.
+  if (window.__tvCliCompilation?.phase === 'ready') compilationState(window);
   const previous = window.__tvCliCompilation;
   const strategies = pageStrategies(window);
   const applied = strategies.find(item => item.id === previous?.strategy_id);
@@ -133,9 +136,12 @@ export function compilationState(window) {
       epoch.phase = 'invalidated'; epoch.error = 'Compiled script changed outside this CLI compilation; its source hash is no longer verified.';
     }
     if (epoch.phase === 'invalidated') return { phase: epoch.phase, error: epoch.error };
+    const calculation = epoch.calculation;
     if (context?.symbol !== epoch.context?.symbol || context?.resolution !== epoch.context?.resolution
       || context?.chart_type !== epoch.context?.chart_type
-      || JSON.stringify(selected?.inputs) !== epoch.inputs_fingerprint) {
+      || JSON.stringify(selected?.inputs) !== epoch.inputs_fingerprint
+      || (selected.status_type != null && selected.status_type !== 2)
+      || calculation?.active || (calculation?.completed?.cycle > epoch.accepted_cycle)) {
       epoch.phase = 'pending'; epoch.baselines = [{ id: epoch.strategy_id, report: epoch.report,
         fingerprint: epoch.fingerprint, compiled_identity: epoch.compiled_identity, stable_reference: true, runtime_error: null }];
       // Old real-time ticks are not evidence of recalculation for new inputs.
