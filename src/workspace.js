@@ -77,6 +77,7 @@ export async function initWorkspace(resources) {
 async function permitFor(command, values, positionals) {
   if (command === 'pine set') {
     const source = values.file ? readFileSync(values.file, 'utf8') : await readInput();
+    if (!source) throw workspaceError('PINE_SOURCE_REQUIRED', 'A nonempty Pine source is required.');
     // Preserve the CLI adapter's stdin behavior without consuming it twice.
     values.workspaceSource = source;
     return { source: source.replace(/\r\n/g, '\n') };
@@ -133,7 +134,8 @@ export async function runWorkspace(file, command, values, positionals, handler) 
       const source_proof = command === 'pine save' && result?.saved ? { hash, version: String(after.snapshot.version) } : workspace.binding.source_proof;
       lease.saveBinding({ ...workspace.binding, snapshot: after.snapshot, source_proof });
       const study = after.snapshot.studies[0];
-      const calculation = after.calculation ? { ...after.calculation,
+      const calculation = after.calculation ? { ...after.calculation, inputs_fingerprint: undefined,
+        inputs_hash: after.calculation.inputs_fingerprint ? sourceHash(after.calculation.inputs_fingerprint) : null,
         completed: after.calculation.completed ? { cycle: after.calculation.completed.cycle, key_hash: sourceHash(after.calculation.completed.key) } : null } : null;
       const provenance = { workspace_id: workspace.id, operation_id: lease.operation, target: workspace.target, layout: workspace.layout, pine: workspace.pine,
         page_generation: workspace.binding.nonce, source_hash: sourceHash(after.snapshot.source), context: after.snapshot.context,
