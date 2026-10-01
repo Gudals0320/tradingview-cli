@@ -1,7 +1,7 @@
 import {it} from 'node:test';
 import assert from 'node:assert/strict';
 import {setImmediate} from 'node:timers';
-import {planPineCompilation,dispatchPineCompilation,verifyPineCompilation,pineCompileContext} from '../src/core/pine-state.js';
+import {planPineCompilation,dispatchPineCompilation,verifyPineCompilation,pineCompileContext,refreshSavedPine} from '../src/core/pine-state.js';
 import {smartCompile} from '../src/core/pine.js';
 
 function fixture(items=[{id:'p',pine:'P',text:'old'}]) {
@@ -11,7 +11,7 @@ function fixture(items=[{id:'p',pine:'P',text:'old'}]) {
       {id:'pineId',value:item.pine},{id:'text',value:item.text},{id:'pineVersion',value:'1.0'},
     ];}})};
   const window={TradingViewApi:{_activeChartWidgetWV:{value:()=>chart}},__tvCliPineCompile:{token:'token',refresh:()=>{}}};
-  let identity={scriptIdPart:'P',version:'2.0'},adds=0,updates=0;
+  let identity={scriptIdPart:'P',version:'1.0'},adds=0,updates=0;
   const controller={getScriptIdVersion:()=>identity,isModified:()=>true,isDraft:()=>false,
     updateOnChart:async()=>{updates++;sources.find(item=>item.pine==='P').text='new';},
     addToChart:async()=>{adds++;sources.push({id:'new',pine:'P',text:'new',metaInfo:()=>({isTVScript:true}),status:()=>({type:2})});identity={scriptIdPart:'P',version:'1.0'};},
@@ -62,5 +62,17 @@ it('reports unreadable chart targets without dispatching a mutation',()=>{
   const f=fixture();f.window.TradingViewApi._activeChartWidgetWV.value=()=>{throw new Error('calculating');};
   assert.equal(planPineCompilation(f.window,f.controller).code,'TARGETS_UNREADABLE');
   assert.throws(()=>dispatchPineCompilation(f.window,f.controller,'token'),/TARGETS_UNREADABLE/);
+  assert.deepEqual(f.counts(),{adds:0,updates:0});
+});
+it('clean saved refresh translates the saved version but targets the old applied version without persistence',async()=>{
+  const f=fixture();let restarted=0,translated=null;
+  f.setIdentity({scriptIdPart:'P',version:'2.0'});
+  f.sources[0].restart=()=>{restarted++;};
+  f.controller.getSource=()=> 'indicator("P")\nplot(close)';
+  f.controller._editorStore={getStore:()=>({getState:()=>({script:{scriptName:'P'}})}),
+    addPendingRequest:()=>{},removePendingRequest:()=>{},translateScript:async opts=>{translated=opts;return {success:true,metaInfo:{}};}};
+  f.controller._replaceStubByStudy=async (opts,stub,update,modified)=>{assert.equal(stub,null);assert.equal(update,true);assert.equal(modified,true);assert.equal(opts.oldPineVersion,'1.0');assert.equal(opts.pineVersion,'2.0');};
+  const plan=planPineCompilation(f.window,f.controller);await refreshSavedPine(f.window,f.controller,plan);
+  assert.deepEqual(translated,{scriptIdPart:'P',scriptVersion:'2.0'});assert.equal(restarted,1);
   assert.deepEqual(f.counts(),{adds:0,updates:0});
 });

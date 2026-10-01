@@ -46,6 +46,7 @@ export function pineStudySnapshot(window) {
     if (!info?.isTVScript) return [];
     const inputs = chart.getStudyById(source.id()).getInputValues();
     return [{ id: source.id(), pine_id: inputs.find(input => input.id === 'pineId')?.value,
+      version:inputs.find(input => input.id === 'pineVersion')?.value,
       compiled_identity: JSON.stringify(inputs.filter(input => ['text','pineId','pineVersion'].includes(input.id))) }];
   });
 }
@@ -59,7 +60,36 @@ export function planPineCompilation(window, controller) {
   const matches = identity?.scriptIdPart ? before.filter(item => item.pine_id === identity.scriptIdPart) : [];
   if (matches.length > 1) return { error:'More than one chart study uses this Pine document.', code:'AMBIGUOUS_TARGET', target_count:matches.length };
   return { method:matches.length === 1 ? 'updateOnChart' : 'addToChart', before,
-    script_id:identity?.scriptIdPart || null, target_id:matches[0]?.id || null };
+    script_id:identity?.scriptIdPart || null, target_id:matches[0]?.id || null,target_version:matches[0]?.version };
+}
+
+/** Reapply a persisted source to its existing study without writing a version. */
+export async function refreshSavedPine(window, controller, plan) {
+  const identity=controller.getScriptIdVersion();
+  if(identity?.scriptIdPart!==plan.script_id)throw new Error('TARGET_MISMATCH: saved document changed.');
+  if(typeof controller._replaceStubByStudy!=='function'||typeof controller._editorStore.translateScript!=='function') {
+    throw new Error('CLEAN_UPDATE_UNSUPPORTED: native saved-source refresh is unavailable.');
+  }
+  const store=controller._editorStore,request='tv-cli-refresh-'+Date.now();
+  store.addPendingRequest(request);
+  try {
+    const translated=await store.translateScript({scriptIdPart:identity.scriptIdPart,scriptVersion:identity.version});
+    // The native updater requires its explicit update branch (no loading stub).
+    // These arguments select that branch; they do not alter editor draft state.
+    await controller._replaceStubByStudy({metaInfo:translated.metaInfo,compileErrors:translated.compileErrors,
+      pineId:identity.scriptIdPart,pineVersion:identity.version,oldPineVersion:plan.target_version},null,true,true);
+    if(!translated.success){store.pushScriptError(translated.compileErrors,store.getStore().getState().script.scriptName);throw new Error('Saved source failed native compilation.');}
+  } finally {store.removePendingRequest(request);}
+  const chart=window.TradingViewApi?._activeChartWidgetWV?.value();
+  let target;
+  for(let attempt=0;attempt<50;attempt++){
+    target=chart?._chartWidget.model().model().dataSources().find(s=>s.id()===plan.target_id);
+    if(target&&typeof target.restart==='function')break;
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  if(!target||typeof target.restart!=='function')throw new Error('CLEAN_UPDATE_UNSUPPORTED: target cannot start a verified calculation.');
+  if(window.__tvCliCompilation?.target_study_id===plan.target_id)window.__tvCliCompilation.rebind?.();
+  target.restart(true);
 }
 
 export function verifyPineCompilation(window, operation) {
@@ -74,6 +104,7 @@ export function verifyPineCompilation(window, operation) {
   const matches = after.filter(item => item.pine_id === currentId);
   if (matches.length > 1) return {code:'DUPLICATE_ADDED',target_count:matches.length,error:'Compilation created or retained multiple studies for this Pine document.'};
   if (matches.length === 0) return {pending:true};
+  if(String(matches[0].version)!==String(controller.getScriptIdVersion()?.version))return {pending:true,reason:'APPLIED_VERSION_PENDING'};
   if (plan.target_id && matches[0].id !== plan.target_id) return {code:'TARGET_MISMATCH',error:'Compilation replaced the target chart study.'};
   const oldOther = plan.before.filter(item => item.id !== plan.target_id);
   const newOther = after.filter(item => item.id !== matches[0].id);
@@ -89,12 +120,13 @@ export function dispatchPineCompilation(window, controller, token) {
   if (operation?.token !== token) throw new Error('Pine compile observer was replaced.');
   const plan = planPineCompilation(window, controller);
   if (plan.error) throw new Error(plan.code + ': ' + plan.error);
-  const method = plan.method;
-  if (typeof controller?.[method] !== 'function') throw new Error('Pine native compilation action unavailable.');
+  const refresh=plan.method==='updateOnChart'&&controller.isModified?.()===false;
+  const method = refresh?'refreshSavedOnChart':plan.method;
+  if (!refresh && typeof controller?.[method] !== 'function') throw new Error('Pine native compilation action unavailable.');
   operation.controller = controller;
   operation.plan = plan;
   operation.check = () => verifyPineCompilation(window, operation);
-  Promise.resolve().then(() => controller[method]()).then(() => {
+  Promise.resolve().then(() => refresh?refreshSavedPine(window,controller,plan):controller[method]()).then(() => {
     operation.actionDone = true; operation.refresh();
   }, error => {
     operation.error = error?.message || String(error); operation.actionDone = true; operation.refresh();
@@ -126,7 +158,8 @@ export function pineCompileContext(window, controller) {
     }
   }
   return { save_required: saveRequired, unchanged, pending:pending && !unchanged, runtime_error:runtimeError, identity,
-    target_id:plan.target_id };
+    target_id:plan.target_id,target_version:plan.target_version,
+    same_version_refresh:Boolean(plan.target_id && modified===false && String(plan.target_version)===String(identity?.version)) };
 }
 
-export const PINE_TARGET_PAGE_CODE = [pineStudySnapshot,planPineCompilation,verifyPineCompilation].map(fn => fn.toString()).join('\n');
+export const PINE_TARGET_PAGE_CODE = [pineStudySnapshot,planPineCompilation,verifyPineCompilation,refreshSavedPine].map(fn => fn.toString()).join('\n');

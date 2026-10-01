@@ -53,10 +53,15 @@ export function rememberVerifiedCompilation(window, epoch) {
   cache.set(epoch.strategy_id, epoch);
 }
 
+export function forgetVerifiedCompilation(window, epoch) {
+  if(window.__tvCliVerifiedStrategies?.get(epoch.strategy_id)===epoch)window.__tvCliVerifiedStrategies.delete(epoch.strategy_id);
+  epoch.dispose?.();
+}
+
 export function failCompilation(window, token, error, code = 'COMPILATION_FAILED') {
   const epoch = window.__tvCliCompilation;
   if (epoch?.token !== token) return false;
-  epoch.dispose?.();
+  forgetVerifiedCompilation(window,epoch);
   epoch.phase = 'failed'; epoch.error = error; epoch.failure_code = code;
   epoch.strategy_id ||= epoch.target_study_id; epoch.report_verified = false;
   return true;
@@ -114,7 +119,7 @@ export function prepareInputChange(window, strategyId) {
   return true;
 }
 
-export function beginCompilation(window, token, sourceHash, strategyMode, strategyName = null, scriptId = null, targetStudyId = null) {
+export function beginCompilation(window, token, sourceHash, strategyMode, strategyName = null, scriptId = null, targetStudyId = null, sameVersionRefresh = false) {
   const cached = targetStudyId && window.__tvCliVerifiedStrategies?.get(targetStudyId);
   if (cached?.script_id === scriptId && cached.source_hash === sourceHash) window.__tvCliCompilation = cached;
   // The identical-source shortcut must consume native calculation transitions
@@ -126,6 +131,11 @@ export function beginCompilation(window, token, sourceHash, strategyMode, strate
   const matching = scriptId ? strategies.filter(item => item.inputs.find(input => input.id === 'pineId')?.value === scriptId) : strategies;
   const sameDocument = !scriptId || (matching.length === 1 && matching[0].id === applied?.id && previous?.script_id === scriptId);
   const context = readChartContext(window);
+  if(strategyMode && previous?.phase==='pending' && previous.persistence_confirmed && previous.source_hash===sourceHash
+    && previous.script_id===scriptId && matching.length===1
+    && String(matching[0].inputs.find(i=>i.id==='pineVersion')?.value)===String(previous.saved_version)) {
+    return {phase:'awaiting',token:previous.token,strategy_id:matching[0].id};
+  }
   if (strategyMode && sameDocument && previous?.phase === 'pending' && previous.report_verified
     && previous.requires_compiled_change === false && previous.source_hash === sourceHash
     && previous.compiled_identity && compiledIdentity(applied?.inputs || []) === previous.compiled_identity
@@ -143,6 +153,7 @@ export function beginCompilation(window, token, sourceHash, strategyMode, strate
   if (window.__tvCliVerifiedStrategies?.get(previous?.strategy_id) !== previous) previous?.dispose?.();
   window.__tvCliCompilation = { token, source_hash: sourceHash, strategy_mode: strategyMode,
     script_id:scriptId,target_study_id:targetStudyId,
+    allow_same_identity_refresh:sameVersionRefresh,
     strategy_name: strategyName, requires_compiled_change: true,
     phase: 'pending', baselines: strategies.map((item) => {
       let second = item.source.reportData?.(); if (second?.value) second = second.value();
@@ -150,6 +161,10 @@ export function beginCompilation(window, token, sourceHash, strategyMode, strate
         compiled_identity: compiledIdentity(item.inputs),
         stable_reference: item.report === second, runtime_error: item.runtime_error };
     }) };
+  const target=strategies.find(item=>item.id===targetStudyId);
+  const epoch=window.__tvCliCompilation;
+  epoch.rebind=()=>{const item=pageStrategies(window).find(item=>item.id===epoch.target_study_id);if(item)observeCalculation(window,epoch,item);};
+  if(strategyMode&&target){window.__tvCliCompilation.strategy_id=target.id;observeCalculation(window,window.__tvCliCompilation,target);}
   return { phase: 'pending', token };
 }
 
@@ -159,14 +174,16 @@ export function compilationState(window) {
   if (epoch.phase === 'ready') {
     const context = readChartContext(window);
     const selected = pageStrategies(window).find(item => item.id === epoch.strategy_id);
-    if (!selected) { epoch.dispose?.(); window.__tvCliCompilation = null; return { phase: 'not-strategy' }; }
+    if (!selected) { forgetVerifiedCompilation(window,epoch); window.__tvCliCompilation = null; return { phase: 'not-strategy' }; }
     if (epoch.observer_source !== selected.source) {
+      forgetVerifiedCompilation(window,epoch);
       epoch.report_verified = false; epoch.token = null; epoch.source_hash = null;
       observeCalculation(window, epoch, selected);
       return { phase: 'unverified', strategy_id: selected.id };
     }
     if (compiledIdentity(selected.inputs) !== epoch.compiled_identity) {
       epoch.phase = 'invalidated'; epoch.error = 'Compiled script changed outside this CLI compilation; its source hash is no longer verified.';
+      forgetVerifiedCompilation(window,epoch);
     }
     if (epoch.phase === 'invalidated') return { phase: epoch.phase, error: epoch.error };
     const calculation = epoch.calculation;
@@ -195,6 +212,7 @@ export function compilationState(window) {
     const old = epoch.baselines.find(baseline => baseline.id === item.id);
     const identity = compiledIdentity(item.inputs);
     return (identity && (!old || identity !== old.compiled_identity))
+      || (epoch.allow_same_identity_refresh && item.id===epoch.target_study_id)
       || (!epoch.requires_compiled_change && item.id === epoch.strategy_id);
   });
   if (changed.length > 1) return { phase: 'pending', token: epoch.token, error: 'More than one strategy changed; cannot identify the compiled script.' };
@@ -213,7 +231,10 @@ export function compilationState(window) {
       if (!completed || completed.cycle <= epoch.accepted_cycle
         || completed.key !== calculationKey(item.inputs, readChartContext(window))) continue;
     }
-    if (!old || (old.stable_reference && item.report !== old.report) || reportFingerprint(item.report) !== old.fingerprint) {
+    const completed=epoch.calculation?.completed;
+    const observed=completed&&completed.cycle>epoch.accepted_cycle&&completed.key===calculationKey(item.inputs,readChartContext(window));
+    if(epoch.allow_same_identity_refresh&&!observed)continue;
+    if (!old || observed || (old.stable_reference && item.report !== old.report) || reportFingerprint(item.report) !== old.fingerprint) {
       epoch.phase = 'ready'; epoch.strategy_id = item.id; epoch.baselines = [];
       epoch.context = readChartContext(window); epoch.report = item.report;
       epoch.fingerprint = reportFingerprint(item.report); epoch.inputs_fingerprint = JSON.stringify(item.inputs);
@@ -288,7 +309,7 @@ export function readStrategyReport(window, options = {}) {
 }
 
 export const STRATEGY_PAGE_CODE = [readChartContext, formatDiagnostic, pageStrategies, reportFingerprint, reportIsComplete, compiledIdentity,
-  calculationKey, rememberVerifiedCompilation, failCompilation, observeCalculation, prepareInputChange, beginCompilation, compilationState, readStrategyReport].map(fn => fn.toString()).join('\n');
+  calculationKey, rememberVerifiedCompilation, forgetVerifiedCompilation, failCompilation, observeCalculation, prepareInputChange, beginCompilation, compilationState, readStrategyReport].map(fn => fn.toString()).join('\n');
 
 export function reportExpression(options = {}) {
   return `(() => { ${STRATEGY_PAGE_CODE}; return readStrategyReport(window, ${JSON.stringify(options)}); })()`;

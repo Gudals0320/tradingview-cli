@@ -295,6 +295,12 @@ export async function save({ timeout = 15000, _deps } = {}) {
   const sleep = _deps?.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
   const now = _deps?.now || Date.now;
   const token = randomUUID();
+  const savedSource=!_deps?(await getSource()).source:_deps.source;
+  const prepareStrategy=typeof savedSource==='string'&&/^\s*strategy\s*\(/m.test(savedSource);
+  if(prepareStrategy) await inspect(`(() => { ${PINE_TARGET_PAGE_CODE}; ${STRATEGY_PAGE_CODE};
+    const c=${FIND_CONTROLLER},plan=planPineCompilation(window,c);
+    if(!plan.error&&plan.target_id&&c.isModified()) beginCompilation(window,${JSON.stringify(token+'-save')},${JSON.stringify(sourceHash(canonicalPineSource(savedSource)))},true,null,plan.script_id,plan.target_id);
+    return true;})()`);
   await inspect(`(() => {
     const controller = ${FIND_CONTROLLER};
     const m = ${FIND_MONACO};
@@ -344,6 +350,8 @@ export async function save({ timeout = 15000, _deps } = {}) {
         return typeof data.source === 'string' && normalize(data.source) === normalize(operation.source)
           && normalize((${FIND_MONACO}).editor.getValue()) === normalize(operation.source);
       })()`);
+      if(verified&&prepareStrategy) await inspect(`(() => {${STRATEGY_PAGE_CODE};const epoch=window.__tvCliCompilation;
+        if(epoch?.token===${JSON.stringify(token+'-save')}){epoch.persistence_confirmed=true;epoch.saved_version=${JSON.stringify(state.identity.version)};compilationState(window);}return true;})()`);
       return verified ? { success:true,saved:true,action:dialogHandled?'saved_with_dialog':'saved',
         script_id:state.identity.scriptIdPart,version:state.identity.version }
         : {success:false,saved:false,error:'Persisted Pine source did not match the editor source.'};
@@ -386,7 +394,7 @@ export async function smartCompile({ timeout = 30000, save: saveChanges = false,
     unchanged:true,has_errors:false,errors:[],warnings:[]};
   const literal = source.match(/^\s*strategy\s*\(\s*(?:title\s*=\s*)?("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/m)?.[1];
   const strategyName = literal ? literal.slice(1, -1).replace(/\\([\\"'nrt])/g, (_, ch) => ({ n: '\n', r: '\r', t: '\t' }[ch] || ch)) : null;
-  const begun = await inspect(`(() => { ${STRATEGY_PAGE_CODE}; return beginCompilation(window, ${JSON.stringify(token)}, ${JSON.stringify(sourceHash(canonicalPineSource(source)))}, ${strategyMode}, ${JSON.stringify(strategyName)}, ${JSON.stringify(context.identity?.scriptIdPart || null)}, ${JSON.stringify(context.target_id || null)}); })()`);
+  const begun = await inspect(`(() => { ${STRATEGY_PAGE_CODE}; return beginCompilation(window, ${JSON.stringify(token)}, ${JSON.stringify(sourceHash(canonicalPineSource(source)))}, ${strategyMode}, ${JSON.stringify(strategyName)}, ${JSON.stringify(context.identity?.scriptIdPart || null)}, ${JSON.stringify(context.target_id || null)},${Boolean(context.same_version_refresh)}); })()`);
   if (begun?.phase === 'unchanged') return { success: true, compiled: true, compile_performed: false, unchanged: true,
     has_errors: false, errors: [], warnings: [], strategy_id: begun.strategy_id, strategy_inputs: begun.inputs,
     compilation_token: begun.token, report_ready: true };

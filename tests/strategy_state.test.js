@@ -39,6 +39,34 @@ function fixture() {
 }
 
 describe('Strategy report identity and metadata', () => {
+  it('restores canonical verified identity through beginCompilation itself', () => {
+    const f=fixture(),chart=f.window.TradingViewApi._activeChartWidgetWV.value();const inputs=chart.getStudyById;
+    chart.getStudyById=id=>({getInputValues:()=>[...inputs(id).getInputValues(),{id:'pineId',value:'P'}]});
+    const lf='strategy("Same title")\nplot(close)\n',hash=sourceHash(lf);
+    beginCompilation(f.window,'run',hash,true,'Same title','P','strategy');f.compile();f.update();assert.equal(compilationState(f.window).phase,'ready');
+    beginCompilation(f.window,'other','other-source',false,null,'Q');
+    assert.equal(beginCompilation(f.window,'reopen',sourceHash(canonicalPineSource(lf.replace(/\n/g,'\r\n'))),true,'Same title','P','strategy').phase,'unchanged');
+    beginCompilation(f.window,'other2','other-source',false,null,'Q');
+    assert.notEqual(beginCompilation(f.window,'raw',sourceHash(lf.replace(/\n/g,'\r\n')),true,'Same title','P','strategy').phase,'unchanged');
+  });
+  it('cache restoration rejects changed compiled identity and duplicate/foreign documents', () => {
+    for(const mutation of ['compiled','duplicate','foreign']){
+      const f=fixture(),chart=f.window.TradingViewApi._activeChartWidgetWV.value(),inputs=chart.getStudyById;
+      chart.getStudyById=id=>({getInputValues:()=>[...inputs(id).getInputValues(),{id:'pineId',value:'P'}]});
+      beginCompilation(f.window,'run','hash',true,'Same title','P','strategy');f.compile();f.update();compilationState(f.window);
+      beginCompilation(f.window,'other','other',false,null,'Q');
+      if(mutation==='compiled')f.compile('changed-externally');
+      if(mutation==='duplicate')chart._chartWidget.model().model=()=>({dataSources:()=>[f.source,{...f.source,id:()=> 'duplicate'}]});
+      assert.notEqual(beginCompilation(f.window,'reopen','hash',true,'Same title',mutation==='foreign'?'Q':'P','strategy').phase,'unchanged');
+      if(mutation==='compiled')assert.equal(f.window.__tvCliVerifiedStrategies.has('strategy'),false);
+    }
+  });
+  it('same-version refresh needs a new native calculation rather than a complete old report', () => {
+    const f=fixture();beginCompilation(f.window,'refresh','hash',true,null,null,'strategy',true);
+    assert.equal(compilationState(f.window).phase,'pending');
+    f.status(1);f.status(2);f.tick();
+    assert.equal(compilationState(f.window).phase,'ready');
+  });
   it('canonicalizes physical CRLF only without changing source contents or trailing newlines', () => {
     const lf='strategy("\\r\\n")\n// 한글\n';
     assert.equal(sourceHash(canonicalPineSource(lf.replace(/\n/g,'\r\n'))),sourceHash(lf));
