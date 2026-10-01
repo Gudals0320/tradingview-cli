@@ -17,8 +17,14 @@ export function nativeCheckpoint(command, targetId, details = {}) {
   const lease = access.getStore()?.legacy;
   if (!lease) return;
   const previous = lease.pending();
+  const targetPanes = { ...previous?.target_panes };
+  if (targetId) {
+    const prior = targetPanes[targetId];
+    targetPanes[targetId] = details.all_panes || !Number.isInteger(details.pane_index) || prior === '*'
+      ? '*' : [...new Set([...(prior || []), details.pane_index])];
+  }
   lease.checkpoint({ ...previous, ...details, phase: 'running', command: command || lease.command,
-    target_id: targetId, targets: [...new Set([...(previous?.targets || []), previous?.target_id, targetId].filter(Boolean))],
+    target_id: targetId, targets: [...new Set([...(previous?.targets || []), previous?.target_id, targetId].filter(Boolean))], target_panes: targetPanes,
     native_quiescence_required: true });
 }
 export function nativeQuiescent() { access.getStore()?.legacy?.clearCheckpoint?.(); }

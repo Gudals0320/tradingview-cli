@@ -98,6 +98,22 @@ it('save waits for completion and verifies persisted source', async () => {
   f.controller.saveScript = async () => { modified = false; };
   assert.equal((await save({ _deps: f })).saved, true);
 });
+it('save retains its fence when a generic transport error occurs during dispatch', async () => {
+  const f=saveFixture();let complete;
+  f.controller.isModified=()=>true;
+  f.controller.saveScript=()=>new Promise(resolve=>{complete=resolve;});
+  const inspect=f.evaluate;
+  f.evaluate=(expression,options)=>{
+    const value=inspect(expression);
+    if(options?.mutation)throw Object.assign(new Error('WebSocket closed after dispatch'),{code:'ECONNRESET'});
+    return value;
+  };
+  try {
+    const result=await save({_deps:f});
+    assert.equal(result.recovery_required,true);assert.equal(result.saved,null);
+    assert.equal(f.context.window.__tvCliSave.pending,true);
+  } finally {complete?.();await f.context.window.__tvCliSave.promise;}
+});
 it('save never reports success on persistence mismatch, rejection, or timeout', async () => {
   const f = saveFixture(); f.context.fetch = async () => ({ ok: true, json: async () => ({ source: 'other' }) });
   assert.equal((await save({ _deps: f })).success, false);

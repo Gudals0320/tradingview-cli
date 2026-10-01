@@ -249,7 +249,8 @@ describe('multi-feed pane assignment', () => {
       async setLayout(client, code) {
         const capacity = capacities.get(code);
         layoutAttempts.push(capacity);
-        if (capacity > 8) throw new Error('layout requires a higher TradingView plan');
+        if (capacity > 8) throw Object.assign(new Error('layout requires a higher TradingView plan'),
+          { code: 'LAYOUT_CAPACITY_UNAVAILABLE', native_terminal: true });
         const panes = tabs.get(client.id);
         while (panes.length < capacity) panes.push({ index: panes.length, symbol: 'EMPTY', timeframe: '1', hasBar: true });
       },

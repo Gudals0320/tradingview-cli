@@ -68,7 +68,7 @@ it('default feed preparation never mutates existing user panes and bounded empty
   const adapter = { discover: async () => targets.map(id => ({ id })), attach: async id => ({ id }), close: async () => {},
     inventory: async (_, targetId) => ({ targetId, panes: targetId === 'user' ? [{ index: 0, symbol: 'OTHER', timeframe: '1', hasBar: true }] : [] }),
     provision: async client => { if (client.id === 'user') mutations++; },
-    setLayout: async client => { if (client.id === 'user') mutations++; throw new Error('capacity'); },
+    setLayout: async client => { if (client.id === 'user') mutations++; throw Object.assign(new Error('capacity'), { code: 'LAYOUT_CAPACITY_UNAVAILABLE', native_terminal: true }); },
     openTab: async () => { opens++; targets.push('new' + opens); } };
   await assert.rejects(prepareFeedBindings(feeds, adapter, { maxNewTabs: 2 }), /Bounded tab creation/);
   assert.equal(opens, 2); assert.equal(mutations, 0);
