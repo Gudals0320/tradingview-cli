@@ -79,12 +79,27 @@ export async function getDesktopInventory({ _deps } = {}) {
   const targets = _deps?.targets || await CDP.List({ host: CDP_HOST, port: CDP_PORT });
   const inspect = _deps?.inspect || inspectTarget;
   const shells = [], identities = {};
-  for (const target of targets.filter((item) => item.type === 'page' && /\/window\/index\.html/.test(item.url || ''))) {
-    const state = await inspect(target, `(${readShellState.toString()})(document, window)`);
-    if (state) shells.push({ id: target.id, state });
-  }
-  for (const target of targets.filter((item) => item.type === 'page' && /tradingview\.com\/chart|\/new-tab\/index\.html/.test(item.url || ''))) {
-    identities[target.id] = await inspect(target, `(${readPageIdentity.toString()})(document, window)`);
+  const probes = targets.filter(target => target.type === 'page').flatMap(target => {
+    if (/\/window\/index\.html/.test(target.url || '')) return [{ target, shell: true, expression: `(${readShellState.toString()})(document, window)` }];
+    if (/tradingview\.com\/chart|\/new-tab\/index\.html/.test(target.url || '')) return [{ target, expression: `(${readPageIdentity.toString()})(document, window)` }];
+    return [];
+  });
+  const results = new Array(probes.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(4, probes.length) }, async () => {
+    for (;;) {
+      const index = next++; if (index >= probes.length) return;
+      const probe = probes[index];
+      try { results[index] = { value: await inspect(probe.target, probe.expression) }; }
+      catch (error) { results[index] = { error }; }
+    }
+  }));
+  // Consume/close every independent probe before surfacing a deterministic error.
+  for (let index = 0; index < probes.length; index++) {
+    const probe = probes[index], result = results[index];
+    if (result.error) throw result.error;
+    if (probe.shell) { if (result.value) shells.push({ id: probe.target.id, state: result.value }); }
+    else identities[probe.target.id] = result.value;
   }
   return { targets, shells, tabs: resolveInventory(targets, shells, identities) };
 }
