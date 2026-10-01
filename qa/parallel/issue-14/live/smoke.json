@@ -1,0 +1,633 @@
+{
+  "ms": 200,
+  "output": [
+    {
+      "worker": "a",
+      "ms": 197,
+      "result": {
+        "success": true,
+        "compiled": true,
+        "compile_performed": false,
+        "unchanged": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": [],
+        "strategy_id": "DGZDCG",
+        "strategy_inputs": [
+          {
+            "id": "text",
+            "value": "bmI9Ks46_z1NN6iTpW+odwp4gJlti0w==_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"
+          },
+          {
+            "id": "pineId",
+            "value": "USER;43a7dfc4d50343e5aad834be773a8498"
+          },
+          {
+            "id": "pineVersion",
+            "value": "1.0"
+          },
+          {
+            "id": "pineFeatures",
+            "value": "{\"strategy\":1,\"plot\":1,\"ta\":1}"
+          },
+          {
+            "id": "in_0",
+            "value": 20
+          },
+          {
+            "id": "in_1",
+            "value": 100000
+          },
+          {
+            "id": "in_2",
+            "value": "percent"
+          },
+          {
+            "id": "in_3",
+            "value": 0.05
+          },
+          {
+            "id": "in_4",
+            "value": 1
+          },
+          {
+            "id": "in_5",
+            "value": 0
+          },
+          {
+            "id": "in_6",
+            "value": false
+          },
+          {
+            "id": "in_7",
+            "value": false
+          },
+          {
+            "id": "in_8",
+            "value": 0
+          },
+          {
+            "id": "in_9",
+            "value": "percent_of_equity"
+          },
+          {
+            "id": "in_10",
+            "value": 100
+          },
+          {
+            "id": "in_11",
+            "value": "NONE"
+          },
+          {
+            "id": "in_12",
+            "value": false
+          },
+          {
+            "id": "in_13",
+            "value": "FIFO"
+          },
+          {
+            "id": "in_14",
+            "value": 100
+          },
+          {
+            "id": "in_15",
+            "value": 100
+          },
+          {
+            "id": "in_16",
+            "value": 2
+          },
+          {
+            "id": "in_17",
+            "value": false
+          },
+          {
+            "id": "in_18",
+            "value": false
+          },
+          {
+            "id": "in_19",
+            "value": "BACKTEST"
+          },
+          {
+            "id": "in_20",
+            "value": ""
+          },
+          {
+            "id": "in_21",
+            "value": "order_fills"
+          },
+          {
+            "id": "in_22",
+            "value": ""
+          },
+          {
+            "id": "in_23",
+            "value": true
+          },
+          {
+            "id": "in_24",
+            "value": ""
+          },
+          {
+            "id": "in_25",
+            "value": false
+          },
+          {
+            "id": "__profile",
+            "value": false
+          }
+        ],
+        "compilation_token": "857fbd40-7c85-43c5-b455-2b8a9161f2c0",
+        "report_ready": true,
+        "applied": true,
+        "calculation_ready": true,
+        "chart_changed": false,
+        "chart": {
+          "target_count": 1,
+          "studies": [
+            {
+              "id": "DGZDCG",
+              "version": "1.0",
+              "status_type": 2
+            }
+          ]
+        },
+        "editor_modified": false,
+        "provenance": {
+          "workspace_id": "08768c5f-61a0-49aa-ba79-c95d4f87e490",
+          "operation_id": "08019764-400e-4dfc-95bd-5cf6781de7ea",
+          "target": "5C41A72F6BCEA9727F47A4FC926AC953",
+          "layout": "2QKIbTsO",
+          "pine": "USER;43a7dfc4d50343e5aad834be773a8498",
+          "page_generation": "0f45edc5-94e8-4512-a2d2-7cac42f34d29",
+          "source_hash": "256b6b75452469283b69e6b8e94990c5c9c186910ae2c61450cafbea35c28023",
+          "context": {
+            "symbol": "BITSTAMP:BTCUSD",
+            "aliases": [
+              "BTCUSD",
+              "BITSTAMP:BTCUSD"
+            ],
+            "resolution": "60",
+            "chart_type": 1,
+            "session": null
+          },
+          "study": {
+            "id": "DGZDCG",
+            "pine": "USER;43a7dfc4d50343e5aad834be773a8498",
+            "strategy": true,
+            "inputs": [
+              {
+                "id": "pineId",
+                "value": "USER;43a7dfc4d50343e5aad834be773a8498"
+              },
+              {
+                "id": "pineVersion",
+                "value": "1.0"
+              },
+              {
+                "id": "pineFeatures",
+                "value": "{\"strategy\":1,\"plot\":1,\"ta\":1}"
+              },
+              {
+                "id": "in_0",
+                "value": 20
+              },
+              {
+                "id": "in_1",
+                "value": 100000
+              },
+              {
+                "id": "in_2",
+                "value": "percent"
+              },
+              {
+                "id": "in_3",
+                "value": 0.05
+              },
+              {
+                "id": "in_4",
+                "value": 1
+              },
+              {
+                "id": "in_5",
+                "value": 0
+              },
+              {
+                "id": "in_6",
+                "value": false
+              },
+              {
+                "id": "in_7",
+                "value": false
+              },
+              {
+                "id": "in_8",
+                "value": 0
+              },
+              {
+                "id": "in_9",
+                "value": "percent_of_equity"
+              },
+              {
+                "id": "in_10",
+                "value": 100
+              },
+              {
+                "id": "in_11",
+                "value": "NONE"
+              },
+              {
+                "id": "in_12",
+                "value": false
+              },
+              {
+                "id": "in_13",
+                "value": "FIFO"
+              },
+              {
+                "id": "in_14",
+                "value": 100
+              },
+              {
+                "id": "in_15",
+                "value": 100
+              },
+              {
+                "id": "in_16",
+                "value": 2
+              },
+              {
+                "id": "in_17",
+                "value": false
+              },
+              {
+                "id": "in_18",
+                "value": false
+              },
+              {
+                "id": "in_19",
+                "value": "BACKTEST"
+              },
+              {
+                "id": "in_20",
+                "value": ""
+              },
+              {
+                "id": "in_21",
+                "value": "order_fills"
+              },
+              {
+                "id": "in_22",
+                "value": ""
+              },
+              {
+                "id": "in_23",
+                "value": true
+              },
+              {
+                "id": "in_24",
+                "value": ""
+              },
+              {
+                "id": "in_25",
+                "value": false
+              },
+              {
+                "id": "__profile",
+                "value": false
+              }
+            ],
+            "status": 2,
+            "compiled_hash": "47e927411939a4fb0badcbc208687d092a605a4b48e3285843bea07f0c51d5d5"
+          },
+          "calculation": {
+            "token": "857fbd40-7c85-43c5-b455-2b8a9161f2c0",
+            "source_hash": "256b6b75452469283b69e6b8e94990c5c9c186910ae2c61450cafbea35c28023",
+            "phase": "ready",
+            "strategy_id": "DGZDCG",
+            "accepted_cycle": 0,
+            "cycle": 0,
+            "completed": null
+          }
+        }
+      },
+      "stderr": ""
+    },
+    {
+      "worker": "b",
+      "ms": 199,
+      "result": {
+        "success": true,
+        "compiled": true,
+        "compile_performed": false,
+        "unchanged": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": [],
+        "strategy_id": "WbFocA",
+        "strategy_inputs": [
+          {
+            "id": "text",
+            "value": "bmI9Ks46_uWmSaK0OFpM0NGmzu4v14Q==_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"
+          },
+          {
+            "id": "pineId",
+            "value": "USER;3236d6372c7244a7b589a54b816940d2"
+          },
+          {
+            "id": "pineVersion",
+            "value": "1.0"
+          },
+          {
+            "id": "pineFeatures",
+            "value": "{\"strategy\":1,\"plot\":1,\"ta\":1}"
+          },
+          {
+            "id": "in_0",
+            "value": 20
+          },
+          {
+            "id": "in_1",
+            "value": 100000
+          },
+          {
+            "id": "in_2",
+            "value": "percent"
+          },
+          {
+            "id": "in_3",
+            "value": 0.05
+          },
+          {
+            "id": "in_4",
+            "value": 1
+          },
+          {
+            "id": "in_5",
+            "value": 0
+          },
+          {
+            "id": "in_6",
+            "value": false
+          },
+          {
+            "id": "in_7",
+            "value": false
+          },
+          {
+            "id": "in_8",
+            "value": 0
+          },
+          {
+            "id": "in_9",
+            "value": "percent_of_equity"
+          },
+          {
+            "id": "in_10",
+            "value": 100
+          },
+          {
+            "id": "in_11",
+            "value": "NONE"
+          },
+          {
+            "id": "in_12",
+            "value": false
+          },
+          {
+            "id": "in_13",
+            "value": "FIFO"
+          },
+          {
+            "id": "in_14",
+            "value": 100
+          },
+          {
+            "id": "in_15",
+            "value": 100
+          },
+          {
+            "id": "in_16",
+            "value": 2
+          },
+          {
+            "id": "in_17",
+            "value": false
+          },
+          {
+            "id": "in_18",
+            "value": false
+          },
+          {
+            "id": "in_19",
+            "value": "BACKTEST"
+          },
+          {
+            "id": "in_20",
+            "value": ""
+          },
+          {
+            "id": "in_21",
+            "value": "order_fills"
+          },
+          {
+            "id": "in_22",
+            "value": ""
+          },
+          {
+            "id": "in_23",
+            "value": true
+          },
+          {
+            "id": "in_24",
+            "value": ""
+          },
+          {
+            "id": "in_25",
+            "value": false
+          },
+          {
+            "id": "__profile",
+            "value": false
+          }
+        ],
+        "compilation_token": "8d673a40-f100-419e-9a96-946637e1649e",
+        "report_ready": true,
+        "applied": true,
+        "calculation_ready": true,
+        "chart_changed": false,
+        "chart": {
+          "target_count": 1,
+          "studies": [
+            {
+              "id": "WbFocA",
+              "version": "1.0",
+              "status_type": 2
+            }
+          ]
+        },
+        "editor_modified": false,
+        "provenance": {
+          "workspace_id": "675eebfa-3813-45a7-be45-8c9ed20f700c",
+          "operation_id": "4b255472-8015-4d8d-8c32-201baa87ab01",
+          "target": "0C0598E17D667D6B7FC3B75F87458C53",
+          "layout": "1yvV37Yp",
+          "pine": "USER;3236d6372c7244a7b589a54b816940d2",
+          "page_generation": "d761951c-7d74-46b1-9749-9775d462f538",
+          "source_hash": "b04dc6e29535b0ad3133ee50783a3539715a194f9d4a530239fd44ca679405b4",
+          "context": {
+            "symbol": "BITSTAMP:BTCUSD",
+            "aliases": [
+              "BTCUSD",
+              "BITSTAMP:BTCUSD"
+            ],
+            "resolution": "60",
+            "chart_type": 1,
+            "session": null
+          },
+          "study": {
+            "id": "WbFocA",
+            "pine": "USER;3236d6372c7244a7b589a54b816940d2",
+            "strategy": true,
+            "inputs": [
+              {
+                "id": "pineId",
+                "value": "USER;3236d6372c7244a7b589a54b816940d2"
+              },
+              {
+                "id": "pineVersion",
+                "value": "1.0"
+              },
+              {
+                "id": "pineFeatures",
+                "value": "{\"strategy\":1,\"plot\":1,\"ta\":1}"
+              },
+              {
+                "id": "in_0",
+                "value": 20
+              },
+              {
+                "id": "in_1",
+                "value": 100000
+              },
+              {
+                "id": "in_2",
+                "value": "percent"
+              },
+              {
+                "id": "in_3",
+                "value": 0.05
+              },
+              {
+                "id": "in_4",
+                "value": 1
+              },
+              {
+                "id": "in_5",
+                "value": 0
+              },
+              {
+                "id": "in_6",
+                "value": false
+              },
+              {
+                "id": "in_7",
+                "value": false
+              },
+              {
+                "id": "in_8",
+                "value": 0
+              },
+              {
+                "id": "in_9",
+                "value": "percent_of_equity"
+              },
+              {
+                "id": "in_10",
+                "value": 100
+              },
+              {
+                "id": "in_11",
+                "value": "NONE"
+              },
+              {
+                "id": "in_12",
+                "value": false
+              },
+              {
+                "id": "in_13",
+                "value": "FIFO"
+              },
+              {
+                "id": "in_14",
+                "value": 100
+              },
+              {
+                "id": "in_15",
+                "value": 100
+              },
+              {
+                "id": "in_16",
+                "value": 2
+              },
+              {
+                "id": "in_17",
+                "value": false
+              },
+              {
+                "id": "in_18",
+                "value": false
+              },
+              {
+                "id": "in_19",
+                "value": "BACKTEST"
+              },
+              {
+                "id": "in_20",
+                "value": ""
+              },
+              {
+                "id": "in_21",
+                "value": "order_fills"
+              },
+              {
+                "id": "in_22",
+                "value": ""
+              },
+              {
+                "id": "in_23",
+                "value": true
+              },
+              {
+                "id": "in_24",
+                "value": ""
+              },
+              {
+                "id": "in_25",
+                "value": false
+              },
+              {
+                "id": "__profile",
+                "value": false
+              }
+            ],
+            "status": 2,
+            "compiled_hash": "53b29679f15ff9dc9d5aba92078c6836f788873c87e8aad67347ca151b197bc7"
+          },
+          "calculation": {
+            "token": "8d673a40-f100-419e-9a96-946637e1649e",
+            "source_hash": "b04dc6e29535b0ad3133ee50783a3539715a194f9d4a530239fd44ca679405b4",
+            "phase": "ready",
+            "strategy_id": "WbFocA",
+            "accepted_cycle": 0,
+            "cycle": 0,
+            "completed": null
+          }
+        }
+      },
+      "stderr": ""
+    }
+  ]
+}

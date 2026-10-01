@@ -86,3 +86,26 @@ it('failed saved translation returns diagnostics without replacing or restarting
   await assert.rejects(refreshSavedPine(f.window,f.controller,plan),/failed native compilation/);
   assert.equal(replaced,0);assert.equal(restarted,0);assert.equal(diagnostics,1);assert.equal(f.sources[0].text,'old');
 });
+it('modified source after layout reload saves once and updates the actual old applied version',async()=>{
+  const f=fixture([{id:'p',pine:'P',text:'old'},{id:'q',pine:'Q',text:'untouched'}]);
+  f.setIdentity({scriptIdPart:'P',version:'9.0'});let saves=0,restarts=0,modified=true;
+  f.controller.isModified=()=>modified;
+  f.controller.saveScript=async()=>{saves++;modified=false;f.setIdentity({scriptIdPart:'P',version:'10.0'});};
+  f.sources[0].restart=()=>{restarts++;};
+  f.controller._editorStore={getStore:()=>({getState:()=>({script:{scriptName:'P'}})}),addPendingRequest:()=>{},removePendingRequest:()=>{},pushScriptError:()=>{},
+    translateScript:async identity=>{assert.deepEqual(identity,{scriptIdPart:'P',scriptVersion:'10.0'});return {success:true,metaInfo:{}};}};
+  f.controller._replaceStubByStudy=async opts=>{assert.equal(opts.oldPineVersion,'1.0');assert.equal(opts.pineVersion,'10.0');f.sources[0].text='requested new';};
+  assert.equal(dispatchPineCompilation(f.window,f.controller,'token'),'saveThenRefreshOnChart');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(f.window.__tvCliPineCompile.actionDone,true);assert.equal(saves,1);assert.equal(restarts,1);
+  assert.equal(f.sources[1].text,'untouched');assert.deepEqual(f.counts(),{adds:0,updates:0});
+});
+it('modified saved source after reload still requires --save before any native save',async()=>{
+  const f=fixture();f.setIdentity({scriptIdPart:'P',version:'9.0'});let saves=0;
+  f.controller.saveScript=async()=>{saves++;};
+  const context=pineCompileContext(f.window,f.controller);
+  const result=await smartCompile({_deps:{source:'indicator("Same title")\nplot(close)',
+    readOutcome:async()=>readPineOutcome(f.window,f.controller,null,'token'),
+    evaluate:expression=>expression.includes('return failCompilation(')?true:context}});
+  assert.equal(result.code,'SAVE_REQUIRED');assert.equal(result.compiled,false);assert.equal(saves,0);assert.deepEqual(f.counts(),{adds:0,updates:0});
+});

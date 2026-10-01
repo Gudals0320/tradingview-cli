@@ -1,0 +1,10 @@
+//@version=6
+strategy("Codex I14 A 20261001", overlay=true, initial_capital=100000, commission_type=strategy.commission.percent, commission_value=0.05, slippage=1, pyramiding=0)
+length = input.int(20, "Length", minval=2)
+average = ta.sma(close, length)
+if ta.crossover(close, average)
+    strategy.entry("L", strategy.long)
+if ta.crossunder(close, average)
+    strategy.close("L")
+plot(average)
+// Independent workspace source mutation

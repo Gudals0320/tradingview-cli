@@ -237,6 +237,8 @@ Desktop의 활성 탭은 셸의 실제 탭 선택 상태를 기준으로 판단�
 
 ## 배치 실행과 중단 복구
 
+단일 Desktop/포트에서 여러 CLI 작업을 동시에 실행하려면 [독립 workspace 문서](docs/workspaces.md)를 사용합니다. 작업별 target·저장 레이아웃·Pine 문서를 예약하고, 각 호출을 `tv --workspace FILE ...`로 이어갑니다. 예약 중에는 일반 online 명령이 차단됩니다. 일반 CLI 호출끼리도 실행 전체의 endpoint lease를 획득하므로 겹치는 호출은 `SESSION_BUSY`로 실패할 수 있습니다.
+
 배치는 같은 Desktop endpoint와 운영체제 임시 디렉토리를 공유하는 CLI 프로세스 사이에 잠금을 사용합니다. Pine 초안이 레이아웃 간에 공유될 수 있으므로 다른 레이아웃의 충돌하는 CLI 작업도 거부합니다.
 
 `tv session status`는 저장된 초안 내용을 노출하지 않고 소유권과 복구 상태를 보여줍니다. 배치를 강제 종료하면 복구 journal을 보존하고 후속 변경 작업을 거부합니다. 복구 대기 중에는 `status`, `state`, `tab list`로 상태를 확인할 수 있지만, 다른 배치가 살아 있는 동안에는 이 명령들도 차단됩니다.

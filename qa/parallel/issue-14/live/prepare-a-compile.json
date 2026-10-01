@@ -1,0 +1,151 @@
+{
+  "success": true,
+  "compiled": true,
+  "has_errors": false,
+  "errors": [],
+  "warnings": [],
+  "button_clicked": "addToChart",
+  "strategy_id": "DGZDCG",
+  "strategy_inputs": [
+    {
+      "id": "text",
+      "value": "bmI9Ks46_z1NN6iTpW+odwp4gJlti0w==_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"
+    },
+    {
+      "id": "pineId",
+      "value": "USER;43a7dfc4d50343e5aad834be773a8498"
+    },
+    {
+      "id": "pineVersion",
+      "value": "1.0"
+    },
+    {
+      "id": "pineFeatures",
+      "value": "{\"strategy\":1,\"plot\":1,\"ta\":1}"
+    },
+    {
+      "id": "in_0",
+      "value": 20
+    },
+    {
+      "id": "in_1",
+      "value": 100000
+    },
+    {
+      "id": "in_2",
+      "value": "percent"
+    },
+    {
+      "id": "in_3",
+      "value": 0.05
+    },
+    {
+      "id": "in_4",
+      "value": 1
+    },
+    {
+      "id": "in_5",
+      "value": 0
+    },
+    {
+      "id": "in_6",
+      "value": false
+    },
+    {
+      "id": "in_7",
+      "value": false
+    },
+    {
+      "id": "in_8",
+      "value": 0
+    },
+    {
+      "id": "in_9",
+      "value": "percent_of_equity"
+    },
+    {
+      "id": "in_10",
+      "value": 100
+    },
+    {
+      "id": "in_11",
+      "value": "NONE"
+    },
+    {
+      "id": "in_12",
+      "value": false
+    },
+    {
+      "id": "in_13",
+      "value": "FIFO"
+    },
+    {
+      "id": "in_14",
+      "value": 100
+    },
+    {
+      "id": "in_15",
+      "value": 100
+    },
+    {
+      "id": "in_16",
+      "value": 2
+    },
+    {
+      "id": "in_17",
+      "value": false
+    },
+    {
+      "id": "in_18",
+      "value": false
+    },
+    {
+      "id": "in_19",
+      "value": "BACKTEST"
+    },
+    {
+      "id": "in_20",
+      "value": ""
+    },
+    {
+      "id": "in_21",
+      "value": "order_fills"
+    },
+    {
+      "id": "in_22",
+      "value": ""
+    },
+    {
+      "id": "in_23",
+      "value": true
+    },
+    {
+      "id": "in_24",
+      "value": ""
+    },
+    {
+      "id": "in_25",
+      "value": false
+    },
+    {
+      "id": "__profile",
+      "value": false
+    }
+  ],
+  "compilation_token": "857fbd40-7c85-43c5-b455-2b8a9161f2c0",
+  "report_ready": true,
+  "applied": true,
+  "calculation_ready": true,
+  "chart_changed": true,
+  "chart": {
+    "target_count": 1,
+    "studies": [
+      {
+        "id": "DGZDCG",
+        "version": "1.0",
+        "status_type": 2
+      }
+    ]
+  },
+  "editor_modified": false
+}

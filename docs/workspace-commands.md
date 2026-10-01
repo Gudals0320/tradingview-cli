@@ -1,0 +1,8 @@
+# Command support matrix
+
+| Scope | Commands |
+|---|---|
+| Workspace (also exclusive legacy) | `data equity`, `data ledger`, `data strategy`, `data trades`, `indicator get`, `indicator set`, `info`, `pine compile`, `pine console`, `pine errors`, `pine get`, `pine raw-compile`, `pine save`, `pine set`, `state`, `symbol`, `timeframe`, `type`, `workspace wait` |
+| Desktop Runtime independent | `pine analyze`, `pine check`, `search`, `session discard`, `session status`, `update`, `workspace abandon`, `workspace gate-clear`, `workspace gate-status`, `workspace interrupt`, `workspace inventory`, `workspace status` |
+| Workspace administration (reserved-target CDP) | `workspace init`, `workspace rebind`, `workspace recover`, `workspace release` |
+| Exclusive legacy only | `alert create`, `alert delete`, `alert list`, `data boxes`, `data depth`, `data indicator`, `data labels`, `data lines`, `data tables`, `discover`, `draw clear`, `draw get`, `draw list`, `draw remove`, `draw shape`, `indicator add`, `indicator remove`, `indicator toggle`, `launch`, `layout list`, `layout switch`, `ohlcv`, `pane focus`, `pane layout`, `pane list`, `pane symbol`, `pine list`, `pine new`, `pine open`, `quote`, `range`, `replay autoplay`, `replay start`, `replay status`, `replay step`, `replay stop`, `replay trade`, `screenshot`, `scroll`, `status`, `stream all`, `stream bars`, `stream labels`, `stream lines`, `stream ohlcv`, `stream quote`, `stream tables`, `stream values`, `tab close`, `tab list`, `tab new`, `tab switch`, `ui click`, `ui eval`, `ui find`, `ui fullscreen`, `ui hover`, `ui keyboard`, `ui mouse`, `ui panel`, `ui scroll`, `ui type`, `ui-state`, `values`, `watchlist add`, `watchlist add-bulk`, `watchlist get`, `watchlist remove` |

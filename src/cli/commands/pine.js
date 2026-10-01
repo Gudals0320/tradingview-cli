@@ -23,7 +23,9 @@ register('pine', {
       },
       handler: async (opts) => {
         let source;
-        if (opts.file) {
+        if (opts.workspaceSource !== undefined) {
+          source = opts.workspaceSource;
+        } else if (opts.file) {
           source = readFileSync(opts.file, 'utf-8');
         } else {
           source = await readStdin();

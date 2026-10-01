@@ -1,0 +1,310 @@
+{
+  "started_at": "2026-10-01T10:12:03.119Z",
+  "inventory_before": [
+    {
+      "id": "0C0598E17D667D6B7FC3B75F87458C53",
+      "url": "https://kr.tradingview.com/chart/1yvV37Yp/"
+    },
+    {
+      "id": "5C41A72F6BCEA9727F47A4FC926AC953",
+      "url": "https://kr.tradingview.com/chart/2QKIbTsO/"
+    },
+    {
+      "id": "D1AFFCCBC3A67669FD97D434AADFB942",
+      "url": "https://kr.tradingview.com/chart/KHbeIfLo/"
+    }
+  ],
+  "steps": [
+    {
+      "suffix": "b",
+      "target": "0C0598E17D667D6B7FC3B75F87458C53",
+      "args": [
+        "symbol",
+        "BITSTAMP:BTCUSD"
+      ],
+      "ms": 1069,
+      "result": {
+        "success": true,
+        "symbol": "BITSTAMP:BTCUSD",
+        "chart_ready": true
+      },
+      "stderr": ""
+    },
+    {
+      "suffix": "b",
+      "target": "0C0598E17D667D6B7FC3B75F87458C53",
+      "args": [
+        "timeframe",
+        "60"
+      ],
+      "ms": 1020,
+      "result": {
+        "success": true,
+        "timeframe": "60",
+        "chart_ready": true
+      },
+      "stderr": ""
+    },
+    {
+      "suffix": "b",
+      "target": "0C0598E17D667D6B7FC3B75F87458C53",
+      "args": [
+        "pine",
+        "new",
+        "strategy"
+      ],
+      "ms": 171,
+      "result": {
+        "success": true,
+        "type": "strategy",
+        "action": "new_script_created",
+        "template": "strategy"
+      },
+      "stderr": ""
+    },
+    {
+      "suffix": "b",
+      "target": "0C0598E17D667D6B7FC3B75F87458C53",
+      "args": [
+        "pine",
+        "set",
+        "--file",
+        "qa/parallel/issue-14/fixture-b.pine"
+      ],
+      "ms": 148,
+      "result": {
+        "success": true,
+        "lines_set": 10
+      },
+      "stderr": ""
+    },
+    {
+      "suffix": "b",
+      "target": "0C0598E17D667D6B7FC3B75F87458C53",
+      "args": [
+        "pine",
+        "save"
+      ],
+      "ms": 1498,
+      "result": {
+        "success": true,
+        "saved": true,
+        "action": "saved_with_dialog",
+        "script_id": "USER;3236d6372c7244a7b589a54b816940d2",
+        "version": "1.0"
+      },
+      "stderr": ""
+    },
+    {
+      "suffix": "b",
+      "target": "0C0598E17D667D6B7FC3B75F87458C53",
+      "args": [
+        "pine",
+        "compile"
+      ],
+      "ms": 1348,
+      "result": {
+        "success": true,
+        "compiled": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": [],
+        "button_clicked": "addToChart",
+        "strategy_id": "WbFocA",
+        "strategy_inputs": [
+          {
+            "id": "text",
+            "value": "bmI9Ks46_uWmSaK0OFpM0NGmzu4v14Q==_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"
+          },
+          {
+            "id": "pineId",
+            "value": "USER;3236d6372c7244a7b589a54b816940d2"
+          },
+          {
+            "id": "pineVersion",
+            "value": "1.0"
+          },
+          {
+            "id": "pineFeatures",
+            "value": "{\"strategy\":1,\"plot\":1,\"ta\":1}"
+          },
+          {
+            "id": "in_0",
+            "value": 20
+          },
+          {
+            "id": "in_1",
+            "value": 100000
+          },
+          {
+            "id": "in_2",
+            "value": "percent"
+          },
+          {
+            "id": "in_3",
+            "value": 0.05
+          },
+          {
+            "id": "in_4",
+            "value": 1
+          },
+          {
+            "id": "in_5",
+            "value": 0
+          },
+          {
+            "id": "in_6",
+            "value": false
+          },
+          {
+            "id": "in_7",
+            "value": false
+          },
+          {
+            "id": "in_8",
+            "value": 0
+          },
+          {
+            "id": "in_9",
+            "value": "percent_of_equity"
+          },
+          {
+            "id": "in_10",
+            "value": 100
+          },
+          {
+            "id": "in_11",
+            "value": "NONE"
+          },
+          {
+            "id": "in_12",
+            "value": false
+          },
+          {
+            "id": "in_13",
+            "value": "FIFO"
+          },
+          {
+            "id": "in_14",
+            "value": 100
+          },
+          {
+            "id": "in_15",
+            "value": 100
+          },
+          {
+            "id": "in_16",
+            "value": 2
+          },
+          {
+            "id": "in_17",
+            "value": false
+          },
+          {
+            "id": "in_18",
+            "value": false
+          },
+          {
+            "id": "in_19",
+            "value": "BACKTEST"
+          },
+          {
+            "id": "in_20",
+            "value": ""
+          },
+          {
+            "id": "in_21",
+            "value": "order_fills"
+          },
+          {
+            "id": "in_22",
+            "value": ""
+          },
+          {
+            "id": "in_23",
+            "value": true
+          },
+          {
+            "id": "in_24",
+            "value": ""
+          },
+          {
+            "id": "in_25",
+            "value": false
+          },
+          {
+            "id": "__profile",
+            "value": false
+          }
+        ],
+        "compilation_token": "8d673a40-f100-419e-9a96-946637e1649e",
+        "report_ready": true,
+        "applied": true,
+        "calculation_ready": true,
+        "chart_changed": true,
+        "chart": {
+          "target_count": 1,
+          "studies": [
+            {
+              "id": "WbFocA",
+              "version": "1.0",
+              "status_type": 2
+            }
+          ]
+        },
+        "editor_modified": false
+      },
+      "stderr": ""
+    },
+    {
+      "suffix": "a",
+      "target": "5C41A72F6BCEA9727F47A4FC926AC953",
+      "args": [
+        "symbol",
+        "BITSTAMP:BTCUSD"
+      ],
+      "ms": 1077,
+      "result": {
+        "success": true,
+        "symbol": "BITSTAMP:BTCUSD",
+        "chart_ready": true
+      },
+      "stderr": ""
+    },
+    {
+      "suffix": "a",
+      "target": "5C41A72F6BCEA9727F47A4FC926AC953",
+      "args": [
+        "timeframe",
+        "60"
+      ],
+      "ms": 992,
+      "result": {
+        "success": true,
+        "timeframe": "60",
+        "chart_ready": true
+      },
+      "stderr": ""
+    }
+  ],
+  "error": {
+    "message": "Command failed: C:\\Program Files\\nodejs\\node.exe src/cli/index.js --target 5C41A72F6BCEA9727F47A4FC926AC953 pine new strategy\n{\n  \"success\": false,\n  \"error\": \"Visible Pine Editor did not initialize before timeout. Open its panel in TradingView and retry.\",\n  \"code\": \"PINE_EDITOR_NOT_READY\",\n  \"details\": {\n    \"viewport_width\": 1280,\n    \"viewport_height\": 800,\n    \"document_ready\": \"complete\",\n    \"panel_visible\": false,\n    \"panel_signature\": \"{\\\"containers\\\":[],\\\"controls\\\":[{\\\"disabled\\\":false,\\\"pressed\\\":\\\"false\\\",\\\"expanded\\\":null,\\\"cls\\\":\\\"button-SEyQozUN button-zm3YRUFG apply-common-tooltip common-tooltip-vertical isInteractive-zm3YRUFG accessible-zm3YRUFG\\\"}]}\",\n    \"requests\": 8,\n    \"timeout_ms\": 30000\n  }\n}\n",
+    "stdout": "",
+    "stderr": "{\n  \"success\": false,\n  \"error\": \"Visible Pine Editor did not initialize before timeout. Open its panel in TradingView and retry.\",\n  \"code\": \"PINE_EDITOR_NOT_READY\",\n  \"details\": {\n    \"viewport_width\": 1280,\n    \"viewport_height\": 800,\n    \"document_ready\": \"complete\",\n    \"panel_visible\": false,\n    \"panel_signature\": \"{\\\"containers\\\":[],\\\"controls\\\":[{\\\"disabled\\\":false,\\\"pressed\\\":\\\"false\\\",\\\"expanded\\\":null,\\\"cls\\\":\\\"button-SEyQozUN button-zm3YRUFG apply-common-tooltip common-tooltip-vertical isInteractive-zm3YRUFG accessible-zm3YRUFG\\\"}]}\",\n    \"requests\": 8,\n    \"timeout_ms\": 30000\n  }\n}\n"
+  },
+  "finished_at": "2026-10-01T10:12:41.873Z",
+  "inventory_after": [
+    {
+      "id": "0C0598E17D667D6B7FC3B75F87458C53",
+      "url": "https://kr.tradingview.com/chart/1yvV37Yp/"
+    },
+    {
+      "id": "5C41A72F6BCEA9727F47A4FC926AC953",
+      "url": "https://kr.tradingview.com/chart/2QKIbTsO/"
+    },
+    {
+      "id": "D1AFFCCBC3A67669FD97D434AADFB942",
+      "url": "https://kr.tradingview.com/chart/KHbeIfLo/"
+    }
+  ]
+}

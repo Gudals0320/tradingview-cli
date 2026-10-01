@@ -133,12 +133,24 @@ export function dispatchPineCompilation(window, controller, token) {
   const plan = planPineCompilation(window, controller);
   if (plan.error) throw new Error(plan.code + ': ' + plan.error);
   const refresh=plan.method==='updateOnChart'&&controller.isModified?.()===false;
-  const method = refresh?'refreshSavedOnChart':plan.method;
-  if (!refresh && typeof controller?.[method] !== 'function') throw new Error('Pine native compilation action unavailable.');
+  const saveRefresh=plan.method==='updateOnChart'&&controller.isModified?.()===true&&controller.isDraft?.()===false
+    && String(controller.getScriptIdVersion()?.version)!==String(plan.target_version);
+  const method = refresh?'refreshSavedOnChart':saveRefresh?'saveThenRefreshOnChart':plan.method;
+  if (saveRefresh && (typeof controller.saveScript!=='function'||typeof controller._replaceStubByStudy!=='function')) throw new Error('Pine saved-version reconciliation action unavailable.');
+  if (!refresh && !saveRefresh && typeof controller?.[method] !== 'function') throw new Error('Pine native compilation action unavailable.');
   operation.controller = controller;
   operation.plan = plan;
   operation.check = () => verifyPineCompilation(window, operation);
-  Promise.resolve().then(() => refresh?refreshSavedPine(window,controller,plan):controller[method]()).then(() => {
+  Promise.resolve().then(async () => {
+    if(saveRefresh){
+      // A reloaded layout can retain an older study than the saved editor.
+      // Save the requested edits once, then target the actual applied version.
+      await controller.saveScript();
+      if(controller.isModified?.()!==false)throw new Error('SAVE_FAILED: Edited source was not saved before applying it.');
+      return refreshSavedPine(window,controller,plan);
+    }
+    return refresh?refreshSavedPine(window,controller,plan):controller[method]();
+  }).then(() => {
     operation.actionDone = true; operation.refresh();
   }, error => {
     operation.error = error?.message || String(error);operation.error_code=error?.code||null; operation.actionDone = true; operation.refresh();

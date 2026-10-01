@@ -1,7 +1,8 @@
 import CDP from 'chrome-remote-interface';
 import { CDP_HOST, CDP_PORT } from './config.js';
 import { getDesktopInventory, activeTarget, bindShellTab } from './desktop.js';
-import { assertSessionAccess, isReadOnlySession } from './session.js';
+import { assertSessionAccess, isReadOnlySession, currentWorkspaceSession } from './session.js';
+import { WORKSPACE_PAGE_CODE } from './workspace-page.js';
 
 let client = null;
 let targetInfo = null;
@@ -73,6 +74,8 @@ export async function getClient() {
 export async function connect(targetId = null) {
   assertSessionAccess();
   targetId ||= preferredTarget || process.env.TV_CDP_TARGET || null;
+  const workspace = currentWorkspaceSession()?.workspace;
+  if (workspace && targetId !== workspace.target) { const error = new Error('Workspace target cannot change or fall back.'); error.code = 'WORKSPACE_TARGET_MISMATCH'; throw error; }
   let lastError;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
@@ -143,6 +146,14 @@ export async function getTargetInfo() {
 
 export async function evaluate(expression, opts = {}) {
   const c = await getClient();
+  const workspace = currentWorkspaceSession()?.workspace;
+  if (workspace) {
+    const owner = { id: workspace.id, token: workspace.token, nonce: workspace.binding?.nonce };
+    expression = `(async () => {${WORKSPACE_PAGE_CODE};const owner=${JSON.stringify(owner)};
+      guardWorkspacePage(window,document,owner);
+      const value=await (${expression});guardWorkspacePage(window,document,owner);return value;})()`;
+    opts = { ...opts, awaitPromise: true };
+  }
   const result = await c.Runtime.evaluate({
     expression,
     returnByValue: true,
@@ -153,7 +164,9 @@ export async function evaluate(expression, opts = {}) {
     const msg = result.exceptionDetails.exception?.description
       || result.exceptionDetails.text
       || 'Unknown evaluation error';
-    throw new Error(`JS evaluation error: ${msg}`);
+    const error = new Error(`JS evaluation error: ${msg}`);
+    error.code = msg.match(/\b(WORKSPACE_[A-Z_]+):/)?.[1];
+    throw error;
   }
   return result.result?.value;
 }

@@ -24,6 +24,13 @@ it('failed --save syntax responses report actual persistence, version, chart cha
   assert.equal(r.code,'PINE_COMPILE_ERROR');assert.equal(r.saved,true);assert.equal(r.version,'2.0');assert.equal(r.save_performed,true);assert.equal(r.chart_changed,true);
   assert.equal(r.errors[0].line,3);assert.equal(readStrategyReport(f.window).code,'PINE_COMPILE_ERROR');
 });
+it('a failed chart refresh still reports the successfully saved version',async()=>{
+  const f=fixture({version:'10.0'});
+  const result=await finalizePineCompile({success:false,compiled:false,code:'CLEAN_UPDATE_UNSUPPORTED',error:'Saved translation could not update the target'},
+    {...f,token:'run',source:'requested saved source',saveChanges:true});
+  assert.equal(result.success,false);assert.equal(result.compiled,false);assert.equal(result.saved,true);
+  assert.equal(result.save_performed,true);assert.equal(result.version,'10.0');assert.equal(result.persistence_verified,true);
+});
 it('runtime native descriptions remain actionable even with empty Monaco markers',async()=>{
   const f=fixture({runtime:true});const r=await finalizePineCompile({success:false,compiled:false,error:'Rejected'},{...f,token:'run',source:'runtime source'});
   assert.equal(r.code,'PINE_RUNTIME_ERROR');assert.equal(r.compiled,true);assert.match(r.runtime_error,/18.*array.get.*-1.*0/);

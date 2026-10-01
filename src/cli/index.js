@@ -25,6 +25,7 @@ import './commands/pane.js';
 import './commands/tab.js';
 import './commands/stream.js';
 import './commands/session.js';
+import './commands/workspace.js';
 
 // Run
 import { run } from './router.js';
