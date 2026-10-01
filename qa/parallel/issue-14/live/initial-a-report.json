@@ -1,0 +1,348 @@
+{
+  "success": true,
+  "strategy": "Codex I14 A 20261001",
+  "strategy_id": "DGZDCG",
+  "currency": "USD",
+  "source": "internal_api",
+  "compilation_token": "857fbd40-7c85-43c5-b455-2b8a9161f2c0",
+  "source_hash": "256b6b75452469283b69e6b8e94990c5c9c186910ae2c61450cafbea35c28023",
+  "strategy_inputs": [
+    {
+      "id": "text",
+      "value": "bmI9Ks46_z1NN6iTpW+odwp4gJlti0w==_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"
+    },
+    {
+      "id": "pineId",
+      "value": "USER;43a7dfc4d50343e5aad834be773a8498"
+    },
+    {
+      "id": "pineVersion",
+      "value": "1.0"
+    },
+    {
+      "id": "pineFeatures",
+      "value": "{\"strategy\":1,\"plot\":1,\"ta\":1}"
+    },
+    {
+      "id": "in_0",
+      "value": 20
+    },
+    {
+      "id": "in_1",
+      "value": 100000
+    },
+    {
+      "id": "in_2",
+      "value": "percent"
+    },
+    {
+      "id": "in_3",
+      "value": 0.05
+    },
+    {
+      "id": "in_4",
+      "value": 1
+    },
+    {
+      "id": "in_5",
+      "value": 0
+    },
+    {
+      "id": "in_6",
+      "value": false
+    },
+    {
+      "id": "in_7",
+      "value": false
+    },
+    {
+      "id": "in_8",
+      "value": 0
+    },
+    {
+      "id": "in_9",
+      "value": "percent_of_equity"
+    },
+    {
+      "id": "in_10",
+      "value": 100
+    },
+    {
+      "id": "in_11",
+      "value": "NONE"
+    },
+    {
+      "id": "in_12",
+      "value": false
+    },
+    {
+      "id": "in_13",
+      "value": "FIFO"
+    },
+    {
+      "id": "in_14",
+      "value": 100
+    },
+    {
+      "id": "in_15",
+      "value": 100
+    },
+    {
+      "id": "in_16",
+      "value": 2
+    },
+    {
+      "id": "in_17",
+      "value": false
+    },
+    {
+      "id": "in_18",
+      "value": false
+    },
+    {
+      "id": "in_19",
+      "value": "BACKTEST"
+    },
+    {
+      "id": "in_20",
+      "value": ""
+    },
+    {
+      "id": "in_21",
+      "value": "order_fills"
+    },
+    {
+      "id": "in_22",
+      "value": ""
+    },
+    {
+      "id": "in_23",
+      "value": true
+    },
+    {
+      "id": "in_24",
+      "value": ""
+    },
+    {
+      "id": "in_25",
+      "value": false
+    },
+    {
+      "id": "__profile",
+      "value": false
+    }
+  ],
+  "metric_count": 20,
+  "metrics": {
+    "net_profit": -61695.10512713052,
+    "net_profit_percent": -0.6169510512713052,
+    "gross_profit": 437888.2610957298,
+    "gross_loss": 499583.3662228603,
+    "profit_factor": 0.8765068869414503,
+    "max_drawdown": 89110.74421838426,
+    "max_drawdown_percent": 0.733715628311592,
+    "total_trades": 1944,
+    "winning_trades": 314,
+    "losing_trades": 1630,
+    "percent_profitable": 0.16152263374485595,
+    "avg_trade": -31.73616519,
+    "largest_win": 10805.054291519999,
+    "largest_loss": 4705.17236287,
+    "commission_paid": 107537.21625313014,
+    "sharpe_ratio": -0.29055473821181266,
+    "sortino_ratio": -0.35129116339992483,
+    "buy_hold_return": 84489.33372,
+    "buy_hold_return_percent": 0.8448933371999999,
+    "open_pl": 0
+  },
+  "context": {
+    "symbol": "BITSTAMP:BTCUSD",
+    "resolution": "60",
+    "chart_type": 1,
+    "aliases": [
+      "BTCUSD",
+      "BITSTAMP:BTCUSD"
+    ],
+    "bar_count": 300,
+    "first_bar_time": 1789772400,
+    "last_bar_time": 1790848800,
+    "loading": false,
+    "series_symbol": "BITSTAMP:BTCUSD",
+    "feed_error": null
+  },
+  "backtest_window": {
+    "from": "2024-01-01T00:00:00.000Z",
+    "to": "2026-10-01T10:00:00.000Z"
+  },
+  "loaded_window": {
+    "from": "2026-09-18T23:00:00.000Z",
+    "to": "2026-10-01T10:00:00.000Z"
+  },
+  "trade_window": {
+    "from": "2024-01-03T02:00:00.000Z",
+    "to": "2026-10-01T08:00:00.000Z"
+  },
+  "units": {
+    "money": "USD",
+    "percent_fields": "fraction (0.01 = 1%)",
+    "time_fields": "ISO-8601 UTC",
+    "order_sequence": "ordinal, not timestamp or bar index"
+  },
+  "provenance": {
+    "workspace_id": "08768c5f-61a0-49aa-ba79-c95d4f87e490",
+    "operation_id": "3d32f64d-59be-4084-b702-b2e32ed5f5a6",
+    "target": "5C41A72F6BCEA9727F47A4FC926AC953",
+    "layout": "2QKIbTsO",
+    "pine": "USER;43a7dfc4d50343e5aad834be773a8498",
+    "page_generation": "0f45edc5-94e8-4512-a2d2-7cac42f34d29",
+    "source_hash": "256b6b75452469283b69e6b8e94990c5c9c186910ae2c61450cafbea35c28023",
+    "context": {
+      "symbol": "BITSTAMP:BTCUSD",
+      "aliases": [
+        "BTCUSD",
+        "BITSTAMP:BTCUSD"
+      ],
+      "resolution": "60",
+      "chart_type": 1,
+      "session": null
+    },
+    "study": {
+      "id": "DGZDCG",
+      "pine": "USER;43a7dfc4d50343e5aad834be773a8498",
+      "strategy": true,
+      "inputs": [
+        {
+          "id": "pineId",
+          "value": "USER;43a7dfc4d50343e5aad834be773a8498"
+        },
+        {
+          "id": "pineVersion",
+          "value": "1.0"
+        },
+        {
+          "id": "pineFeatures",
+          "value": "{\"strategy\":1,\"plot\":1,\"ta\":1}"
+        },
+        {
+          "id": "in_0",
+          "value": 20
+        },
+        {
+          "id": "in_1",
+          "value": 100000
+        },
+        {
+          "id": "in_2",
+          "value": "percent"
+        },
+        {
+          "id": "in_3",
+          "value": 0.05
+        },
+        {
+          "id": "in_4",
+          "value": 1
+        },
+        {
+          "id": "in_5",
+          "value": 0
+        },
+        {
+          "id": "in_6",
+          "value": false
+        },
+        {
+          "id": "in_7",
+          "value": false
+        },
+        {
+          "id": "in_8",
+          "value": 0
+        },
+        {
+          "id": "in_9",
+          "value": "percent_of_equity"
+        },
+        {
+          "id": "in_10",
+          "value": 100
+        },
+        {
+          "id": "in_11",
+          "value": "NONE"
+        },
+        {
+          "id": "in_12",
+          "value": false
+        },
+        {
+          "id": "in_13",
+          "value": "FIFO"
+        },
+        {
+          "id": "in_14",
+          "value": 100
+        },
+        {
+          "id": "in_15",
+          "value": 100
+        },
+        {
+          "id": "in_16",
+          "value": 2
+        },
+        {
+          "id": "in_17",
+          "value": false
+        },
+        {
+          "id": "in_18",
+          "value": false
+        },
+        {
+          "id": "in_19",
+          "value": "BACKTEST"
+        },
+        {
+          "id": "in_20",
+          "value": ""
+        },
+        {
+          "id": "in_21",
+          "value": "order_fills"
+        },
+        {
+          "id": "in_22",
+          "value": ""
+        },
+        {
+          "id": "in_23",
+          "value": true
+        },
+        {
+          "id": "in_24",
+          "value": ""
+        },
+        {
+          "id": "in_25",
+          "value": false
+        },
+        {
+          "id": "__profile",
+          "value": false
+        }
+      ],
+      "status": 2,
+      "compiled_hash": "47e927411939a4fb0badcbc208687d092a605a4b48e3285843bea07f0c51d5d5"
+    },
+    "calculation": {
+      "token": "857fbd40-7c85-43c5-b455-2b8a9161f2c0",
+      "source_hash": "256b6b75452469283b69e6b8e94990c5c9c186910ae2c61450cafbea35c28023",
+      "phase": "ready",
+      "strategy_id": "DGZDCG",
+      "accepted_cycle": 0,
+      "cycle": 0,
+      "completed": null
+    }
+  }
+}

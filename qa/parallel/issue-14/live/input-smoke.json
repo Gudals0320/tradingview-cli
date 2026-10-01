@@ -1,0 +1,1366 @@
+[
+  {
+    "worker": "a",
+    "ms": 1253,
+    "result": {
+      "success": true,
+      "entity_id": "DGZDCG",
+      "updated_inputs": {
+        "in_0": 21
+      },
+      "report_ready": true,
+      "provenance": {
+        "workspace_id": "08768c5f-61a0-49aa-ba79-c95d4f87e490",
+        "operation_id": "b29dcc4c-bafe-4bf1-959d-eab7e2dea1ea",
+        "target": "5C41A72F6BCEA9727F47A4FC926AC953",
+        "layout": "2QKIbTsO",
+        "pine": "USER;43a7dfc4d50343e5aad834be773a8498",
+        "page_generation": "0f45edc5-94e8-4512-a2d2-7cac42f34d29",
+        "source_hash": "256b6b75452469283b69e6b8e94990c5c9c186910ae2c61450cafbea35c28023",
+        "context": {
+          "symbol": "BITSTAMP:BTCUSD",
+          "aliases": [
+            "BTCUSD",
+            "BITSTAMP:BTCUSD"
+          ],
+          "resolution": "60",
+          "chart_type": 1,
+          "session": null
+        },
+        "study": {
+          "id": "DGZDCG",
+          "pine": "USER;43a7dfc4d50343e5aad834be773a8498",
+          "strategy": true,
+          "inputs": [
+            {
+              "id": "pineId",
+              "value": "USER;43a7dfc4d50343e5aad834be773a8498"
+            },
+            {
+              "id": "pineVersion",
+              "value": "1.0"
+            },
+            {
+              "id": "pineFeatures",
+              "value": "{\"strategy\":1,\"plot\":1,\"ta\":1}"
+            },
+            {
+              "id": "in_0",
+              "value": 21
+            },
+            {
+              "id": "in_1",
+              "value": 100000
+            },
+            {
+              "id": "in_2",
+              "value": "percent"
+            },
+            {
+              "id": "in_3",
+              "value": 0.05
+            },
+            {
+              "id": "in_4",
+              "value": 1
+            },
+            {
+              "id": "in_5",
+              "value": 0
+            },
+            {
+              "id": "in_6",
+              "value": false
+            },
+            {
+              "id": "in_7",
+              "value": false
+            },
+            {
+              "id": "in_8",
+              "value": 0
+            },
+            {
+              "id": "in_9",
+              "value": "percent_of_equity"
+            },
+            {
+              "id": "in_10",
+              "value": 100
+            },
+            {
+              "id": "in_11",
+              "value": "NONE"
+            },
+            {
+              "id": "in_12",
+              "value": false
+            },
+            {
+              "id": "in_13",
+              "value": "FIFO"
+            },
+            {
+              "id": "in_14",
+              "value": 100
+            },
+            {
+              "id": "in_15",
+              "value": 100
+            },
+            {
+              "id": "in_16",
+              "value": 2
+            },
+            {
+              "id": "in_17",
+              "value": false
+            },
+            {
+              "id": "in_18",
+              "value": false
+            },
+            {
+              "id": "in_19",
+              "value": "BACKTEST"
+            },
+            {
+              "id": "in_20",
+              "value": ""
+            },
+            {
+              "id": "in_21",
+              "value": "order_fills"
+            },
+            {
+              "id": "in_22",
+              "value": ""
+            },
+            {
+              "id": "in_23",
+              "value": true
+            },
+            {
+              "id": "in_24",
+              "value": ""
+            },
+            {
+              "id": "in_25",
+              "value": false
+            },
+            {
+              "id": "__profile",
+              "value": false
+            }
+          ],
+          "status": 2,
+          "compiled_hash": "f6e540bf5753e74989461ca6b1ef4999c16bda6dc84dfce92aa0b8154a90da27"
+        },
+        "calculation": {
+          "token": "857fbd40-7c85-43c5-b455-2b8a9161f2c0",
+          "source_hash": "256b6b75452469283b69e6b8e94990c5c9c186910ae2c61450cafbea35c28023",
+          "phase": "ready",
+          "strategy_id": "DGZDCG",
+          "accepted_cycle": 1,
+          "cycle": 1,
+          "completed": {
+            "cycle": 1,
+            "key_hash": "09c945e8ed02f185e3550b3b46533203331bc493e4e45ec90db1273db303aad3"
+          }
+        },
+        "native_events": [
+          {
+            "event": "status",
+            "at": 1790849722058,
+            "status": 1,
+            "inputs": [
+              {
+                "id": "pineId",
+                "value": "USER;43a7dfc4d50343e5aad834be773a8498"
+              },
+              {
+                "id": "pineVersion",
+                "value": "1.0"
+              },
+              {
+                "id": "pineFeatures",
+                "value": "{\"strategy\":1,\"plot\":1,\"ta\":1}"
+              },
+              {
+                "id": "in_0",
+                "value": 21
+              },
+              {
+                "id": "in_1",
+                "value": 100000
+              },
+              {
+                "id": "in_2",
+                "value": "percent"
+              },
+              {
+                "id": "in_3",
+                "value": 0.05
+              },
+              {
+                "id": "in_4",
+                "value": 1
+              },
+              {
+                "id": "in_5",
+                "value": 0
+              },
+              {
+                "id": "in_6",
+                "value": false
+              },
+              {
+                "id": "in_7",
+                "value": false
+              },
+              {
+                "id": "in_8",
+                "value": 0
+              },
+              {
+                "id": "in_9",
+                "value": "percent_of_equity"
+              },
+              {
+                "id": "in_10",
+                "value": 100
+              },
+              {
+                "id": "in_11",
+                "value": "NONE"
+              },
+              {
+                "id": "in_12",
+                "value": false
+              },
+              {
+                "id": "in_13",
+                "value": "FIFO"
+              },
+              {
+                "id": "in_14",
+                "value": 100
+              },
+              {
+                "id": "in_15",
+                "value": 100
+              },
+              {
+                "id": "in_16",
+                "value": 2
+              },
+              {
+                "id": "in_17",
+                "value": false
+              },
+              {
+                "id": "in_18",
+                "value": false
+              },
+              {
+                "id": "in_19",
+                "value": "BACKTEST"
+              },
+              {
+                "id": "in_20",
+                "value": ""
+              },
+              {
+                "id": "in_21",
+                "value": "order_fills"
+              },
+              {
+                "id": "in_22",
+                "value": ""
+              },
+              {
+                "id": "in_23",
+                "value": true
+              },
+              {
+                "id": "in_24",
+                "value": ""
+              },
+              {
+                "id": "in_25",
+                "value": false
+              },
+              {
+                "id": "__profile",
+                "value": false
+              }
+            ]
+          },
+          {
+            "event": "report",
+            "at": 1790849722300,
+            "status": 1,
+            "inputs": [
+              {
+                "id": "pineId",
+                "value": "USER;43a7dfc4d50343e5aad834be773a8498"
+              },
+              {
+                "id": "pineVersion",
+                "value": "1.0"
+              },
+              {
+                "id": "pineFeatures",
+                "value": "{\"strategy\":1,\"plot\":1,\"ta\":1}"
+              },
+              {
+                "id": "in_0",
+                "value": 21
+              },
+              {
+                "id": "in_1",
+                "value": 100000
+              },
+              {
+                "id": "in_2",
+                "value": "percent"
+              },
+              {
+                "id": "in_3",
+                "value": 0.05
+              },
+              {
+                "id": "in_4",
+                "value": 1
+              },
+              {
+                "id": "in_5",
+                "value": 0
+              },
+              {
+                "id": "in_6",
+                "value": false
+              },
+              {
+                "id": "in_7",
+                "value": false
+              },
+              {
+                "id": "in_8",
+                "value": 0
+              },
+              {
+                "id": "in_9",
+                "value": "percent_of_equity"
+              },
+              {
+                "id": "in_10",
+                "value": 100
+              },
+              {
+                "id": "in_11",
+                "value": "NONE"
+              },
+              {
+                "id": "in_12",
+                "value": false
+              },
+              {
+                "id": "in_13",
+                "value": "FIFO"
+              },
+              {
+                "id": "in_14",
+                "value": 100
+              },
+              {
+                "id": "in_15",
+                "value": 100
+              },
+              {
+                "id": "in_16",
+                "value": 2
+              },
+              {
+                "id": "in_17",
+                "value": false
+              },
+              {
+                "id": "in_18",
+                "value": false
+              },
+              {
+                "id": "in_19",
+                "value": "BACKTEST"
+              },
+              {
+                "id": "in_20",
+                "value": ""
+              },
+              {
+                "id": "in_21",
+                "value": "order_fills"
+              },
+              {
+                "id": "in_22",
+                "value": ""
+              },
+              {
+                "id": "in_23",
+                "value": true
+              },
+              {
+                "id": "in_24",
+                "value": ""
+              },
+              {
+                "id": "in_25",
+                "value": false
+              },
+              {
+                "id": "__profile",
+                "value": false
+              }
+            ]
+          },
+          {
+            "event": "status",
+            "at": 1790849722303,
+            "status": 2,
+            "inputs": [
+              {
+                "id": "pineId",
+                "value": "USER;43a7dfc4d50343e5aad834be773a8498"
+              },
+              {
+                "id": "pineVersion",
+                "value": "1.0"
+              },
+              {
+                "id": "pineFeatures",
+                "value": "{\"strategy\":1,\"plot\":1,\"ta\":1}"
+              },
+              {
+                "id": "in_0",
+                "value": 21
+              },
+              {
+                "id": "in_1",
+                "value": 100000
+              },
+              {
+                "id": "in_2",
+                "value": "percent"
+              },
+              {
+                "id": "in_3",
+                "value": 0.05
+              },
+              {
+                "id": "in_4",
+                "value": 1
+              },
+              {
+                "id": "in_5",
+                "value": 0
+              },
+              {
+                "id": "in_6",
+                "value": false
+              },
+              {
+                "id": "in_7",
+                "value": false
+              },
+              {
+                "id": "in_8",
+                "value": 0
+              },
+              {
+                "id": "in_9",
+                "value": "percent_of_equity"
+              },
+              {
+                "id": "in_10",
+                "value": 100
+              },
+              {
+                "id": "in_11",
+                "value": "NONE"
+              },
+              {
+                "id": "in_12",
+                "value": false
+              },
+              {
+                "id": "in_13",
+                "value": "FIFO"
+              },
+              {
+                "id": "in_14",
+                "value": 100
+              },
+              {
+                "id": "in_15",
+                "value": 100
+              },
+              {
+                "id": "in_16",
+                "value": 2
+              },
+              {
+                "id": "in_17",
+                "value": false
+              },
+              {
+                "id": "in_18",
+                "value": false
+              },
+              {
+                "id": "in_19",
+                "value": "BACKTEST"
+              },
+              {
+                "id": "in_20",
+                "value": ""
+              },
+              {
+                "id": "in_21",
+                "value": "order_fills"
+              },
+              {
+                "id": "in_22",
+                "value": ""
+              },
+              {
+                "id": "in_23",
+                "value": true
+              },
+              {
+                "id": "in_24",
+                "value": ""
+              },
+              {
+                "id": "in_25",
+                "value": false
+              },
+              {
+                "id": "__profile",
+                "value": false
+              }
+            ]
+          },
+          {
+            "event": "report",
+            "at": 1790849722317,
+            "status": 2,
+            "inputs": [
+              {
+                "id": "pineId",
+                "value": "USER;43a7dfc4d50343e5aad834be773a8498"
+              },
+              {
+                "id": "pineVersion",
+                "value": "1.0"
+              },
+              {
+                "id": "pineFeatures",
+                "value": "{\"strategy\":1,\"plot\":1,\"ta\":1}"
+              },
+              {
+                "id": "in_0",
+                "value": 21
+              },
+              {
+                "id": "in_1",
+                "value": 100000
+              },
+              {
+                "id": "in_2",
+                "value": "percent"
+              },
+              {
+                "id": "in_3",
+                "value": 0.05
+              },
+              {
+                "id": "in_4",
+                "value": 1
+              },
+              {
+                "id": "in_5",
+                "value": 0
+              },
+              {
+                "id": "in_6",
+                "value": false
+              },
+              {
+                "id": "in_7",
+                "value": false
+              },
+              {
+                "id": "in_8",
+                "value": 0
+              },
+              {
+                "id": "in_9",
+                "value": "percent_of_equity"
+              },
+              {
+                "id": "in_10",
+                "value": 100
+              },
+              {
+                "id": "in_11",
+                "value": "NONE"
+              },
+              {
+                "id": "in_12",
+                "value": false
+              },
+              {
+                "id": "in_13",
+                "value": "FIFO"
+              },
+              {
+                "id": "in_14",
+                "value": 100
+              },
+              {
+                "id": "in_15",
+                "value": 100
+              },
+              {
+                "id": "in_16",
+                "value": 2
+              },
+              {
+                "id": "in_17",
+                "value": false
+              },
+              {
+                "id": "in_18",
+                "value": false
+              },
+              {
+                "id": "in_19",
+                "value": "BACKTEST"
+              },
+              {
+                "id": "in_20",
+                "value": ""
+              },
+              {
+                "id": "in_21",
+                "value": "order_fills"
+              },
+              {
+                "id": "in_22",
+                "value": ""
+              },
+              {
+                "id": "in_23",
+                "value": true
+              },
+              {
+                "id": "in_24",
+                "value": ""
+              },
+              {
+                "id": "in_25",
+                "value": false
+              },
+              {
+                "id": "__profile",
+                "value": false
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "worker": "b",
+    "ms": 1186,
+    "result": {
+      "success": true,
+      "entity_id": "WbFocA",
+      "updated_inputs": {
+        "in_0": 21
+      },
+      "report_ready": true,
+      "provenance": {
+        "workspace_id": "675eebfa-3813-45a7-be45-8c9ed20f700c",
+        "operation_id": "34e468d1-eadf-4ac4-85ff-cfff770e9362",
+        "target": "0C0598E17D667D6B7FC3B75F87458C53",
+        "layout": "1yvV37Yp",
+        "pine": "USER;3236d6372c7244a7b589a54b816940d2",
+        "page_generation": "d761951c-7d74-46b1-9749-9775d462f538",
+        "source_hash": "b04dc6e29535b0ad3133ee50783a3539715a194f9d4a530239fd44ca679405b4",
+        "context": {
+          "symbol": "BITSTAMP:BTCUSD",
+          "aliases": [
+            "BTCUSD",
+            "BITSTAMP:BTCUSD"
+          ],
+          "resolution": "60",
+          "chart_type": 1,
+          "session": null
+        },
+        "study": {
+          "id": "WbFocA",
+          "pine": "USER;3236d6372c7244a7b589a54b816940d2",
+          "strategy": true,
+          "inputs": [
+            {
+              "id": "pineId",
+              "value": "USER;3236d6372c7244a7b589a54b816940d2"
+            },
+            {
+              "id": "pineVersion",
+              "value": "1.0"
+            },
+            {
+              "id": "pineFeatures",
+              "value": "{\"strategy\":1,\"plot\":1,\"ta\":1}"
+            },
+            {
+              "id": "in_0",
+              "value": 21
+            },
+            {
+              "id": "in_1",
+              "value": 100000
+            },
+            {
+              "id": "in_2",
+              "value": "percent"
+            },
+            {
+              "id": "in_3",
+              "value": 0.05
+            },
+            {
+              "id": "in_4",
+              "value": 1
+            },
+            {
+              "id": "in_5",
+              "value": 0
+            },
+            {
+              "id": "in_6",
+              "value": false
+            },
+            {
+              "id": "in_7",
+              "value": false
+            },
+            {
+              "id": "in_8",
+              "value": 0
+            },
+            {
+              "id": "in_9",
+              "value": "percent_of_equity"
+            },
+            {
+              "id": "in_10",
+              "value": 100
+            },
+            {
+              "id": "in_11",
+              "value": "NONE"
+            },
+            {
+              "id": "in_12",
+              "value": false
+            },
+            {
+              "id": "in_13",
+              "value": "FIFO"
+            },
+            {
+              "id": "in_14",
+              "value": 100
+            },
+            {
+              "id": "in_15",
+              "value": 100
+            },
+            {
+              "id": "in_16",
+              "value": 2
+            },
+            {
+              "id": "in_17",
+              "value": false
+            },
+            {
+              "id": "in_18",
+              "value": false
+            },
+            {
+              "id": "in_19",
+              "value": "BACKTEST"
+            },
+            {
+              "id": "in_20",
+              "value": ""
+            },
+            {
+              "id": "in_21",
+              "value": "order_fills"
+            },
+            {
+              "id": "in_22",
+              "value": ""
+            },
+            {
+              "id": "in_23",
+              "value": true
+            },
+            {
+              "id": "in_24",
+              "value": ""
+            },
+            {
+              "id": "in_25",
+              "value": false
+            },
+            {
+              "id": "__profile",
+              "value": false
+            }
+          ],
+          "status": 2,
+          "compiled_hash": "b085463796bd3eafbadda7c8366e94748189a08a763515de02d46955f632888b"
+        },
+        "calculation": {
+          "token": "8d673a40-f100-419e-9a96-946637e1649e",
+          "source_hash": "b04dc6e29535b0ad3133ee50783a3539715a194f9d4a530239fd44ca679405b4",
+          "phase": "ready",
+          "strategy_id": "WbFocA",
+          "accepted_cycle": 1,
+          "cycle": 1,
+          "completed": {
+            "cycle": 1,
+            "key_hash": "c46c5e6721526eaf5a857e62fe2fb1540d324b948f69c2412ece7d5da665a8bf"
+          }
+        },
+        "native_events": [
+          {
+            "event": "status",
+            "at": 1790849722053,
+            "status": 1,
+            "inputs": [
+              {
+                "id": "pineId",
+                "value": "USER;3236d6372c7244a7b589a54b816940d2"
+              },
+              {
+                "id": "pineVersion",
+                "value": "1.0"
+              },
+              {
+                "id": "pineFeatures",
+                "value": "{\"strategy\":1,\"plot\":1,\"ta\":1}"
+              },
+              {
+                "id": "in_0",
+                "value": 21
+              },
+              {
+                "id": "in_1",
+                "value": 100000
+              },
+              {
+                "id": "in_2",
+                "value": "percent"
+              },
+              {
+                "id": "in_3",
+                "value": 0.05
+              },
+              {
+                "id": "in_4",
+                "value": 1
+              },
+              {
+                "id": "in_5",
+                "value": 0
+              },
+              {
+                "id": "in_6",
+                "value": false
+              },
+              {
+                "id": "in_7",
+                "value": false
+              },
+              {
+                "id": "in_8",
+                "value": 0
+              },
+              {
+                "id": "in_9",
+                "value": "percent_of_equity"
+              },
+              {
+                "id": "in_10",
+                "value": 100
+              },
+              {
+                "id": "in_11",
+                "value": "NONE"
+              },
+              {
+                "id": "in_12",
+                "value": false
+              },
+              {
+                "id": "in_13",
+                "value": "FIFO"
+              },
+              {
+                "id": "in_14",
+                "value": 100
+              },
+              {
+                "id": "in_15",
+                "value": 100
+              },
+              {
+                "id": "in_16",
+                "value": 2
+              },
+              {
+                "id": "in_17",
+                "value": false
+              },
+              {
+                "id": "in_18",
+                "value": false
+              },
+              {
+                "id": "in_19",
+                "value": "BACKTEST"
+              },
+              {
+                "id": "in_20",
+                "value": ""
+              },
+              {
+                "id": "in_21",
+                "value": "order_fills"
+              },
+              {
+                "id": "in_22",
+                "value": ""
+              },
+              {
+                "id": "in_23",
+                "value": true
+              },
+              {
+                "id": "in_24",
+                "value": ""
+              },
+              {
+                "id": "in_25",
+                "value": false
+              },
+              {
+                "id": "__profile",
+                "value": false
+              }
+            ]
+          },
+          {
+            "event": "report",
+            "at": 1790849722275,
+            "status": 1,
+            "inputs": [
+              {
+                "id": "pineId",
+                "value": "USER;3236d6372c7244a7b589a54b816940d2"
+              },
+              {
+                "id": "pineVersion",
+                "value": "1.0"
+              },
+              {
+                "id": "pineFeatures",
+                "value": "{\"strategy\":1,\"plot\":1,\"ta\":1}"
+              },
+              {
+                "id": "in_0",
+                "value": 21
+              },
+              {
+                "id": "in_1",
+                "value": 100000
+              },
+              {
+                "id": "in_2",
+                "value": "percent"
+              },
+              {
+                "id": "in_3",
+                "value": 0.05
+              },
+              {
+                "id": "in_4",
+                "value": 1
+              },
+              {
+                "id": "in_5",
+                "value": 0
+              },
+              {
+                "id": "in_6",
+                "value": false
+              },
+              {
+                "id": "in_7",
+                "value": false
+              },
+              {
+                "id": "in_8",
+                "value": 0
+              },
+              {
+                "id": "in_9",
+                "value": "percent_of_equity"
+              },
+              {
+                "id": "in_10",
+                "value": 100
+              },
+              {
+                "id": "in_11",
+                "value": "NONE"
+              },
+              {
+                "id": "in_12",
+                "value": false
+              },
+              {
+                "id": "in_13",
+                "value": "FIFO"
+              },
+              {
+                "id": "in_14",
+                "value": 100
+              },
+              {
+                "id": "in_15",
+                "value": 100
+              },
+              {
+                "id": "in_16",
+                "value": 2
+              },
+              {
+                "id": "in_17",
+                "value": false
+              },
+              {
+                "id": "in_18",
+                "value": false
+              },
+              {
+                "id": "in_19",
+                "value": "BACKTEST"
+              },
+              {
+                "id": "in_20",
+                "value": ""
+              },
+              {
+                "id": "in_21",
+                "value": "order_fills"
+              },
+              {
+                "id": "in_22",
+                "value": ""
+              },
+              {
+                "id": "in_23",
+                "value": true
+              },
+              {
+                "id": "in_24",
+                "value": ""
+              },
+              {
+                "id": "in_25",
+                "value": false
+              },
+              {
+                "id": "__profile",
+                "value": false
+              }
+            ]
+          },
+          {
+            "event": "status",
+            "at": 1790849722278,
+            "status": 2,
+            "inputs": [
+              {
+                "id": "pineId",
+                "value": "USER;3236d6372c7244a7b589a54b816940d2"
+              },
+              {
+                "id": "pineVersion",
+                "value": "1.0"
+              },
+              {
+                "id": "pineFeatures",
+                "value": "{\"strategy\":1,\"plot\":1,\"ta\":1}"
+              },
+              {
+                "id": "in_0",
+                "value": 21
+              },
+              {
+                "id": "in_1",
+                "value": 100000
+              },
+              {
+                "id": "in_2",
+                "value": "percent"
+              },
+              {
+                "id": "in_3",
+                "value": 0.05
+              },
+              {
+                "id": "in_4",
+                "value": 1
+              },
+              {
+                "id": "in_5",
+                "value": 0
+              },
+              {
+                "id": "in_6",
+                "value": false
+              },
+              {
+                "id": "in_7",
+                "value": false
+              },
+              {
+                "id": "in_8",
+                "value": 0
+              },
+              {
+                "id": "in_9",
+                "value": "percent_of_equity"
+              },
+              {
+                "id": "in_10",
+                "value": 100
+              },
+              {
+                "id": "in_11",
+                "value": "NONE"
+              },
+              {
+                "id": "in_12",
+                "value": false
+              },
+              {
+                "id": "in_13",
+                "value": "FIFO"
+              },
+              {
+                "id": "in_14",
+                "value": 100
+              },
+              {
+                "id": "in_15",
+                "value": 100
+              },
+              {
+                "id": "in_16",
+                "value": 2
+              },
+              {
+                "id": "in_17",
+                "value": false
+              },
+              {
+                "id": "in_18",
+                "value": false
+              },
+              {
+                "id": "in_19",
+                "value": "BACKTEST"
+              },
+              {
+                "id": "in_20",
+                "value": ""
+              },
+              {
+                "id": "in_21",
+                "value": "order_fills"
+              },
+              {
+                "id": "in_22",
+                "value": ""
+              },
+              {
+                "id": "in_23",
+                "value": true
+              },
+              {
+                "id": "in_24",
+                "value": ""
+              },
+              {
+                "id": "in_25",
+                "value": false
+              },
+              {
+                "id": "__profile",
+                "value": false
+              }
+            ]
+          },
+          {
+            "event": "report",
+            "at": 1790849722289,
+            "status": 2,
+            "inputs": [
+              {
+                "id": "pineId",
+                "value": "USER;3236d6372c7244a7b589a54b816940d2"
+              },
+              {
+                "id": "pineVersion",
+                "value": "1.0"
+              },
+              {
+                "id": "pineFeatures",
+                "value": "{\"strategy\":1,\"plot\":1,\"ta\":1}"
+              },
+              {
+                "id": "in_0",
+                "value": 21
+              },
+              {
+                "id": "in_1",
+                "value": 100000
+              },
+              {
+                "id": "in_2",
+                "value": "percent"
+              },
+              {
+                "id": "in_3",
+                "value": 0.05
+              },
+              {
+                "id": "in_4",
+                "value": 1
+              },
+              {
+                "id": "in_5",
+                "value": 0
+              },
+              {
+                "id": "in_6",
+                "value": false
+              },
+              {
+                "id": "in_7",
+                "value": false
+              },
+              {
+                "id": "in_8",
+                "value": 0
+              },
+              {
+                "id": "in_9",
+                "value": "percent_of_equity"
+              },
+              {
+                "id": "in_10",
+                "value": 100
+              },
+              {
+                "id": "in_11",
+                "value": "NONE"
+              },
+              {
+                "id": "in_12",
+                "value": false
+              },
+              {
+                "id": "in_13",
+                "value": "FIFO"
+              },
+              {
+                "id": "in_14",
+                "value": 100
+              },
+              {
+                "id": "in_15",
+                "value": 100
+              },
+              {
+                "id": "in_16",
+                "value": 2
+              },
+              {
+                "id": "in_17",
+                "value": false
+              },
+              {
+                "id": "in_18",
+                "value": false
+              },
+              {
+                "id": "in_19",
+                "value": "BACKTEST"
+              },
+              {
+                "id": "in_20",
+                "value": ""
+              },
+              {
+                "id": "in_21",
+                "value": "order_fills"
+              },
+              {
+                "id": "in_22",
+                "value": ""
+              },
+              {
+                "id": "in_23",
+                "value": true
+              },
+              {
+                "id": "in_24",
+                "value": ""
+              },
+              {
+                "id": "in_25",
+                "value": false
+              },
+              {
+                "id": "__profile",
+                "value": false
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+]
