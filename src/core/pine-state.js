@@ -52,7 +52,10 @@ export function pineStudySnapshot(window) {
 
 export function planPineCompilation(window, controller) {
   const identity = controller?.getScriptIdVersion?.();
-  const before = pineStudySnapshot(window);
+  let before;
+  try { before = pineStudySnapshot(window); } catch (error) {
+    return {code:'TARGETS_UNREADABLE',error:'Could not read Pine chart targets: ' + error.message};
+  }
   const matches = identity?.scriptIdPart ? before.filter(item => item.pine_id === identity.scriptIdPart) : [];
   if (matches.length > 1) return { error:'More than one chart study uses this Pine document.', code:'AMBIGUOUS_TARGET', target_count:matches.length };
   return { method:matches.length === 1 ? 'updateOnChart' : 'addToChart', before,
@@ -64,7 +67,10 @@ export function verifyPineCompilation(window, operation) {
   const currentId = controller.getScriptIdVersion()?.scriptIdPart;
   if (!currentId || (plan.script_id && plan.script_id !== currentId)) return {
     code:'TARGET_MISMATCH',error:'Pine document identity changed during compilation.' };
-  const after = pineStudySnapshot(window);
+  let after;
+  try { after = pineStudySnapshot(window); } catch (error) {
+    return {code:'TARGETS_UNREADABLE',error:'Could not verify Pine chart targets: ' + error.message};
+  }
   const matches = after.filter(item => item.pine_id === currentId);
   if (matches.length > 1) return {code:'DUPLICATE_ADDED',target_count:matches.length,error:'Compilation created or retained multiple studies for this Pine document.'};
   if (matches.length === 0) return {pending:true};

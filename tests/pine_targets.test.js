@@ -58,3 +58,9 @@ it('fails closed when a connected document has no native update action',()=>{
   assert.throws(()=>dispatchPineCompilation(f.window,f.controller,'token'),/unavailable/);
   assert.deepEqual(f.counts(),{adds:0,updates:0});
 });
+it('reports unreadable chart targets without dispatching a mutation',()=>{
+  const f=fixture();f.window.TradingViewApi._activeChartWidgetWV.value=()=>{throw new Error('calculating');};
+  assert.equal(planPineCompilation(f.window,f.controller).code,'TARGETS_UNREADABLE');
+  assert.throws(()=>dispatchPineCompilation(f.window,f.controller,'token'),/TARGETS_UNREADABLE/);
+  assert.deepEqual(f.counts(),{adds:0,updates:0});
+});
