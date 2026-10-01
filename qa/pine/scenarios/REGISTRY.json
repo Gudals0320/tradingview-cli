@@ -94,7 +94,8 @@
       ],
       "thread_id": "01a0f59d-535b-7b81-8a76-559c1029fef4",
       "status": "reviewed",
-      "outcome": "Functional PASS; coordinate/log observability limits; inherited document fenced before mutation"
+      "outcome": "Functional PASS; coordinate/log observability limits; inherited document fenced before mutation",
+      "commit": "2de84fe"
     },
     {
       "number": 5,
@@ -115,8 +116,9 @@
         "save/reopen export 및 전체소스 보존; 검증지표 계산 결과 실제 대조.",
         "게시/외부import/계정공유 금지. library import integration 검증했다고 주장하지 말 것; unsupported Desktop 차트추가 동작은 정확히 기록."
       ],
-      "thread_id": null,
-      "status": "queued"
+      "thread_id": "01a0f5b2-cb41-7800-92e7-ade8e5a2e9ae",
+      "status": "reviewed",
+      "outcome": "Final v2 copied-body 33/33; library persistence/type contracts pass; title-check divergence, library apply timeouts, panel/update observations with workarounds"
     },
     {
       "number": 6,

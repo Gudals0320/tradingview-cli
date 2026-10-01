@@ -94,3 +94,26 @@ Product baseline: 57ee8e7. Shared product source stays unchanged during this run
   a fixed global ring-buffer capacity; aggregate will use captured-view wording.
 - New layout inherited S03 document, but pre-fence stopped before any mutation;
   explicit new/reset preceded S04 source. No cross-document incident this run.
+
+## S05 — reviewed after v2 coverage correction
+
+- Read full HANDOFF, server/Desktop/support records, body hashes and numeric probes.
+- First 30/30 probe result used v1 bodies, while final library v2 added scale.
+  Lead required narrow coverage correction. Final verifier now matches all 50
+  nonblank v2 body lines after export/name normalization; independently recomputed
+  by Lead. Final chart33/33 and Node oracle agree, including scale1/2/0.
+- Actual library import/publication was not performed. Functional numeric claim
+  is about copied library bodies executed as an indicator, not import linkage.
+- Spaced library title passed translate_light check but Desktop rejected it.
+  Separate valid-title library apply attempts2/2 timed out with a status0 study;
+  cause/interaction with other chart failures remains unproven.
+- Visible, full-viewport panel reopening failed once after reload; manual panel
+  open worked. Valid verifier update was rejected3 times in one stateful session;
+  own-study remove/re-add allowed final33 probes. Do not present as clean-path PASS.
+- Lead fixed stale editorial claims: four observations (not three), current v1
+  file title is already corrected, final tamper comparison1 line (not3), and the
+  incorrect aside about variance of [1,2,3,4]. Builder/evidence regenerated locally.
+- Screenshot command's exact generated screenshots/s05-final.png was moved by
+  Lead to S05 ignored results; original raw command path remains historical.
+- Unsupported library study and superseded own verifier study were removed by
+  worker; no other scenario source mutated. Final Volume+verifier and no modal.
