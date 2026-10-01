@@ -45,3 +45,13 @@ the sanitized evidence. The final #5 saved-state verification (`f7984bb`) and th
 #8 closed-log evidence/known limitations were accepted. The remaining limitations
 above are part of this agreement. The reviewer authorized this documentation-only
 agreement record without another review; the branch is left clean for the user.
+
+## Large-edit follow-up
+
+The subsequent 266→319-line strategy edit exposed issue #12. The target planning,
+document-bound report verification and #4 same-title opening edge were corrected
+in focused commits. Actual minimal/large/indicator/draft/document round trips
+pass; Reviewer agreed the follow-up at `0a75062`. The latest full suite has 308
+passing tests. See `large-edit/EXECUTOR.md` for the full record, source hashes,
+explicit QA setup cleanup and retained assets. Final editor is the large edited
+QA strategy; no merge, PR or push was performed.

@@ -158,6 +158,9 @@ fix. The new total unit suite is 308 passing tests, including pine_targets.
 The final editor is the saved large edited QA strategy in split view. Existing
 Lead failure evidence remains historical; explicit setup cleanup and retained QA
 assets are documented separately from the successful recovery sequence.
+Reviewer explicitly agreed #12 and the #4 follow-up at `0a75062`; the later change
+only records that agreement. Final test count is 308, lint passes and the branch
+is left clean without merge, PR or push.
 
 ## Lead large-edit follow-up — after 6e41546
 

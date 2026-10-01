@@ -74,5 +74,9 @@ is intentionally ambiguous. Personal scripts and original user layouts were not
 changed. Broad E2E was not run. Lead's time-exit counter was 0, so that Pine branch
 was compiled but not exercised by this workflow.
 
-Reviewer approved the implementation direction and the #4 follow-up. Final #12
-agreement is pending review of this committed integration/evidence record.
+Reviewer `01a0f504-e284-7e21-be27-7c56c82b7cf6` explicitly agreed completion of
+#12 and the #4 follow-up at `0a75062`. The reviewer independently ran 308 tests and
+lint, checked clean status, accepted the live evidence and known limits, and
+approved this documentation-only agreement record without another review.
+Transient unreadable post-action targets currently fail closed immediately;
+retrying such snapshots until timeout is a nonblocking future improvement.
