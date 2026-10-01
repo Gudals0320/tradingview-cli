@@ -38,7 +38,7 @@ v2→v3 실제 diff: 두 곳에 경계 검사 추가, 세션 완료 시 `runStar
 | C4 | 한도5에서 최신5개만, 표/배열 일관 | **PASS** | keep=5에서 표 5행(09-27~10-01), 배열 길이 5, removed 누적 단조 증가, avgVol=최신5 평균 6,815.57 일치 |
 | C5 | 완료 세션 ≥2개를 같은 차트 OHLCV로 독립 계산 대조 | **PASS** | 15분봉 테이블 5행 전부 봉수·거래량·고가·저가·범위 완전 일치; 시리즈 검증 24세션 전부 일치. 표본: BTCUSDT 9세션(09-21~09-29), ETHUSDT 24세션(09-07~10-01) |
 | C6 | console 실제 로그행만 | **PASS (제한적)** | `log.info` 출력이 그대로 `S02 session started/completed/oldest session removed utc=…` 형식으로만 파싱됨(오류 항목 0). 40줄 링버퍼 한계는 아래 5절 |
-| C7 | 배열 오류 관측·복구 | **PASS** | 재현 2회: 저장 성공 후 compile/compile --save가 `Rejected`(exit 1) 4/4회, 차트 study는 runtime error 상태, 수정 v3 set/save/compile --save로 복구(unchanged:true, statusType 2) |
+| C7 | 배열 오류 관측·복구 | **PASS** | 재현 2회: 저장 성공 후 compile/compile --save가 `Rejected`(exit 1) 3/3회(labels 44/48/91), 차트 study는 runtime error 상태, 수정 v3 set/save/compile --save로 복구(unchanged:true, statusType 2) |
 | C8 | 저장/재열기 보존 | **PASS** | `pine get` == v3 파일 해시(`eb174c78…`) 동일, `pine open` 재열기 후 재확인 동일(141행), 콘솔에 실제 소스 저장 파이프라인 기록 존재 |
 | C9 | 빈 배열에서 최초 시작을 실시간 관측 | **NOT TESTED (추출 창 제한)** | 사용 가능한 추출 창(최대 500봉)과 40줄 콘솔 버퍼가 초기 계산 구간을 포함하지 않아 직접 검증하지 못했습니다. Pine의 첫 계산이 선 채워진 상태인지도 단정하지 않습니다. |
 | C10 | 실시간 세션 롤오버 | **NOT TESTED** | 장시간 대기 회피 지침에 따라 미검증 |
@@ -89,7 +89,7 @@ fixture 오류(제품 결함 아님): 추출 스크립트 플롯 오프셋(F1), 
 
 ## 6. 종합 결과와 한계
 
-요구된 개발·오류 주입·수정·초기화·한도 변경·저장/재열기·독립 OHLCV 대조를 실제 차트에서 완료했습니다. 핵심 기능(세션 집계, 1회 기록, 20/5 제한, 표 일관성)은 독립 계산과 완전히 일치하며, 런타임 배열 오류는 1건의 제품 진단 결함(D1)과 함께 명확히 재현·복구되었습니다. 빈 이력 시작의 실시간 관측(C9)은 차트 이력 제한으로 BLOCKED, 실시간 롤오버(C10)는 NOT TESTED입니다. 제품 코드는 수정하지 않았습니다.
+요구된 개발·오류 주입·수정·초기화·한도 변경·저장/재열기·독립 OHLCV 대조를 실제 차트에서 완료했습니다. 핵심 기능(세션 집계, 1회 기록, 20/5 제한, 표 일관성)은 독립 계산과 완전히 일치하며, 런타임 배열 오류는 1건의 제품 진단 결함(D1)과 함께 명확히 재현·복구되었습니다. 빈 이력 시작의 직접 관측(C9)은 사용 가능한 추출 창/콘솔 버퍼 제한으로 NOT TESTED, 실시간 롤오버(C10)는 NOT TESTED입니다. 제품 코드는 수정하지 않았습니다.
 
 증거: `evidence.json` (QA 디렉터리), 원시 CLI 출력은 무시된 `results/pine-scenarios/s02-session-dashboard/`에만 보관.
 

@@ -45,3 +45,6 @@ Product baseline: 57ee8e7. Shared product source stays unchanged during this run
   observed initial empty archive. C9/C10 remain NOT TESTED. Logs rendered volume
   to fewer decimal places; exact numeric proof comes from table/series, not logs.
 - Worker ended idle, own replay stopped and dialogs0; no product files changed.
+- Lead corrected two stale handoff summary cells after worker's metadata repair:
+  C7 4/4 -> 3/3 and the concluding C9 BLOCKED -> NOT TESTED, matching its detailed
+  sections/evidence. No further Desktop calls were made for editorial correction.
