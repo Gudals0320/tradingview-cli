@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
 import { reserveWorkspace, acquireWorkspace, workspaceStatus, markInterrupted, loadWorkspace } from '../src/workspace-store.js';
-import { acquireSession, sessionPaths, assertSessionAccess } from '../src/session.js';
+import { acquireSession, sessionPaths, assertSessionAccess, clearAdmissionGate, admissionGateStatus } from '../src/session.js';
 
 const moduleUrl = new URL('../src/workspace-store.js', import.meta.url).href;
 function fixture() { const directory = mkdtempSync(join(tmpdir(), 'tv-workspace-')); return { directory, host: 'fixture', port: 1 }; }
@@ -21,9 +21,37 @@ function child(code) {
     process.on('exit', code => { if (code) reject(new Error(errors)); });
   });
   const exited = new Promise(resolve => process.on('exit', resolve));
-  return { process, ready, exited };
+  return { process, ready, exited, errors: () => errors };
 }
 describe('persistent independent workspaces', () => {
+  it('admits six independent process loops without metadata false conflicts', async () => {
+    const options = fixture(), resources = Array.from({ length: 6 }, (_, i) => reserve(options, String(i)));
+    const workers = resources.map(resource => child(`import {acquireWorkspace} from ${JSON.stringify(moduleUrl)};
+      console.log('ready');process.stdin.once('data',()=>{for(let i=0;i<15;i++){const lease=acquireWorkspace(${JSON.stringify(resource.file)},${JSON.stringify(options)});lease.finish({success:true});}process.stdin.pause();});`));
+    await Promise.all(workers.map(worker => worker.ready));
+    workers.forEach(worker => worker.process.stdin.end('start'));
+    assert.deepEqual(await Promise.all(workers.map(worker => worker.exited)), [0,0,0,0,0,0], workers.map(worker => worker.errors()).join('\n'));
+    resources.forEach(resource => assert.equal(workspaceStatus(resource.file, options).operation, null));
+  });
+  it('preserves clean failure continuity and requires verified recovery acknowledgement', () => {
+    const options = fixture(), a = reserve(options, 'a');
+    const clean = acquireWorkspace(a.file, options); clean.finish({ success: false, interrupted: false, result: { compiled: false } });
+    const lease = acquireWorkspace(a.file, options); lease.finish({ success: false });
+    assert.throws(() => acquireWorkspace(a.file, { ...options, recover: true }), { code: 'WORKSPACE_OPERATION_MISMATCH' });
+    const recovery = acquireWorkspace(a.file, { ...options, recover: true, recoveryOperation: lease.operation });
+    recovery.finish({ success: false, error: 'identity still mismatches' });
+    assert.equal(workspaceStatus(a.file, options).interrupted.operation_id, lease.operation);
+  });
+  it('clears only an exact dead gate token while preserving all reservations', () => {
+    const options = fixture(), a = reserve(options, 'a'), path = sessionPaths(options).gate;
+    writeFileSync(path, JSON.stringify({ pid: process.pid, token: 'live' }));
+    assert.throws(() => clearAdmissionGate('live', options), { code: 'SESSION_BUSY' });
+    writeFileSync(path, JSON.stringify({ pid: 99999999, token: 'dead', process_started_at: 'fixture' }));
+    assert.equal(admissionGateStatus(options).owner_alive, false);
+    assert.throws(() => clearAdmissionGate('wrong', options), { code: 'GATE_TOKEN_MISMATCH' });
+    clearAdmissionGate('dead', options);
+    const lease = acquireWorkspace(a.file, options); lease.finish({ success: true });
+  });
   it('rejects duplicate target, layout and document reservations', () => {
     const options = fixture(), a = reserve(options, 'a');
     for (const kind of ['target', 'layout', 'pine']) {
@@ -55,8 +83,8 @@ describe('persistent independent workspaces', () => {
       first.process.stdin.end('finish'); await first.exited;
       second.process.stdin.end('finish'); await second.exited;
     }
-    assert.equal(JSON.parse(readFileSync(`${a.file}.result.json`)).result.owner, a.id);
-    assert.equal(JSON.parse(readFileSync(`${b.file}.result.json`)).result.owner, b.id);
+    assert.equal(JSON.parse(readFileSync(join(options.directory, '.tv-workspaces', a.id, 'result.json'))).result.owner, a.id);
+    assert.equal(JSON.parse(readFileSync(join(options.directory, '.tv-workspaces', b.id, 'result.json'))).result.owner, b.id);
   });
   it('retains killed owner resources while another workspace completes', async () => {
     const options = fixture(), a = reserve(options, 'a'), b = reserve(options, 'b');
@@ -71,8 +99,10 @@ describe('persistent independent workspaces', () => {
     markInterrupted(a.file, operation, options);
     assert.throws(() => acquireWorkspace(a.file, options), { code: 'WORKSPACE_RECOVERY_REQUIRED' });
     const other = acquireWorkspace(b.file, options); other.finish({ success: true });
-    const recovery = acquireWorkspace(a.file, { ...options, recover: true });
-    assert.equal(recovery.pending().phase, 'calculating'); recovery.finish({ success: true });
+    const recovery = acquireWorkspace(a.file, { ...options, recover: true, recoveryOperation: operation });
+    assert.equal(recovery.pending().phase, 'calculating');
+    assert.throws(() => recovery.finish({ success: true }), { code: 'WORKSPACE_RECOVERY_REQUIRED' });
+    recovery.acknowledgeRecovery(operation); recovery.finish({ success: true });
     const continued = acquireWorkspace(a.file, options); continued.finish({ success: true });
   });
   it('refuses copied/tampered tokens and never removes another operation', () => {

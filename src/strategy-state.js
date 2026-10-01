@@ -71,7 +71,7 @@ export function failCompilation(window, token, error, code = 'COMPILATION_FAILED
 export function observeCalculation(window, epoch, item) {
   if (epoch.observer_source === item.source) return;
   epoch.dispose?.();
-  epoch.calculation = { cycle: 0, active: false, completed: null };
+  epoch.calculation = { cycle: 0, active: false, completed: null, events: [] };
   epoch.accepted_cycle = 0;
   const inspect = () => pageStrategies(window).find(value => value.id === item.id);
   const statusChanged = () => {
@@ -82,7 +82,11 @@ export function observeCalculation(window, epoch, item) {
       report = item.source.reportData?.(); if (report?.value) report = report.value();
     } catch { return; }
     if (status?.type !== 2 || !reportIsComplete(report)) {
-      if (!epoch.calculation.active) epoch.calculation.cycle++;
+      if (!epoch.calculation.active) {
+        epoch.calculation.cycle++;
+        epoch.calculation.events.push({ event: 'started', cycle: epoch.calculation.cycle, at: Date.now() });
+        if (epoch.calculation.events.length > 100) epoch.calculation.events.shift();
+      }
       epoch.calculation.active = true;
     }
   };
@@ -93,6 +97,8 @@ export function observeCalculation(window, epoch, item) {
     if (epoch.calculation.active && current?.status_type === 2 && reportIsComplete(current.report)) {
       epoch.calculation.completed = { cycle: epoch.calculation.cycle,
         key: calculationKey(current.inputs, readChartContext(window)) };
+      epoch.calculation.events.push({ event: 'completed', cycle: epoch.calculation.cycle, at: Date.now() });
+      if (epoch.calculation.events.length > 100) epoch.calculation.events.shift();
       epoch.calculation.active = false;
     }
   };

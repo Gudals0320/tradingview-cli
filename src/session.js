@@ -26,7 +26,8 @@ function read(path) { return JSON.parse(readFileSync(path, 'utf8')); }
 export function readReservations(options = {}) {
   const paths = sessionPaths(options);
   if (!existsSync(paths.reservations)) return [];
-  const value = read(paths.reservations);
+  let value;
+  try { value = read(paths.reservations); } catch { throw failure('OWNERSHIP_UNREADABLE', 'Workspace reservation registry is unreadable.'); }
   if (!Array.isArray(value)) throw failure('OWNERSHIP_UNREADABLE', 'Workspace reservation registry is malformed.');
   return value;
 }
@@ -36,10 +37,41 @@ export function withAdmissionGate(options, action) {
   const paths = sessionPaths(options);
   mkdirSync(paths.directory, { recursive: true });
   let gate;
-  try { gate = openSync(paths.gate, 'wx', 0o600); }
-  catch (error) { if (error.code === 'EEXIST') throw failure('SESSION_BUSY', `Admission metadata is busy. Inspect ${paths.gate} if its process was killed.`); throw error; }
-  try { writeFileSync(gate, JSON.stringify({ pid: process.pid })); closeSync(gate); gate = null; return action(paths); }
+  const started = Date.now();
+  for (;;) {
+    try { gate = openSync(paths.gate, 'wx', 0o600); break; }
+    catch (error) {
+      if (!['EEXIST', 'EPERM', 'EBUSY', 'EACCES'].includes(error.code)) throw error;
+      if (Date.now() - started >= (options.gateTimeout || 2000)) throw failure('ADMISSION_BUSY', `Admission metadata did not clear. Inspect ${paths.gate} if its process was killed.`);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5 + Math.floor(Math.random() * 10));
+    }
+  }
+  try { writeFileSync(gate, JSON.stringify({ pid: process.pid, token: randomUUID(), process_started_at: new Date(Date.now() - process.uptime() * 1000).toISOString(), created_at: new Date().toISOString() })); closeSync(gate); gate = null; return action(paths); }
   finally { if (gate !== null) closeSync(gate); unlinkSync(paths.gate); }
+}
+
+export function admissionGateStatus(options = {}) {
+  const path = sessionPaths(options).gate;
+  if (!existsSync(path)) return { success: true, busy: false };
+  let value;
+  try { value = read(path); } catch { throw failure('OWNERSHIP_UNREADABLE', 'Admission gate is malformed; automatic removal is unsafe.'); }
+  return { success: true, busy: true, path, ...value, owner_alive: alive(value.pid) };
+}
+
+/** Explicit dead-gate repair. PID reuse stays fail-closed while that PID exists. */
+export function clearAdmissionGate(token, options = {}) {
+  const paths = sessionPaths(options), repair = `${paths.gate}.repair`;
+  let handle;
+  try { handle = openSync(repair, 'wx', 0o600); }
+  catch (error) { if (error.code === 'EEXIST') throw failure('ADMISSION_BUSY', 'Another gate repair is in progress.'); throw error; }
+  closeSync(handle);
+  try {
+    const gate = admissionGateStatus(options);
+    if (!token || !gate.busy || gate.token !== token) throw failure('GATE_TOKEN_MISMATCH', 'Pass the exact dead gate token from workspace gate-status.');
+    if (gate.owner_alive) throw failure('SESSION_BUSY', 'Gate owner PID still exists; PID reuse or unverifiable ownership requires manual inspection.');
+    unlinkSync(paths.gate);
+    return { success: true, cleared: true, token };
+  } finally { unlinkSync(repair); }
 }
 
 export function sessionStatus(options = {}) {

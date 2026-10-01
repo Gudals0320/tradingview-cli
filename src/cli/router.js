@@ -4,17 +4,20 @@
  */
 import { parseArgs } from 'node:util';
 import { disconnect, configureTarget } from '../connection.js';
-import { assertSessionAccess, withReadOnlySession } from '../session.js';
+import { acquireSession, withReadOnlySession } from '../session.js';
+import { runWorkspace } from '../workspace.js';
+import { commandScope } from './policy.js';
 
 /** @type {Map<string, { description: string, options?: object, handler: Function, subcommands?: Map<string, object> }>} */
 const commands = new Map();
+export function registeredCommands() { return commands; }
 
 export function register(name, config) {
   commands.set(name, config);
 }
 
 function printHelp() {
-  console.log('Usage: tv [--target CDP_ID] <command> [options]\n');
+  console.log('Usage: tv [--target CDP_ID | --workspace FILE] <command> [options]\n');
   console.log('Commands:');
   const maxLen = Math.max(...[...commands.keys()].map(k => k.length));
   for (const [name, cmd] of commands) {
@@ -54,6 +57,12 @@ function printCommandHelp(name, cmd) {
 
 export async function run(argv) {
   const args = argv.slice(2);
+  let workspaceFile = null;
+  if (args[0] === '--workspace') {
+    if (!args[1] || args[1].startsWith('--')) { handleError(new Error('--workspace requires a workspace file.')); return; }
+    workspaceFile = args[1]; args.splice(0, 2);
+    if (args.includes('--target') || process.env.TV_CDP_TARGET) { const error = new Error('--target and TV_CDP_TARGET cannot override a workspace.'); error.code = 'WORKSPACE_TARGET_MISMATCH'; handleError(error); return; }
+  }
   if (args[0] === '--target') {
     if (!args[1] || args[1].startsWith('--')) { handleError(new Error('--target requires a CDP target ID.')); return; }
     configureTarget(args[1]); args.splice(0, 2);
@@ -65,7 +74,7 @@ export async function run(argv) {
   }
 
   const cmdName = args[0];
-  const offline = cmdName === 'update' || cmdName === 'session'
+  const offline = cmdName === 'update' || cmdName === 'session' || cmdName === 'workspace'
     || (cmdName === 'pine' && ['analyze', 'check'].includes(args[1]));
   // These handlers only inspect existing state. Data/Pine reads can open panels
   // or trigger recalculation, so they deliberately remain blocked in recovery.
@@ -114,7 +123,7 @@ export async function run(argv) {
         }
         process.exit(0);
       }
-      await execute(handler, values, positionals, offline, readOnly);
+      await execute(handler, values, positionals, offline, readOnly, workspaceFile, `${cmdName} ${subName}`);
     } catch (err) {
       handleError(err);
     }
@@ -132,17 +141,20 @@ export async function run(argv) {
         printCommandHelp(cmdName, cmd);
         process.exit(0);
       }
-      await execute(handler, values, positionals, offline, readOnly);
+      await execute(handler, values, positionals, offline, readOnly, workspaceFile, cmdName);
     } catch (err) {
       handleError(err);
     }
   }
 }
 
-async function execute(handler, values, positionals, offline = false, readOnly = false) {
+async function execute(handler, values, positionals, offline = false, readOnly = false, workspaceFile = null, command = '') {
+  let lease;
   try {
     const action = async () => {
-      if (!offline) assertSessionAccess();
+      if (workspaceFile) return runWorkspace(workspaceFile, command, values, positionals, handler);
+      if (command === 'workspace wait') throw new Error('workspace wait requires --workspace FILE.');
+      if (commandScope(command) !== 'offline') lease = acquireSession({ readOnly });
       return handler(values, positionals);
     };
     const result = await (readOnly ? withReadOnlySession(action) : action());
@@ -154,6 +166,7 @@ async function execute(handler, values, positionals, offline = false, readOnly =
     // Close CDP explicitly and let pending stdout/HTTP handles drain. Forcing
     // exit after fetch() can abort in libuv on Windows Node.js 24.
     await disconnect();
+    if (lease) lease.release();
   }
 }
 

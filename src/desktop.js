@@ -1,6 +1,6 @@
 import CDP from 'chrome-remote-interface';
 import { CDP_HOST, CDP_PORT } from './config.js';
-import { assertSessionAccess } from './session.js';
+import { assertSessionAccess, currentWorkspaceSession } from './session.js';
 
 /** These functions are serialized and executed without captured Node variables. */
 export function readShellState(document, window) {
@@ -64,6 +64,7 @@ export function resolveInventory(targets, shells, identities) {
 
 export async function inspectTarget(target, expression, { _deps } = {}) {
   if (!_deps) assertSessionAccess();
+  if (!_deps && currentWorkspaceSession()) { const error = new Error('Workspace operations cannot inspect or control Desktop shell/other targets.'); error.code = 'WORKSPACE_COMMAND_UNSUPPORTED'; throw error; }
   const create = _deps?.createClient || CDP;
   const client = await create({ host: CDP_HOST, port: CDP_PORT, target: target.id });
   try {

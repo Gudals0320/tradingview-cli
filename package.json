@@ -10,7 +10,7 @@
     "tv": "node src/cli/index.js",
     "lint": "eslint src/ tests/ examples/",
     "test": "npm run test:unit",
-    "test:unit": "node --test tests/cli.test.js tests/extraction.test.js tests/pine_analyze.test.js tests/pine_lifecycle.test.js tests/pine_diagnostics.test.js tests/pine_compile.test.js tests/pine_targets.test.js tests/pine_outcome.test.js tests/pine_library.test.js tests/sanitization.test.js tests/replay.test.js tests/launch.test.js tests/chart_indicator.test.js tests/chart_history.test.js tests/update.test.js tests/multi_feed.test.js tests/tab.test.js tests/desktop_dom.test.js tests/pine_batch.test.js tests/personal_repository.test.js tests/desktop_targets.test.js tests/session.test.js tests/strategy_state.test.js",
+    "test:unit": "node --test tests/cli.test.js tests/extraction.test.js tests/pine_analyze.test.js tests/pine_lifecycle.test.js tests/pine_diagnostics.test.js tests/pine_compile.test.js tests/pine_targets.test.js tests/pine_outcome.test.js tests/pine_library.test.js tests/sanitization.test.js tests/replay.test.js tests/launch.test.js tests/chart_indicator.test.js tests/chart_history.test.js tests/update.test.js tests/multi_feed.test.js tests/tab.test.js tests/desktop_dom.test.js tests/pine_batch.test.js tests/personal_repository.test.js tests/desktop_targets.test.js tests/session.test.js tests/strategy_state.test.js tests/workspace.test.js tests/workspace-page.test.js tests/command-policy.test.js",
     "test:e2e": "node --test tests/e2e.test.js",
     "test:all": "node --test tests/*.test.js"
   },

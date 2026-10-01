@@ -36,3 +36,40 @@ Validation separates filesystem/fixture evidence from Windows Desktop evidence.
 Live success requires two dedicated resources, result equivalence, lifecycle
 overlap and repeated throughput increase on one endpoint. No mock result can
 satisfy those requirements.
+
+## Implemented contract
+
+See `docs/workspaces.md` and the complete `docs/workspace-commands.md` adapter
+matrix. `workspace inventory` uses HTTP inventory only; status uses filesystem
+only. Every adapter must be classified or execution and policy coverage fail.
+Legacy calls take an exclusive endpoint lease, and cannot coexist with persistent
+workspace reservations. Resource duplicates fail immediately; Windows metadata
+gate/open/rename contention has bounded retries (two seconds admission, three
+seconds finalization), with no Desktop work inside the gate. Gate metadata has a
+random token, PID and recorded start/creation times. PID reuse is conservative:
+an existing PID is never automatically considered dead. `gate-clear` requires
+the exact token and a nonexistent PID; corrupt/unverifiable state stays blocked.
+
+Page generation is a nonce plus chart/controller references and browser GUID.
+The native saved layout UID is checked alongside the Pine document ID. Same-turn
+guards compare source, normalized symbol/interval, chart type, session and every
+study input. Only the current command's explicit source/context/input change is
+permitted; compile changes only the owned document's study. Results retain native
+calculation freshness checks and record operation-local status/report timestamps.
+
+Recovery acquisition requires the exact interrupted operation. Failed recovery
+preserves it. Only successful identity/quiescence checks, binding persistence and
+explicit acknowledgement can clear it. A compile error with a verified final
+state is a clean failure, not an interruption. Journals/results use workspace UUID
+and operation UUID directories/files so one handle cannot collide with another's
+artifacts. Results are staged as `committed:false`, metadata finalized in the
+gate, then committed outside it; status exposes an unfinished result commit.
+
+Live preparation on 2026-10-01 created layouts `2QKIbTsO` and `1yvV37Yp` with
+distinct saved documents. The original `KHbeIfLo` target was preserved. Fixed
+1280x800 metrics/focus emulation were applied only to test targets. The inactive
+A editor did not initially mount, so preparation selected A once and then
+restored the original tab. After preparation both A/B remained inactive during
+independent CLI smoke tests. Initial identical compilation correctly reported
+unchanged; the input-change smoke recorded real native calculation events on
+both targets. These are preliminary observations, not benchmark completion.
