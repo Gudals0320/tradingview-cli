@@ -9,6 +9,12 @@ import { acquireSession, sessionStatus, sessionPaths, assertSessionAccess, withR
 const moduleUrl = new URL('../src/session.js', import.meta.url).href;
 function fixture() { return { directory: mkdtempSync(join(tmpdir(), 'tv-session-test-')), host: 'test', port: 1 }; }
 describe('Desktop session ownership and recovery', () => {
+  it('shares atomic ownership across local endpoint hostname and IPv6 aliases', () => {
+    const opts = fixture(), aliases=['127.0.0.1','localhost','LOCALHOST.','::1','[::1]','::ffff:127.0.0.1'];
+    const lease=acquireSession({...opts,host:aliases[0]});
+    try{for(const host of aliases){assert.equal(sessionPaths({...opts,host}).key,lease.paths.key);assert.throws(()=>acquireSession({...opts,host}),{code:'SESSION_BUSY'});}}
+    finally{lease.release();}
+  });
   it('rejects a second process before it can snapshot or mutate the session', () => {
     const opts = fixture(), first = acquireSession(opts);
     try {

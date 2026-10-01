@@ -28,6 +28,7 @@ const trials=evidence.trials.map(trial=>{
   return {index:trial.index,workers:trial.workers,cache_condition:trial.cache_condition,ms:trial.ms,native_ms:native,job_ms:jobTime,native_share:native/jobTime,overlap_ms:overlap};
 });
 assert.equal(completed,32);assert.equal(failures,0);assert.equal(retries,0);assert.deepEqual(evidence.active_before,evidence.active_after);
+assert.equal(bars.size,1);assert.equal(coldByJob.size,16);
 const mean=values=>values.reduce((sum,value)=>sum+value,0)/values.length;
 const category=condition=>{const a=trials.filter(t=>t.workers===1&&(!condition||t.cache_condition===condition)),b=trials.filter(t=>t.workers===2&&(!condition||t.cache_condition===condition));return {one_ms:a.map(t=>t.ms),two_ms:b.map(t=>t.ms),one_mean_ms:mean(a.map(t=>t.ms)),two_mean_ms:mean(b.map(t=>t.ms)),throughput_ratio:mean(a.map(t=>t.ms))/mean(b.map(t=>t.ms))};};
 const first=trials.filter(t=>t.cache_condition==='first request');assert.ok(first.every(t=>t.native_share>0.5),'First-request workload was not native dominant');
@@ -36,5 +37,6 @@ const summary={revision:evidence.revision,dirty_at_start:evidence.dirty_at_start
   first_native_share:first.reduce((sum,t)=>sum+t.native_ms,0)/first.reduce((sum,t)=>sum+t.job_ms,0),trials,first_vs_repeated_native_ratios:ratios,
   result_equivalence:true,ledger_equivalence:true,excluded_metrics:['buy_hold_return','buy_hold_return_percent'],additional_exclusions:false,last_bar_times:[...bars],open_positions:0,
   active_tab_unchanged:true,iterations:1500,disjoint_inputs:{a:[100,101,102,103,104,105,106,107],b:[120,121,122,123,124,125,126,127]},
+  dirty_reason:'Untracked live evidence files; production source diff was empty at measurement start.',
   interpretation:'Native lifecycle includes server/network response time, not CPU-only execution. Cache position is not established. First-request labels are checked against observed durations.'};
 assert.ok(summary.primary_first_request.throughput_ratio>1);writeEvidence('heavy-balanced-summary.json',summary);console.log(JSON.stringify(summary,null,2));

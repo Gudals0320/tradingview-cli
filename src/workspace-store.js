@@ -2,7 +2,8 @@ import { existsSync, readFileSync, writeFileSync, renameSync, openSync, closeSyn
 import { resolve, dirname, join } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { sessionPaths, sessionStatus, readReservations, withAdmissionGate } from './session.js';
+import { sessionPaths, sessionStatus, readReservations, withAdmissionGate, assertNoPortLease, canonicalSessionHost } from './session.js';
+import { CDP_HOST } from './config.js';
 
 export function workspaceError(code, message) { const error = new Error(message); error.code = code; return error; }
 const fail = (code, message) => { throw workspaceError(code, message); };
@@ -31,6 +32,7 @@ const samePath = (a, b) => process.platform === 'win32' ? a.toLowerCase() === b.
 function available(options) {
   const state = sessionStatus(options);
   if (state.locked || state.recovery_required) fail('SESSION_BUSY', 'An endpoint lease or recovery journal prevents workspace admission.');
+  if (canonicalSessionHost(options.host ?? CDP_HOST) === '127.0.0.1') assertNoPortLease(options);
 }
 
 export function loadWorkspace(file, options = {}) {

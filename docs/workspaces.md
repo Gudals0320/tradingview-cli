@@ -6,6 +6,13 @@ Each layout must be open in only one target and have at most one Pine study,
 belonging to that document. Registration never switches tabs or opens a document.
 Results cover ordinary backtesting; Deep Backtesting is not supported here.
 
+The initial supported environment is one local Desktop loopback endpoint. Known
+localhost/IPv4/IPv6 loopback aliases share ownership. A configured hostname alias
+cannot use legacy commands while local workspaces reserve that port. The short
+metadata admission gate is shared by port so registration and legacy leases cannot
+race across aliases; it is released before any Desktop work. Launch/restart is
+blocked by any registered workspace even if another port is configured.
+
 ```powershell
 tv workspace inventory
 tv workspace init --file worker-a.json --target TARGET_A --layout LAYOUT_A --pine 'USER;DOCUMENT_A'
@@ -103,6 +110,9 @@ editor is mounted and unmodified, `workspace rebind --file FILE --id ID
 on that exact target. Modified foreign drafts and pending actions are refused.
 Interrupted recovery uses `--rebind --restore-document` with the exact operation
 ID. No tab is activated and another workspace's document is not saved or edited.
+Recent-document selection is shared: after restoring A, a later reload of B may
+open A's document. B rejects that identity and uses the same explicit restoration
+procedure. Already loaded other workspaces keep their documents and sources.
 
 Init, recover and rebind may read the user's own saved script versions from
 pine-facade with the target's existing authenticated session. This verifies editor

@@ -79,6 +79,15 @@ describe('persistent independent workspaces', () => {
     assert.throws(() => acquireSession(options), { code: 'WORKSPACE_RESERVED' });
     assert.throws(() => assertSessionAccess(options), { code: 'WORKSPACE_RESERVED' });
   });
+  it('blocks hostname-alias legacy admission and shares its short port gate', () => {
+    const options=fixture(), local={...options,host:'127.0.0.1'}, a=reserve(local,'a');
+    assert.equal(sessionPaths(local).gate,sessionPaths({...local,host:'desktop-alias'}).gate);
+    assert.throws(()=>acquireSession({...local,host:'desktop-alias'}),{code:'WORKSPACE_RESERVED'});
+    abandonWorkspace(a.file,{workspaceId:a.id},local);
+    const alias=acquireSession({...local,host:'desktop-alias'});
+    assert.throws(()=>reserve(local,'b'),{code:'SESSION_BUSY'});alias.release();
+    const next=reserve(local,'b');abandonWorkspace(next.file,{workspaceId:next.id},local);
+  });
   it('rejects registration during a legacy endpoint lease and pending recovery', () => {
     const options = fixture(), lease = acquireSession(options);
     assert.throws(() => reserve(options, 'a'), { code: 'SESSION_BUSY' });

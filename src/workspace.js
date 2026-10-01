@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { CDP_HOST, CDP_PORT } from './config.js';
 import { acquireWorkspace, reserveWorkspace, releaseWorkspace, workspaceError } from './workspace-store.js';
-import { withWorkspaceSession, sourceHash } from './session.js';
+import { withWorkspaceSession, sourceHash, canonicalSessionHost } from './session.js';
 import { configureTarget, getClient } from './connection.js';
 import { WORKSPACE_PAGE_CODE } from './workspace-page.js';
 import { normalizeTimeframe } from './chart-context.js';
@@ -57,6 +57,7 @@ async function sourceProof(client, snapshot) {
 }
 
 export async function initWorkspace(resources) {
+  if (canonicalSessionHost(CDP_HOST) !== '127.0.0.1') throw workspaceError('WORKSPACE_ENDPOINT_UNSUPPORTED', 'Independent workspaces currently require the local Desktop loopback endpoint.');
   await checkLayout(resources);
   const workspace = reserveWorkspace(resources), lease = acquireWorkspace(workspace.file);
   return withWorkspaceSession(lease, async () => {

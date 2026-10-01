@@ -1,4 +1,4 @@
-import { mkdirSync, openSync, closeSync, readFileSync, writeFileSync, existsSync, unlinkSync, renameSync } from 'node:fs';
+import { mkdirSync, openSync, closeSync, readFileSync, writeFileSync, existsSync, unlinkSync, renameSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -11,10 +11,17 @@ export function withReadOnlySession(action) { return access.run({ readOnly: true
 export function isReadOnlySession() { return access.getStore()?.readOnly === true; }
 export function withWorkspaceSession(lease, action) { return access.run({ workspace: lease }, action); }
 export function currentWorkspaceSession() { return access.getStore()?.workspace || null; }
+export function canonicalSessionHost(host) {
+  const value = String(host).trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  if (['localhost', '::1', '0:0:0:0:0:0:0:1', '0.0.0.0'].includes(value)
+    || /^127\./.test(value) || /^::ffff:127\./.test(value)) return '127.0.0.1';
+  return value;
+}
 export function sessionPaths({ host = CDP_HOST, port = CDP_PORT, directory = join(tmpdir(), 'tradingview-cli-sessions') } = {}) {
-  const endpoint = `${host === 'localhost' ? '127.0.0.1' : host}:${port}`;
+  const endpoint = `${canonicalSessionHost(host)}:${port}`;
   const key = createHash('sha256').update(endpoint).digest('hex');
-  return { key, directory, lock: join(directory, `${key}.lock`), journal: join(directory, `${key}.journal.json`), gate: join(directory, `${key}.acquire`), reservations: join(directory, `${key}.workspaces.json`) };
+  const gateKey = createHash('sha256').update(`admission-port:${port}`).digest('hex');
+  return { key, directory, lock: join(directory, `${key}.lock`), journal: join(directory, `${key}.journal.json`), gate: join(directory, `${gateKey}.acquire`), reservations: join(directory, `${key}.workspaces.json`) };
 }
 function failure(code, message) { const error = new Error(message); error.code = code; return error; }
 function alive(pid) {
@@ -30,6 +37,27 @@ export function readReservations(options = {}) {
   try { value = read(paths.reservations); } catch { throw failure('OWNERSHIP_UNREADABLE', 'Workspace reservation registry is unreadable.'); }
   if (!Array.isArray(value)) throw failure('OWNERSHIP_UNREADABLE', 'Workspace reservation registry is malformed.');
   return value;
+}
+export function assertNoLocalWorkspace(options = {}) {
+  if (readReservations(options).length || readReservations({ ...options, host: '127.0.0.1' }).length) {
+    throw failure('WORKSPACE_RESERVED', 'Reserved local workspaces prevent legacy access on this port, including hostname aliases.');
+  }
+}
+export function assertNoPortLease(options = {}) {
+  const paths = sessionPaths(options), port = Number(options.port ?? CDP_PORT);
+  if (!existsSync(paths.directory)) return;
+  for (const file of readdirSync(paths.directory).filter(name => name.endsWith('.lock'))) {
+    let lock; try { lock = read(join(paths.directory, file)); } catch { continue; }
+    if (Number(lock.port) === port) throw failure('SESSION_BUSY', 'A legacy endpoint lease on this port prevents local workspace registration.');
+  }
+}
+export function assertNoWorkspaceAnywhere(options = {}) {
+  const paths = sessionPaths(options);
+  if (!existsSync(paths.directory)) return;
+  for (const file of readdirSync(paths.directory).filter(name => name.endsWith('.workspaces.json'))) {
+    let rows;try{rows=read(join(paths.directory,file));}catch{throw failure('OWNERSHIP_UNREADABLE','Workspace registry cannot be verified before a Desktop-wide command.');}
+    if (!Array.isArray(rows) || rows.length) throw failure('WORKSPACE_RESERVED', 'Registered workspaces prevent Desktop-wide launch/restart, regardless of configured port.');
+  }
 }
 
 /** Metadata transaction only. Never hold this gate during Desktop operations. */
@@ -96,7 +124,7 @@ export function assertSessionAccess(options = {}) {
     workspace.assertOwner(); return;
   }
   if (owned.has(paths.key)) return;
-  if (readReservations(options).length) throw failure('WORKSPACE_RESERVED', 'This endpoint has reserved workspaces. Use --workspace FILE for supported commands.');
+  assertNoLocalWorkspace(options);
   const state = sessionStatus(options);
   if (state.locked && state.owner_alive) throw failure('SESSION_BUSY', 'Another TradingView CLI process owns this Desktop session.');
   if (state.recovery_required && !(options.readOnly || isReadOnlySession())) throw failure('RECOVERY_REQUIRED',
@@ -106,7 +134,7 @@ export function assertSessionAccess(options = {}) {
 export function acquireSession(options = {}) {
   const paths = sessionPaths(options);
   return withAdmissionGate(options, () => {
-  if (readReservations(options).length) throw failure('WORKSPACE_RESERVED', 'Reserved workspaces prevent endpoint-wide access.');
+  assertNoLocalWorkspace(options);
   const status = sessionStatus(options);
   if (status.locked) {
     if (status.owner_alive) throw failure('SESSION_BUSY', 'Another batch owns this Desktop session.');
@@ -119,7 +147,7 @@ export function acquireSession(options = {}) {
   let handle;
   try { handle = openSync(paths.lock, 'wx', 0o600); }
   catch (error) { if (error.code === 'EEXIST') throw failure('SESSION_BUSY', 'Another batch acquired this session.'); throw error; }
-  writeFileSync(handle, JSON.stringify({ pid: process.pid, run_id, created_at: new Date().toISOString() }));
+  writeFileSync(handle, JSON.stringify({ pid: process.pid, run_id, port: Number(options.port ?? CDP_PORT), created_at: new Date().toISOString() }));
   closeSync(handle);
   owned.set(paths.key, run_id);
   let released = false;

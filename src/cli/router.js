@@ -4,7 +4,7 @@
  */
 import { parseArgs } from 'node:util';
 import { disconnect, configureTarget } from '../connection.js';
-import { acquireSession, withReadOnlySession } from '../session.js';
+import { acquireSession, withReadOnlySession, assertNoWorkspaceAnywhere } from '../session.js';
 import { runWorkspace } from '../workspace.js';
 import { commandScope } from './policy.js';
 
@@ -154,6 +154,7 @@ async function execute(handler, values, positionals, offline = false, readOnly =
     const action = async () => {
       if (workspaceFile) return runWorkspace(workspaceFile, command, values, positionals, handler);
       if (command === 'workspace wait') throw new Error('workspace wait requires --workspace FILE.');
+      if (command === 'launch') assertNoWorkspaceAnywhere();
       if (['workspace', 'legacy'].includes(commandScope(command))) lease = acquireSession({ readOnly });
       return handler(values, positionals);
     };

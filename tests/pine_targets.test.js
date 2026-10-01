@@ -100,3 +100,12 @@ it('modified source after layout reload saves once and updates the actual old ap
   assert.equal(f.window.__tvCliPineCompile.actionDone,true);assert.equal(saves,1);assert.equal(restarts,1);
   assert.equal(f.sources[1].text,'untouched');assert.deepEqual(f.counts(),{adds:0,updates:0});
 });
+it('modified saved source after reload still requires --save before any native save',async()=>{
+  const f=fixture();f.setIdentity({scriptIdPart:'P',version:'9.0'});let saves=0;
+  f.controller.saveScript=async()=>{saves++;};
+  const context=pineCompileContext(f.window,f.controller);
+  const result=await smartCompile({_deps:{source:'indicator("Same title")\nplot(close)',
+    readOutcome:async()=>readPineOutcome(f.window,f.controller,null,'token'),
+    evaluate:expression=>expression.includes('return failCompilation(')?true:context}});
+  assert.equal(result.code,'SAVE_REQUIRED');assert.equal(result.compiled,false);assert.equal(saves,0);assert.deepEqual(f.counts(),{adds:0,updates:0});
+});

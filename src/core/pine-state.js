@@ -133,7 +133,7 @@ export function dispatchPineCompilation(window, controller, token) {
   const plan = planPineCompilation(window, controller);
   if (plan.error) throw new Error(plan.code + ': ' + plan.error);
   const refresh=plan.method==='updateOnChart'&&controller.isModified?.()===false;
-  const saveRefresh=plan.method==='updateOnChart'&&controller.isModified?.()===true
+  const saveRefresh=plan.method==='updateOnChart'&&controller.isModified?.()===true&&controller.isDraft?.()===false
     && String(controller.getScriptIdVersion()?.version)!==String(plan.target_version);
   const method = refresh?'refreshSavedOnChart':saveRefresh?'saveThenRefreshOnChart':plan.method;
   if (saveRefresh && (typeof controller.saveScript!=='function'||typeof controller._replaceStubByStudy!=='function')) throw new Error('Pine saved-version reconciliation action unavailable.');
