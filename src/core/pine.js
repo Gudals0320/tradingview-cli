@@ -31,6 +31,9 @@ export async function ensurePineEditorOpen({ _deps } = {}) {
 
 export function analyze({ source }) {
   const lines = source.split('\n');
+  // Keep offsets while hiding comments and string contents from code rules.
+  const codeLines = source.replace(/("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|\/\/[^\r\n]*/g,
+    (text, literal) => literal ? '_'.repeat(text.length) : ' '.repeat(text.length)).split('\n');
   const diagnostics = [];
 
   let isV6 = false;
@@ -44,7 +47,7 @@ export function analyze({ source }) {
 
   const arrays = new Map();
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = codeLines[i];
     const fromMatch = line.match(/(\w+)\s*=\s*array\.from\(([^)]*)\)/);
     if (fromMatch) {
       const name = fromMatch[1].trim();
@@ -62,7 +65,7 @@ export function analyze({ source }) {
   }
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = codeLines[i];
     const pattern = /array\.(get|set)\(\s*(\w+)\s*,\s*(-?\d+)/g;
     let match;
     while ((match = pattern.exec(line)) !== null) {
@@ -82,7 +85,7 @@ export function analyze({ source }) {
   }
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = codeLines[i];
     const firstLastPattern = /(\w+)\.(first|last)\(\)/g;
     let match;
     while ((match = firstLastPattern.exec(line)) !== null) {
@@ -100,12 +103,12 @@ export function analyze({ source }) {
   }
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = codeLines[i];
     const trimmed = line.trim();
     if (trimmed.includes('strategy.entry') || trimmed.includes('strategy.close')) {
       let hasStrategyDecl = false;
-      for (const l of lines) {
-        if (l.trim().startsWith('strategy(')) { hasStrategyDecl = true; break; }
+      for (const l of codeLines) {
+        if (/^\s*strategy\s*\(/.test(l)) { hasStrategyDecl = true; break; }
       }
       if (!hasStrategyDecl) {
         diagnostics.push({
