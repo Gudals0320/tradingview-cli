@@ -4,7 +4,7 @@
  * They throw on error (callers catch and format).
  */
 import { evaluate, evaluateAsync, getClient } from '../connection.js';
-import { findPineEditor, findPineController, requestPineEditor, clickPineCompileButton } from './desktop-dom.js';
+import { findPineEditor, findPineController, readPineConsole, requestPineEditor, clickPineCompileButton } from './desktop-dom.js';
 import { STRATEGY_PAGE_CODE, splitMarkers, formatDiagnostic } from '../strategy-state.js';
 import { sourceHash } from '../session.js';
 import { randomUUID } from 'node:crypto';
@@ -319,56 +319,14 @@ export async function save() {
   return { success: true, action: dialogHandled ? 'saved_with_dialog' : 'Ctrl+S_dispatched' };
 }
 
-export async function getConsole() {
-  const editorReady = await ensurePineEditorOpen();
-  if (!editorReady) throw new Error('Could not open Pine Editor.');
-
-  const entries = await evaluate(`
-    (function() {
-      var results = [];
-      var rows = document.querySelectorAll('[class*="consoleRow"], [class*="log-"], [class*="consoleLine"]');
-      if (rows.length === 0) {
-        var bottomArea = document.querySelector('[class*="layout__area--bottom"]')
-          || document.querySelector('[class*="bottom-widgetbar-content"]');
-        if (bottomArea) {
-          rows = bottomArea.querySelectorAll('[class*="message"], [class*="log"], [class*="console"]');
-        }
-      }
-      if (rows.length === 0) {
-        var pinePanel = document.querySelector('.pine-editor-container')
-          || document.querySelector('[class*="pine-editor"]')
-          || document.querySelector('[class*="layout__area--bottom"]');
-        if (pinePanel) {
-          var allSpans = pinePanel.querySelectorAll('span, div');
-          for (var s = 0; s < allSpans.length; s++) {
-            var txt = allSpans[s].textContent.trim();
-            if (/^\\d{2}:\\d{2}:\\d{2}/.test(txt) || /error|warning|info/i.test(allSpans[s].className)) {
-              rows = Array.from(rows || []);
-              rows.push(allSpans[s]);
-            }
-          }
-        }
-      }
-      for (var i = 0; i < rows.length; i++) {
-        var text = rows[i].textContent.trim();
-        if (!text) continue;
-        var ts = null;
-        var tsMatch = text.match(/^(\\d{4}-\\d{2}-\\d{2}\\s+)?\\d{2}:\\d{2}:\\d{2}/);
-        if (tsMatch) ts = tsMatch[0];
-        var type = 'info';
-        var cls = rows[i].className || '';
-        if (/error/i.test(cls) || /error/i.test(text.substring(0, 30))) type = 'error';
-        else if (/compil/i.test(text.substring(0, 40))) type = 'compile';
-        else if (/warn/i.test(cls)) type = 'warning';
-        results.push({ timestamp: ts, type: type, message: text });
-      }
-      return results;
-    })()
-  `);
-
+export async function getConsole({ _deps } = {}) {
+  if (!_deps && !await ensurePineEditorOpen()) throw new Error('Could not open Pine Editor.');
+  const entries = await (_deps?.evaluate || evaluate)(`(() => {
+    const controller = ${FIND_CONTROLLER};
+    return (${readPineConsole.toString()})(document, controller);
+  })()`);
   return { success: true, entries: entries || [], entry_count: entries?.length || 0 };
 }
-
 export async function smartCompile({ timeout = 30000, _deps } = {}) {
   const inspect = _deps?.evaluate || evaluate;
   if (!_deps && !await ensurePineEditorOpen()) throw new Error('Could not open Pine Editor.');

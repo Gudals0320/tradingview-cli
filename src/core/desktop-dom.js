@@ -72,6 +72,23 @@ export function findPineController(document) {
   return null;
 }
 
+/** Read actual message records/rows, never an editor or console container. */
+export function readPineConsole(document, controller) {
+  const messages = controller?._editorStore?.getStore?.().getState()?.console?.messages || [];
+  const entries = messages.filter(item => typeof item.text === 'string' && item.text.trim()).map(item => ({
+    timestamp: item.time || null, type: item.level || 'info', message: item.text,
+  }));
+  const rows = document.querySelectorAll('.widgetbar-widget-pine_logs [class*="logContainer-"]');
+  for (const row of rows) {
+    if (row.offsetParent === null) continue;
+    const message = row.querySelector('[class*="msg-"]')?.textContent?.trim();
+    if (!message) continue;
+    entries.push({ timestamp: message.match(/^\[([^\]]+)\]/)?.[1] || null,
+      type: /error/i.test(row.className) ? 'error' : /warn/i.test(row.className) ? 'warning' : 'info', message });
+  }
+  return entries;
+}
+
 export function clickPineCompileButton(document) {
   const buttons = Array.from(document.querySelectorAll('button')).filter((button) =>
     button.offsetParent !== null && !button.disabled && button.getAttribute('aria-disabled') !== 'true');
