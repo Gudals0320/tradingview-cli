@@ -406,6 +406,9 @@ export async function smartCompile({ timeout = 30000, _deps } = {}) {
 }
 
 export async function newScript({ type }) {
+  if (!['indicator', 'strategy', 'library'].includes(type)) {
+    throw new Error(`Invalid Pine script type "${type}". Expected indicator, strategy, or library.`);
+  }
   const editorReady = await ensurePineEditorOpen();
   if (!editorReady) throw new Error('Could not open Pine Editor.');
 
