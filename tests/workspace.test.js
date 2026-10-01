@@ -88,6 +88,14 @@ describe('persistent independent workspaces', () => {
     assert.throws(()=>reserve(local,'b'),{code:'SESSION_BUSY'});alias.release();
     const next=reserve(local,'b');abandonWorkspace(next.file,{workspaceId:next.id},local);
   });
+  it('atomically excludes Desktop-wide launch leases even with a different port', () => {
+    const options=fixture(), local={...options,host:'127.0.0.1'}, other={...local,port:2,desktopWide:true};
+    assert.equal(sessionPaths(local).gate,sessionPaths(other).gate);
+    const resource=reserve(local,'a');assert.throws(()=>acquireSession(other),{code:'WORKSPACE_RESERVED'});
+    abandonWorkspace(resource.file,{workspaceId:resource.id},local);
+    const launching=acquireSession(other);assert.throws(()=>reserve(local,'b'),{code:'SESSION_BUSY'});launching.release();
+    const b=reserve(local,'b');abandonWorkspace(b.file,{workspaceId:b.id},local);
+  });
   it('rejects registration during a legacy endpoint lease and pending recovery', () => {
     const options = fixture(), lease = acquireSession(options);
     assert.throws(() => reserve(options, 'a'), { code: 'SESSION_BUSY' });

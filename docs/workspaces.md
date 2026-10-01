@@ -9,8 +9,9 @@ Results cover ordinary backtesting; Deep Backtesting is not supported here.
 The initial supported environment is one local Desktop loopback endpoint. Known
 localhost/IPv4/IPv6 loopback aliases share ownership. A configured hostname alias
 cannot use legacy commands while local workspaces reserve that port. The short
-metadata admission gate is shared by port so registration and legacy leases cannot
-race across aliases; it is released before any Desktop work. Launch/restart is
+metadata admission gate is shared within the session directory so registration,
+hostname aliases and Desktop-wide launch leases cannot race; it is released before
+any Desktop work. Launch/restart is
 blocked by any registered workspace even if another port is configured.
 
 ```powershell

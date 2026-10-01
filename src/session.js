@@ -20,7 +20,7 @@ export function canonicalSessionHost(host) {
 export function sessionPaths({ host = CDP_HOST, port = CDP_PORT, directory = join(tmpdir(), 'tradingview-cli-sessions') } = {}) {
   const endpoint = `${canonicalSessionHost(host)}:${port}`;
   const key = createHash('sha256').update(endpoint).digest('hex');
-  const gateKey = createHash('sha256').update(`admission-port:${port}`).digest('hex');
+  const gateKey = createHash('sha256').update('desktop-admission-metadata').digest('hex');
   return { key, directory, lock: join(directory, `${key}.lock`), journal: join(directory, `${key}.journal.json`), gate: join(directory, `${gateKey}.acquire`), reservations: join(directory, `${key}.workspaces.json`) };
 }
 function failure(code, message) { const error = new Error(message); error.code = code; return error; }
@@ -47,8 +47,8 @@ export function assertNoPortLease(options = {}) {
   const paths = sessionPaths(options), port = Number(options.port ?? CDP_PORT);
   if (!existsSync(paths.directory)) return;
   for (const file of readdirSync(paths.directory).filter(name => name.endsWith('.lock'))) {
-    let lock; try { lock = read(join(paths.directory, file)); } catch { continue; }
-    if (Number(lock.port) === port) throw failure('SESSION_BUSY', 'A legacy endpoint lease on this port prevents local workspace registration.');
+    let lock; try { lock = read(join(paths.directory, file)); } catch { throw failure('OWNERSHIP_UNREADABLE', 'A legacy lease cannot be verified before workspace registration.'); }
+    if (Number(lock.port) === port || lock.desktop_wide) throw failure('SESSION_BUSY', 'A legacy endpoint or Desktop-wide lease prevents local workspace registration.');
   }
 }
 export function assertNoWorkspaceAnywhere(options = {}) {
@@ -134,6 +134,7 @@ export function assertSessionAccess(options = {}) {
 export function acquireSession(options = {}) {
   const paths = sessionPaths(options);
   return withAdmissionGate(options, () => {
+  if (options.desktopWide) assertNoWorkspaceAnywhere(options);
   assertNoLocalWorkspace(options);
   const status = sessionStatus(options);
   if (status.locked) {
@@ -147,7 +148,7 @@ export function acquireSession(options = {}) {
   let handle;
   try { handle = openSync(paths.lock, 'wx', 0o600); }
   catch (error) { if (error.code === 'EEXIST') throw failure('SESSION_BUSY', 'Another batch acquired this session.'); throw error; }
-  writeFileSync(handle, JSON.stringify({ pid: process.pid, run_id, port: Number(options.port ?? CDP_PORT), created_at: new Date().toISOString() }));
+  writeFileSync(handle, JSON.stringify({ pid: process.pid, run_id, port: Number(options.port ?? CDP_PORT), desktop_wide: Boolean(options.desktopWide), created_at: new Date().toISOString() }));
   closeSync(handle);
   owned.set(paths.key, run_id);
   let released = false;

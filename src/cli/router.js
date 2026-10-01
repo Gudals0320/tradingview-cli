@@ -155,7 +155,7 @@ async function execute(handler, values, positionals, offline = false, readOnly =
       if (workspaceFile) return runWorkspace(workspaceFile, command, values, positionals, handler);
       if (command === 'workspace wait') throw new Error('workspace wait requires --workspace FILE.');
       if (command === 'launch') assertNoWorkspaceAnywhere();
-      if (['workspace', 'legacy'].includes(commandScope(command))) lease = acquireSession({ readOnly });
+      if (['workspace', 'legacy'].includes(commandScope(command))) lease = acquireSession({ readOnly, desktopWide: command === 'launch' });
       return handler(values, positionals);
     };
     const result = await (readOnly ? withReadOnlySession(action) : action());
