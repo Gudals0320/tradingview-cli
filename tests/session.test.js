@@ -35,6 +35,14 @@ describe('Desktop session ownership and recovery', () => {
     assert.throws(() => assertSessionAccess(opts), { code: 'RECOVERY_REQUIRED' });
     assert.equal(JSON.stringify(sessionStatus(opts)).includes('private draft'), false);
   });
+  it('leases read-only inspection during legacy recovery without discarding its journal', () => {
+    const opts = fixture(), first = acquireSession(opts);
+    first.checkpoint({ snapshot: { source: 'retained draft' } }); first.release();
+    const readOnly = acquireSession({ ...opts, readOnly: true });
+    assert.equal(readOnly.pending().snapshot.source, 'retained draft'); readOnly.release();
+    assert.equal(sessionStatus(opts).recovery_required, true);
+    assert.throws(() => acquireSession(opts), { code: 'RECOVERY_REQUIRED' });
+  });
   it('blocks read-only access while a foreign process is active', () => {
     const opts = fixture(), first = acquireSession(opts);
     try {

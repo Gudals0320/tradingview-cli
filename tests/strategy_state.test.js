@@ -39,6 +39,19 @@ function fixture() {
 }
 
 describe('Strategy report identity and metadata', () => {
+  it('a fresh input-only workspace cannot publish its old report before a new native cycle', () => {
+    const f=fixture();
+    assert.equal(f.window.__tvCliCompilation, undefined);
+    prepareInputChange(f.window,'strategy');f.input(21);
+    assert.equal(compilationState(f.window).phase,'pending');
+    assert.equal(readStrategyReport(f.window).success,false);
+    f.tick();assert.equal(readStrategyReport(f.window).success,false);
+    f.status(1);f.status(2);f.update();
+    assert.equal(compilationState(f.window).phase,'ready');
+    assert.equal(readStrategyReport(f.window).success,true);
+    assert.equal(readStrategyReport(f.window).metrics.net_profit,20);
+    assert.equal(f.window.__tvCliCompilation.calculation.completed.cycle,1);
+  });
   it('confirmed save awaits only its exact target/version and never adopts a pre-save report', () => {
     for(const matches of [true,false]){
       const f=fixture(),chart=f.window.TradingViewApi._activeChartWidgetWV.value(),inputs=chart.getStudyById;let version='1.0';

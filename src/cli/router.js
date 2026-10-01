@@ -154,7 +154,7 @@ async function execute(handler, values, positionals, offline = false, readOnly =
     const action = async () => {
       if (workspaceFile) return runWorkspace(workspaceFile, command, values, positionals, handler);
       if (command === 'workspace wait') throw new Error('workspace wait requires --workspace FILE.');
-      if (commandScope(command) !== 'offline') lease = acquireSession({ readOnly });
+      if (['workspace', 'legacy'].includes(commandScope(command))) lease = acquireSession({ readOnly });
       return handler(values, positionals);
     };
     const result = await (readOnly ? withReadOnlySession(action) : action());

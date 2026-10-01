@@ -3,7 +3,8 @@ export const WORKSPACE_COMMANDS = new Set(['state', 'symbol', 'timeframe', 'type
   'pine get', 'pine set', 'pine compile', 'pine raw-compile', 'pine save', 'pine errors', 'pine console',
   'indicator get', 'indicator set', 'data strategy', 'data trades', 'data ledger', 'data equity', 'workspace wait']);
 export const OFFLINE_COMMANDS = new Set(['update', 'search', 'pine analyze', 'pine check', 'session status', 'session discard',
-  'workspace inventory', 'workspace init', 'workspace status', 'workspace interrupt', 'workspace recover', 'workspace release', 'workspace gate-status', 'workspace gate-clear']);
+  'workspace inventory', 'workspace status', 'workspace interrupt', 'workspace abandon', 'workspace gate-status', 'workspace gate-clear']);
+export const ADMIN_COMMANDS = new Set(['workspace init', 'workspace recover', 'workspace rebind', 'workspace release']);
 export const LEGACY_COMMANDS = new Set(['status', 'launch', 'range', 'scroll', 'discover', 'ui-state', 'quote', 'ohlcv', 'values', 'screenshot',
   'alert list', 'alert create', 'alert delete', 'data lines', 'data labels', 'data tables', 'data boxes', 'data depth', 'data indicator',
   'draw shape', 'draw list', 'draw get', 'draw remove', 'draw clear', 'indicator add', 'indicator remove', 'indicator toggle',
@@ -15,6 +16,7 @@ export const LEGACY_COMMANDS = new Set(['status', 'launch', 'range', 'scroll', '
 export function commandScope(command) {
   if (WORKSPACE_COMMANDS.has(command)) return 'workspace';
   if (OFFLINE_COMMANDS.has(command)) return 'offline';
+  if (ADMIN_COMMANDS.has(command)) return 'workspace-admin';
   if (LEGACY_COMMANDS.has(command)) return 'legacy';
   throw new Error(`Unclassified CLI command: ${command}`);
 }

@@ -110,9 +110,9 @@ export function acquireSession(options = {}) {
   const status = sessionStatus(options);
   if (status.locked) {
     if (status.owner_alive) throw failure('SESSION_BUSY', 'Another batch owns this Desktop session.');
-    if (status.recovery_required && !options.recover) throw failure('RECOVERY_REQUIRED', `Recover the interrupted batch before running another: ${paths.journal}`);
+    if (status.recovery_required && !options.recover && !options.readOnly) throw failure('RECOVERY_REQUIRED', `Recover the interrupted batch before running another: ${paths.journal}`);
     unlinkSync(paths.lock);
-  } else if (status.recovery_required && !options.recover) {
+  } else if (status.recovery_required && !options.recover && !options.readOnly) {
     throw failure('RECOVERY_REQUIRED', `Recover the interrupted batch before running another: ${paths.journal}`);
   }
   const run_id = randomUUID();

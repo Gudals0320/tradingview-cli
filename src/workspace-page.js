@@ -24,7 +24,7 @@ export function readWorkspacePage(window, document) {
     ;
   const calculating = studies.some(study => study.status === 0 || study.status === 1);
   return { layout: String(layout), pine: identity?.scriptIdPart || null, version: identity?.version,
-    source: editor.editor.getValue().replace(/\r\n/g, '\n'),
+    source: editor.editor.getValue().replace(/\r\n/g, '\n'), modified: controller.isModified?.(),
     context: { symbol: context.symbol, aliases: context.aliases, resolution: normalizeTimeframe(context.resolution), chart_type: context.chart_type,
       session: chart.symbolExt?.()?.session || null },
     studies, pending: pending_action || calculating, pending_action, calculating,
@@ -114,7 +114,8 @@ export function finishWorkspacePage(window, document, owner, operation) {
   const epoch = window.__tvCliCompilation;
   return { snapshot, events: bound.events, calculation: epoch ? { token: epoch.token, source_hash: epoch.source_hash, phase: epoch.phase,
     strategy_id: epoch.strategy_id, accepted_cycle: epoch.accepted_cycle, cycle: epoch.calculation?.cycle,
-    events: epoch.calculation?.events, completed: epoch.calculation?.completed } : null };
+    events: epoch.calculation?.events, completed: epoch.calculation?.completed,
+    report_verified: epoch.report_verified, inputs_fingerprint: epoch.inputs_fingerprint } : null };
 }
 
 export const WORKSPACE_PAGE_CODE = [findPineEditor, findPineController, readChartContext, normalizeTimeframe, symbolMatches,

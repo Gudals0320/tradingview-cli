@@ -80,6 +80,32 @@ A live/unverifiable PID or malformed gate is not cleared. Lost/copied/deleted
 handles do not release their centralized reservations. Keep the original private
 handle safe; resource IDs and owner tokens must not be edited by hand.
 
+If a reload happens between commands, use `workspace rebind --file FILE --id
+EXACT_WORKSPACE_ID` to acknowledge the same idle resources in a new generation.
+Rebinding reports adopted source/context/input changes. It requires the registered
+document to be mounted and the target still to exist. When a target or handle has
+been lost, use the explicit offline escape hatch instead:
+
+```powershell
+tv workspace abandon --file FILE --id EXACT_WORKSPACE_ID --operation EXACT_INTERRUPTED_OPERATION
+```
+
+An idle reservation needs only the exact workspace ID. An active operation must
+have a nonexistent PID and its exact operation ID; an interrupted operation also
+requires its exact ID. Abandon preserves private journals/results and records
+`incomplete:true`, releases only this workspace and does not touch Desktop. A new
+workspace can then explicitly register newly provisioned resources. Initialization
+checks HTTP inventory before reservation and rolls back a failed bind.
+
+Synchronous page expressions have guards in the same turn. Async expressions have
+guards before dispatch and after completion; native actions run in between. During
+compilation, changing the owned study's input schema/defaults can be a native
+effect of changing source. Those changes are permitted along with compiled
+identity changes. An external edit to that same study during compilation can be
+indistinguishable from a native input change. Do not edit reserved resources in
+the GUI during execution. Other document, source and context changes are checked;
+the CLI cannot physically exclude external software from Desktop.
+
 The allowlist is deliberately narrow. Shell, arbitrary eval, layout switching,
 document creation/opening, alerts, watchlists, replay and other shared commands
 are legacy-only. The policy coverage test requires explicit classification of

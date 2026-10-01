@@ -39,8 +39,21 @@ async function browserIdentity() {
 }
 function owner(workspace) { return { id: workspace.id, token: workspace.token, nonce: workspace.binding?.nonce }; }
 function pageCall(fn, ...args) { return `${fn}(window,document,${args.map(arg => JSON.stringify(arg)).join(',')})`; }
+async function sourceProof(client, snapshot) {
+  if (snapshot.modified !== false || !snapshot.version) return null;
+  try {
+    const verified = await raw(client, `(async () => {
+      const response=await fetch('https://pine-facade.tradingview.com/pine-facade/get/'+encodeURIComponent(${JSON.stringify(snapshot.pine)})+'/'+encodeURIComponent(${JSON.stringify(snapshot.version)}),{credentials:'include'});
+      if(!response.ok)return false;const data=await response.json();
+      const current=readWorkspacePage(window,document);
+      return data.source?.replace(/\\r\\n/g,'\\n')===${JSON.stringify(snapshot.source)}&&current.source===${JSON.stringify(snapshot.source)}&&current.pine===${JSON.stringify(snapshot.pine)}&&String(current.version)===${JSON.stringify(String(snapshot.version))};
+    })()`);
+    return verified ? { hash: sourceHash(snapshot.source), version: String(snapshot.version) } : null;
+  } catch { return null; } // Compilation can provide independent source verification later.
+}
 
 export async function initWorkspace(resources) {
+  await checkLayout(resources);
   const workspace = reserveWorkspace(resources), lease = acquireWorkspace(workspace.file);
   return withWorkspaceSession(lease, async () => {
     try {
@@ -48,10 +61,17 @@ export async function initWorkspace(resources) {
       configureTarget(workspace.target);
       const client = await getClient(), browser = await browserIdentity();
       const binding = await raw(client, pageCall('bindWorkspacePage', workspace, randomUUID()));
-      lease.saveBinding({ ...binding, browser });
+      const source_proof = await sourceProof(client, binding.snapshot);
+      await raw(client, pageCall('guardWorkspacePage', { ...owner(workspace), nonce: binding.nonce }));
+      lease.saveBinding({ ...binding, browser, source_proof });
       lease.finish({ success: true, result: { registered: true } });
       return { success: true, workspace_id: workspace.id, file: workspace.file, target: workspace.target, layout: workspace.layout, pine: workspace.pine };
-    } catch (error) { lease.finish({ success: false, error: error.message }); throw error; }
+    } catch (error) {
+      // Binding only writes a page nonce, never chart/document state. Roll back admission.
+      try { lease.finish({ success: false, interrupted: false, error: error.message }); const rollback = acquireWorkspace(workspace.file); releaseWorkspace(rollback); }
+      catch (cleanup) { error.details = { cleanup_error: cleanup.message }; }
+      throw error;
+    }
   });
 }
 async function permitFor(command, values, positionals) {
@@ -81,20 +101,37 @@ async function readInput() { const chunks = []; for await (const chunk of proces
 export async function runWorkspace(file, command, values, positionals, handler) {
   if (!WORKSPACE_COMMANDS.has(command)) throw workspaceError('WORKSPACE_COMMAND_UNSUPPORTED', `Command ${command} cannot run independently in a workspace.`);
   const permit = await permitFor(command, values, positionals), lease = acquireWorkspace(file), workspace = lease.workspace;
+  let started = false;
+  let handlerStarted = false, client;
   return withWorkspaceSession(lease, async () => {
     try {
       if (!workspace.binding) throw workspaceError('WORKSPACE_NOT_BOUND', 'Initialization did not finish; recover explicitly.');
       await checkLayout(workspace);
       if (await browserIdentity() !== workspace.binding.browser) throw workspaceError('WORKSPACE_GENERATION_CHANGED', 'Desktop browser generation changed.');
       configureTarget(workspace.target);
-      const client = await getClient();
+      client = await getClient();
       const before = await raw(client, pageCall('startWorkspacePage', owner(workspace), lease.operation, permit));
+      started = true;
       if (command.startsWith('indicator ') && before.studies[0]?.id !== positionals[0]) throw workspaceError('WORKSPACE_STUDY_MISMATCH', 'Indicator ID must identify the owned study.');
+      const reportRead = ['data strategy', 'data trades', 'data ledger', 'data equity'].includes(command);
+      if (reportRead && (before.calculating || before.studies[0]?.status !== 2)) throw workspaceError('REPORT_PENDING', 'Owned strategy calculation is not complete.');
       lease.checkpoint({ phase: 'running', command, before, permit });
+      handlerStarted = true;
       const result = await handler(values, positionals);
       const after = await raw(client, pageCall('finishWorkspacePage', owner(workspace), lease.operation));
+      const hash = sourceHash(after.snapshot.source);
+      const persistedProof = workspace.binding.source_proof;
+      const sourceVerified = after.calculation?.source_hash === hash || (persistedProof?.hash === hash && !after.snapshot.modified
+        && persistedProof.version === String(after.snapshot.version)
+        && persistedProof.version === String(after.snapshot.studies[0]?.inputs.find(input => input.id === 'pineVersion')?.value));
+      if (reportRead && result?.success && (after.snapshot.calculating || after.snapshot.studies[0]?.status !== 2
+        || after.calculation?.report_verified !== true || after.calculation?.phase !== 'ready'
+        || after.calculation?.inputs_fingerprint !== JSON.stringify(after.snapshot.studies[0]?.inputs)
+        || !sourceVerified
+        || result.strategy_id !== after.snapshot.studies[0]?.id)) throw workspaceError('REPORT_UNVERIFIED', 'Report does not match the current owned source, inputs and completed calculation.');
       const success = result?.success !== false && result?.compiled !== false && result?.has_errors !== true;
-      lease.saveBinding({ ...workspace.binding, snapshot: after.snapshot });
+      const source_proof = command === 'pine save' && result?.saved ? { hash, version: String(after.snapshot.version) } : workspace.binding.source_proof;
+      lease.saveBinding({ ...workspace.binding, snapshot: after.snapshot, source_proof });
       const study = after.snapshot.studies[0];
       const calculation = after.calculation ? { ...after.calculation,
         completed: after.calculation.completed ? { cycle: after.calculation.completed.cycle, key_hash: sourceHash(after.calculation.completed.key) } : null } : null;
@@ -104,7 +141,15 @@ export async function runWorkspace(file, command, values, positionals, handler) 
       const output = { ...result, provenance };
       lease.checkpoint({ phase: success ? 'complete' : 'failed', command, before, after: after.snapshot, provenance });
       lease.finish({ success, result: output, interrupted: false }); return output;
-    } catch (error) { lease.finish({ success: false, error: error.message }); throw error; }
+    } catch (error) {
+      let interrupted = handlerStarted;
+      if (started && !handlerStarted) {
+        try { await raw(client, pageCall('finishWorkspacePage', owner(workspace), lease.operation)); }
+        catch { interrupted = true; }
+      }
+      try { lease.finish({ success: false, interrupted, error: error.message }); } catch (cleanup) { error.details = { cleanup_error: cleanup.message }; }
+      throw error;
+    }
   });
 }
 
@@ -117,14 +162,42 @@ export async function recoverWorkspace(file, { operationId, rebind = false } = {
       const client = await getClient(), browser = await browserIdentity();
       if (!rebind && workspace.binding?.browser !== browser) throw workspaceError('WORKSPACE_GENERATION_CHANGED', 'Use --rebind to acknowledge the new page generation.');
       if (!rebind) await raw(client, pageCall('guardWorkspacePage', owner(workspace)));
+      if (!rebind) {
+        const operation = await raw(client, 'window.__tvCliWorkspace?.operation');
+        if (operation && operation !== operationId) throw workspaceError('WORKSPACE_OPERATION_MISMATCH', 'Page operation does not match the interrupted operation.');
+      }
       // bind validates resource IDs and native quiescence before changing page state.
       const binding = await raw(client, pageCall('bindWorkspacePage', workspace, randomUUID()));
-      lease.checkpoint({ phase: 'reconciled', interrupted_operation: operationId, snapshot: binding.snapshot, rebind });
-      lease.saveBinding({ ...binding, browser });
+      const source_proof = await sourceProof(client, binding.snapshot);
+      const previous = workspace.binding?.snapshot;
+      const adopted_changes = { source: previous ? previous.source !== binding.snapshot.source : true,
+        context: JSON.stringify(previous?.context) !== JSON.stringify(binding.snapshot.context),
+        inputs: JSON.stringify(previous?.studies) !== JSON.stringify(binding.snapshot.studies) };
+      lease.checkpoint({ phase: 'reconciled', interrupted_operation: operationId, before: previous, snapshot: binding.snapshot, adopted_changes, rebind });
+      lease.saveBinding({ ...binding, browser, source_proof });
       lease.acknowledgeRecovery(operationId);
       lease.finish({ success: true, result: { recovered: true, interrupted_operation: operationId, incomplete: true } });
-      return { success: true, recovered: true, incomplete: true, workspace_id: workspace.id, interrupted_operation: operationId };
-    } catch (error) { lease.finish({ success: false, error: error.message }); throw error; }
+      return { success: true, recovered: true, incomplete: true, workspace_id: workspace.id, interrupted_operation: operationId, adopted_changes };
+    } catch (error) { try { lease.finish({ success: false, error: error.message }); } catch (cleanup) { error.details = { cleanup_error: cleanup.message }; } throw error; }
+  });
+}
+
+export async function rebindWorkspace(file, workspaceId) {
+  const lease = acquireWorkspace(file), workspace = lease.workspace;
+  return withWorkspaceSession(lease, async () => {
+    try {
+      if (workspace.id !== workspaceId) throw workspaceError('WORKSPACE_OWNERSHIP_LOST', 'Pass the exact workspace ID to acknowledge a changed generation.');
+      await checkLayout(workspace); configureTarget(workspace.target);
+      const client = await getClient(), browser = await browserIdentity();
+      const binding = await raw(client, pageCall('bindWorkspacePage', workspace, randomUUID()));
+      const source_proof = await sourceProof(client, binding.snapshot), previous = workspace.binding?.snapshot;
+      const adopted_changes = { source: previous?.source !== binding.snapshot.source,
+        context: JSON.stringify(previous?.context) !== JSON.stringify(binding.snapshot.context),
+        inputs: JSON.stringify(previous?.studies) !== JSON.stringify(binding.snapshot.studies) };
+      lease.checkpoint({ phase: 'rebound', before: previous, after: binding.snapshot, adopted_changes });
+      lease.saveBinding({ ...binding, browser, source_proof }); lease.finish({ success: true, result: { rebound: true, adopted_changes } });
+      return { success: true, rebound: true, workspace_id: workspace.id, adopted_changes };
+    } catch (error) { try { lease.finish({ success: false, interrupted: false, error: error.message }); } catch (cleanup) { error.details = { cleanup_error: cleanup.message }; } throw error; }
   });
 }
 

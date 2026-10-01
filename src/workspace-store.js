@@ -58,8 +58,10 @@ export function reserveWorkspace({ file, target, layout, pine }, options = {}) {
       endpoint_key: paths.key, target, layout, pine, created_at: new Date().toISOString() };
     // Reserve before creating the file: a crash leaves a fail-closed reservation.
     atomic(paths.reservations, [...rows, workspace]);
-    const handle = openSync(file, 'wx', 0o600);
-    try { writeFileSync(handle, JSON.stringify(workspace, null, 2)); } finally { closeSync(handle); }
+    try {
+      const handle = openSync(file, 'wx', 0o600);
+      try { writeFileSync(handle, JSON.stringify(workspace, null, 2)); } finally { closeSync(handle); }
+    } catch (error) { atomic(paths.reservations, rows); throw error; }
     return workspace;
   });
 }
@@ -154,5 +156,26 @@ export function releaseWorkspace(lease, options = {}) {
     atomic(paths.reservations, rows.filter(item => item !== row));
     // Preserve artifacts and source for review. A released file cannot be reused.
     return { success: true, released: true, workspace_id: row.id };
+  });
+}
+
+/** Explicit offline abandonment, including deleted handles/targets. Never changes Desktop. */
+export function abandonWorkspace(file, { workspaceId, operationId } = {}, options = {}) {
+  if (!workspaceId || !file) fail('WORKSPACE_ID_REQUIRED', 'Pass the exact workspace ID and original handle path.');
+  return withAdmissionGate(options, paths => {
+    const rows = readReservations(options), row = rows.find(item => item.id === workspaceId && samePath(item.file, resolve(file)));
+    if (!row) fail('WORKSPACE_OWNERSHIP_LOST', 'Exact workspace reservation was not found.');
+    const expected = row.operation?.id || row.interrupted?.operation_id;
+    if (expected && operationId !== expected) fail('WORKSPACE_OPERATION_MISMATCH', 'Pass the exact active/interrupted operation ID.');
+    if (row.operation) {
+      try { process.kill(row.operation.pid, 0); fail('WORKSPACE_BUSY', 'Active PID still exists; cannot abandon.'); }
+      catch (error) { if (error.code !== 'ESRCH') throw error; }
+    }
+    const directory = join(dirname(row.file), '.tv-workspaces', row.id);
+    mkdirSync(directory, { recursive: true });
+    atomic(join(directory, `abandoned-${randomUUID()}.json`), { workspace_id: row.id, operation_id: expected || null,
+      success: false, incomplete: true, abandoned_at: new Date().toISOString(), target: row.target, layout: row.layout, pine: row.pine });
+    atomic(paths.reservations, rows.filter(item => item !== row));
+    return { success: true, released: true, abandoned: true, incomplete: true, workspace_id: row.id, desktop_changed: false };
   });
 }

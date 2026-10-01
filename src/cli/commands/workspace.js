@@ -1,6 +1,6 @@
 import { register } from '../router.js';
-import { initWorkspace, recoverWorkspace, closeWorkspace, workspaceInventory } from '../../workspace.js';
-import { workspaceStatus, markInterrupted } from '../../workspace-store.js';
+import { initWorkspace, recoverWorkspace, closeWorkspace, workspaceInventory, rebindWorkspace } from '../../workspace.js';
+import { workspaceStatus, markInterrupted, abandonWorkspace } from '../../workspace-store.js';
 import { compilationState, STRATEGY_PAGE_CODE } from '../../strategy-state.js';
 import { evaluate } from '../../connection.js';
 import { admissionGateStatus, clearAdmissionGate } from '../../session.js';
@@ -17,11 +17,14 @@ register('workspace', {
       file, target: { type: 'string' }, layout: { type: 'string' }, pine: { type: 'string' },
     }, handler: opts => initWorkspace(opts) }],
     ['status', { description: 'Inspect filesystem ownership without touching Desktop', options: { file }, handler: opts => workspaceStatus(opts.file) }],
+    ['rebind', { description: 'Acknowledge a new generation of the same idle resources', options: { file, id: { type: 'string' } }, handler: opts => rebindWorkspace(opts.file, opts.id) }],
     ['interrupt', { description: 'Mark an exact operation interrupted after its PID has died', options: { file, operation }, handler: opts => markInterrupted(opts.file, opts.operation) }],
     ['recover', { description: 'Reconcile current isolated state after an interrupted operation', options: { file, operation,
       rebind: { type: 'boolean', description: 'Acknowledge a new generation of the same resources' },
     }, handler: opts => recoverWorkspace(opts.file, { operationId: opts.operation, rebind: opts.rebind }) }],
     ['release', { description: 'Release idle resources; preserve artifacts', options: { file }, handler: opts => closeWorkspace(opts.file) }],
+    ['abandon', { description: 'Explicit offline release after target/handle loss; preserve incomplete artifacts', options: { file, operation, id: { type: 'string', description: 'Exact workspace ID' } },
+      handler: opts => abandonWorkspace(opts.file, { workspaceId: opts.id, operationId: opts.operation }) }],
     ['wait', { description: 'Wait for this workspace strategy calculation (use --workspace FILE)', options: { timeout: { type: 'string' } }, handler: async opts => {
       const timeout = Number(opts.timeout || 30000), start = Date.now();
       if (!Number.isFinite(timeout) || timeout < 1 || timeout > 300000) throw new Error('timeout must be 1..300000 ms.');

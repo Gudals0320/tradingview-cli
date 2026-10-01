@@ -4,7 +4,8 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
-import { reserveWorkspace, acquireWorkspace, workspaceStatus, markInterrupted, loadWorkspace } from '../src/workspace-store.js';
+import { reserveWorkspace, acquireWorkspace, workspaceStatus, markInterrupted, loadWorkspace, abandonWorkspace } from '../src/workspace-store.js';
+import { unlinkSync } from 'node:fs';
 import { acquireSession, sessionPaths, assertSessionAccess, clearAdmissionGate, admissionGateStatus } from '../src/session.js';
 
 const moduleUrl = new URL('../src/workspace-store.js', import.meta.url).href;
@@ -24,6 +25,23 @@ function child(code) {
   return { process, ready, exited, errors: () => errors };
 }
 describe('persistent independent workspaces', () => {
+  it('abandons a lost handle/target offline without releasing another worker', () => {
+    const options = fixture(), a = reserve(options, 'a'), b = reserve(options, 'b');
+    const operation = acquireWorkspace(a.file, options); operation.checkpoint({ phase: 'running' }); operation.finish({ success: false });
+    unlinkSync(a.file);
+    assert.throws(() => abandonWorkspace(a.file, { workspaceId: a.id, operationId: 'wrong' }, options), { code: 'WORKSPACE_OPERATION_MISMATCH' });
+    const result = abandonWorkspace(a.file, { workspaceId: a.id, operationId: operation.operation }, options);
+    assert.equal(result.desktop_changed, false); assert.equal(result.incomplete, true);
+    const other = acquireWorkspace(b.file, options); other.finish({ success: true });
+    assert.throws(() => acquireSession(options), { code: 'WORKSPACE_RESERVED' });
+    abandonWorkspace(b.file, { workspaceId: b.id }, options);
+    const legacy = acquireSession(options); legacy.release();
+  });
+  it('cannot abandon a live workspace operation even with its exact IDs', () => {
+    const options = fixture(), a = reserve(options, 'a'), operation = acquireWorkspace(a.file, options);
+    assert.throws(() => abandonWorkspace(a.file, { workspaceId: a.id, operationId: operation.operation }, options), { code: 'WORKSPACE_BUSY' });
+    operation.finish({ success: true });
+  });
   it('admits six independent process loops without metadata false conflicts', async () => {
     const options = fixture(), resources = Array.from({ length: 6 }, (_, i) => reserve(options, String(i)));
     const workers = resources.map(resource => child(`import {acquireWorkspace} from ${JSON.stringify(moduleUrl)};
