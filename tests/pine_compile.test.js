@@ -47,7 +47,10 @@ function dependencies({ delayedError = false, neverComplete = false, saveRequire
   f.controller.isModified = () => modifiedAfter;
   const context = { window: f.window, document: f.document };
   return { source: '//@version=6\nindicator("QA")\nplot(close)',
+    readOutcome:async()=>({identity:{scriptIdPart:'saved A',version:'2.0'},modified:modifiedAfter,draft:false,markers:[],native_diagnostics:[],runtime_diagnostics:[],targets:[]}),
+    readPersistence:async()=>({matches:!modifiedAfter}),
     evaluate: expression => {
+      if(expression.includes('return failCompilation('))return true;
       if (expression.includes('function pineCompileContext')) return {save_required:saveRequired};
       if (expression.includes('return beginCompilation(')) return { phase: 'pending' };
       if (expression.includes('return (function observePineCompilation')) return observePineCompilation(f.window, f.controller, 'token');
@@ -104,6 +107,7 @@ it('indicator unchanged requires matching applied script ID/version and clean ed
 it('unchanged indicators wait for a pending applied study without dispatching another compile', async () => {
   let ticks = 0;
   const result = await smartCompile({ _deps: { source: 'indicator("QA")',
+    readOutcome:async()=>({markers:[],targets:[]}),
     evaluate: expression => {
       assert.match(expression, /function pineCompileContext/);
       return ticks < 3 ? { pending: true } : { unchanged: true };
@@ -113,10 +117,12 @@ it('unchanged indicators wait for a pending applied study without dispatching an
 });
 it('compile requires explicit permission to persist edits to a saved script', async () => {
   let inspections = 0;
-  const result = await smartCompile({ _deps: { source: 'indicator("QA")', evaluate: () => {
+  const result = await smartCompile({ _deps: { source: 'indicator("QA")', readOutcome:async()=>({markers:[],targets:[]}),evaluate: expression => {
+    if(expression?.includes('return failCompilation('))return true;
     inspections++; return { save_required: true };
   } } });
-  assert.equal(result.code, 'SAVE_REQUIRED'); assert.equal(inspections, 1);
+  assert.equal(result.code, 'SAVE_REQUIRED');
+  assert.equal(inspections,1);
 });
 it('smartCompile verifies late clean completion and fails closed on timeout', async () => {
   assert.equal((await smartCompile({ _deps: dependencies() })).compiled, true);

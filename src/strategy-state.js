@@ -133,6 +133,7 @@ export function beginCompilation(window, token, sourceHash, strategyMode, strate
   const context = readChartContext(window);
   if(strategyMode && previous?.phase==='pending' && previous.persistence_confirmed && previous.source_hash===sourceHash
     && previous.script_id===scriptId && matching.length===1
+    && matching[0].id===previous.target_study_id
     && String(matching[0].inputs.find(i=>i.id==='pineVersion')?.value)===String(previous.saved_version)) {
     return {phase:'awaiting',token:previous.token,strategy_id:matching[0].id};
   }

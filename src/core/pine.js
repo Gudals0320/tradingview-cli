@@ -297,7 +297,10 @@ export async function save({ timeout = 15000, _deps } = {}) {
   const token = randomUUID();
   const savedSource=!_deps?(await getSource()).source:_deps.source;
   const prepareStrategy=typeof savedSource==='string'&&/^\s*strategy\s*\(/m.test(savedSource);
+  const finishSave=async result=>{if(!result.success&&prepareStrategy)await inspect(`(() => {${STRATEGY_PAGE_CODE};return failCompilation(window,${JSON.stringify(token+'-save')},${JSON.stringify(result.error||'Save failed.')},'SAVE_FAILED');})()`);return result;};
+  try {
   if(prepareStrategy) await inspect(`(() => { ${PINE_TARGET_PAGE_CODE}; ${STRATEGY_PAGE_CODE};
+    const operation=window.__tvCliSave;if(operation?.pending&&!operation.abandoned&&Date.now()<operation.expiresAt)return true;
     const c=${FIND_CONTROLLER},plan=planPineCompilation(window,c);
     if(!plan.error&&plan.target_id&&c.isModified()) beginCompilation(window,${JSON.stringify(token+'-save')},${JSON.stringify(sourceHash(canonicalPineSource(savedSource)))},true,null,plan.script_id,plan.target_id);
     return true;})()`);
@@ -334,10 +337,10 @@ export async function save({ timeout = 15000, _deps } = {}) {
         identity:controller.getScriptIdVersion(),modified:controller.isModified()};
     })()`);
     dialogHandled ||= Boolean(state.clicked);
-    if (state.error) return { success:false, saved:false, error:state.error };
+    if (state.error) return finishSave({ success:false, saved:false, error:state.error });
     if (!state.pending) {
-      if (!state.identity?.scriptIdPart || state.modified) return { success:false, saved:false,
-        error:'Pine save finished without a saved document identity or with unsaved changes.' };
+      if (!state.identity?.scriptIdPart || state.modified) return finishSave({ success:false, saved:false,
+        error:'Pine save finished without a saved document identity or with unsaved changes.' });
       const verified = await inspectAsync(`(async () => {
         const operation = window.__tvCliSave, controller = ${FIND_CONTROLLER};
         if (operation?.token !== ${JSON.stringify(token)}) return false;
@@ -352,15 +355,16 @@ export async function save({ timeout = 15000, _deps } = {}) {
       })()`);
       if(verified&&prepareStrategy) await inspect(`(() => {${STRATEGY_PAGE_CODE};const epoch=window.__tvCliCompilation;
         if(epoch?.token===${JSON.stringify(token+'-save')}){epoch.persistence_confirmed=true;epoch.saved_version=${JSON.stringify(state.identity.version)};compilationState(window);}return true;})()`);
-      return verified ? { success:true,saved:true,action:dialogHandled?'saved_with_dialog':'saved',
+      return finishSave(verified ? { success:true,saved:true,action:dialogHandled?'saved_with_dialog':'saved',
         script_id:state.identity.scriptIdPart,version:state.identity.version }
-        : {success:false,saved:false,error:'Persisted Pine source did not match the editor source.'};
+        : {success:false,saved:false,error:'Persisted Pine source did not match the editor source.'});
     }
   } while (now() - start < timeout);
   await inspect(`(() => { const operation=window.__tvCliSave;
     if (operation?.token === ${JSON.stringify(token)}) { operation.abandoned=true;operation.pending=false; }
     return true; })()`);
-  return { success:false,saved:false,error:'Pine save did not complete before timeout.' };
+  return finishSave({ success:false,saved:false,error:'Pine save did not complete before timeout.' });
+  } catch(error){return finishSave({success:false,saved:null,code:'SAVE_FAILED',error:error.message});}
 }
 export async function getConsole({ _deps } = {}) {
   if (!_deps && !await ensurePineEditorOpen()) throw new Error('Could not open Pine Editor.');
@@ -370,36 +374,90 @@ export async function getConsole({ _deps } = {}) {
   })()`);
   return { success: true, entries: entries || [], entry_count: entries?.length || 0 };
 }
+
+export async function finalizePineCompile(result, {source,token,context={},saveChanges=false,inspect,inspectAsync,_deps}={}) {
+  let observed;
+  try { observed=_deps?.readOutcome?await _deps.readOutcome():await inspect(`(() => {${PINE_TARGET_PAGE_CODE};
+    return readPineOutcome(window,${FIND_CONTROLLER},${FIND_MONACO},${JSON.stringify(token)});})()`); }
+  catch(error){observed={state_error:error.message};}
+  const outcome={...result};
+  if(observed?.state_error){outcome.state_error=observed.state_error;outcome.chart_changed=null;
+    if(outcome.success){outcome.success=false;outcome.compiled=false;outcome.code='POST_COMPILE_STATE_UNREADABLE';outcome.error=observed.state_error;}}
+  else {
+    const diagnostics=splitMarkers([...(observed?.markers||[]),...(observed?.native_diagnostics||[])]);
+    const unique=list=>[...new Map(list.map(d=>[JSON.stringify([d.line,d.column,d.message,d.severity]),d])).values()];
+    outcome.errors=unique([...(result.errors||[]),...diagnostics.errors]);
+    outcome.warnings=unique([...(result.warnings||[]),...diagnostics.warnings]);
+    const currentRuntime=(observed?.runtime_diagnostics||[]).filter(d=>String(d.version)===String(observed.identity?.version));
+    if(currentRuntime.length)outcome.runtime_diagnostics=currentRuntime;
+    const protectedCode=/TARGET|DUPLICATE|SAVE_|AMBIGUOUS/.test(result.code||'');
+    if(outcome.errors.length){outcome.success=false;outcome.compiled=false;outcome.has_errors=true;
+      if(!protectedCode){outcome.code='PINE_COMPILE_ERROR';outcome.error=outcome.errors[0].message;}}
+    else if(currentRuntime.length&&!protectedCode){outcome.success=false;outcome.compiled=true;outcome.has_errors=false;
+      outcome.code='PINE_RUNTIME_ERROR';outcome.runtime_error=currentRuntime[0].message;outcome.runtime_diagnostics=currentRuntime;outcome.error=currentRuntime[0].message;}
+    else if(!outcome.success && !outcome.code){outcome.code='NATIVE_ACTION_REJECTED';outcome.native_action_error=result.error;
+      outcome.error=(result.error||'Native action rejected.')+' No diagnostics available for the current saved version.';}
+    const before=(context.before||[]).filter(s=>s.pine_id===context.identity?.scriptIdPart);
+    const after=observed?.targets||[];
+    outcome.applied=after.length===1&&String(after[0].version)===String(observed.identity?.version);
+    outcome.calculation_ready=outcome.applied&&after[0].status_type===2;
+    outcome.chart_changed=context.before?JSON.stringify(before.map(s=>[s.id,s.compiled_identity]))!==JSON.stringify(after.map(s=>[s.id,s.compiled_identity])):null;
+    outcome.chart={target_count:after.length,studies:after.map(s=>({id:s.id,version:s.version,status_type:s.status_type}))};
+    outcome.editor_modified=observed?.modified;
+    if(observed?.runtime_diagnostics?.length&&!currentRuntime.length)outcome.previous_target_diagnostics=observed.runtime_diagnostics;
+  }
+  if(saveChanges){
+    outcome.save_requested=true;outcome.script_id=observed?.identity?.scriptIdPart||null;outcome.version=observed?.identity?.version||null;
+    outcome.save_performed=Boolean(outcome.script_id&&(context.identity?.scriptIdPart!==outcome.script_id||String(context.identity?.version)!==String(outcome.version)));
+    try {
+      const persisted=_deps?.readPersistence?await _deps.readPersistence():await inspectAsync(`(async()=>{
+        const c=${FIND_CONTROLLER},id=c?.getScriptIdVersion?.();if(!id?.scriptIdPart)return {matches:false};
+        const response=await fetch('https://pine-facade.tradingview.com/pine-facade/get/'+encodeURIComponent(id.scriptIdPart)+'/'+encodeURIComponent(id.version),{credentials:'include'});
+        if(!response.ok)throw new Error('Saved source verification HTTP '+response.status);const data=await response.json();
+        return {matches:typeof data.source==='string'&&data.source.replace(/\\r\\n/g,'\\n')===${JSON.stringify(canonicalPineSource(source))}};
+      })()`);
+      outcome.saved=Boolean(persisted.matches&&!observed?.draft);outcome.persistence_verified=true;
+      outcome.source_persisted=Boolean(persisted.matches);outcome.persistence_kind=observed?.draft?'draft':'saved_document';
+    }catch(error){outcome.saved=null;outcome.persistence_verified=false;outcome.persistence_error=error.message;}
+  }
+  if(!outcome.success){outcome.report_ready=false;
+    if(outcome.code==='REPORT_TIMEOUT'&&result.calculation_pending)return outcome;
+    await inspect(`(() => {${STRATEGY_PAGE_CODE};return failCompilation(window,${JSON.stringify(token)},${JSON.stringify(outcome.error||outcome.errors?.[0]?.message||'Compilation failed.')},${JSON.stringify(outcome.code||'COMPILATION_FAILED')});})()`);
+  }
+  return outcome;
+}
 export async function smartCompile({ timeout = 30000, save: saveChanges = false, _deps } = {}) {
   const inspect = _deps?.evaluate || evaluate;
   if (!_deps && !await ensurePineEditorOpen()) throw new Error('Could not open Pine Editor.');
   const source = _deps?.source || (await getSource()).source;
+  const token=randomUUID();let activeToken=token,context;
+  const finish=result=>finalizePineCompile(result,{source,token:activeToken,context,saveChanges,inspect,inspectAsync:_deps?.evaluateAsync||evaluateAsync,_deps});
+  try {
   const contextExpression = `(() => { ${PINE_TARGET_PAGE_CODE}; const controller = ${FIND_CONTROLLER};
     return (${pineCompileContext.toString()})(window, controller); })()`;
-  let context = await inspect(contextExpression);
-  if (context.error) return {success:false,compiled:false,report_ready:false,code:context.code,error:context.error,target_count:context.target_count};
-  if (context.save_required && !saveChanges) return { success:false,compiled:false,code:'SAVE_REQUIRED',
-    error:'This saved script has unsaved changes. Run pine save first or compile with --save.' };
-  const token = randomUUID();
+  context = await inspect(contextExpression);
+  if (context.error) return finish({success:false,compiled:false,report_ready:false,code:context.code,error:context.error,target_count:context.target_count});
+  if (context.save_required && !saveChanges) return finish({ success:false,compiled:false,code:'SAVE_REQUIRED',
+    error:'This saved script has unsaved changes. Run pine save first or compile with --save.' });
   const strategyMode = /^\s*strategy\s*\(/m.test(source);
   if (!strategyMode && context.pending) {
     const sleep = _deps?.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
     const now = _deps?.now || Date.now, started = now();
     do { await sleep(200); context = await inspect(contextExpression); }
     while (context.pending && now() - started < timeout);
-    if (context.pending) return {success:false,compiled:false,error:'Applied indicator calculation did not finish before timeout.'};
-    if (!context.unchanged) return {success:false,compiled:false,error:context.runtime_error || 'Applied indicator identity could not be verified.'};
+    if (context.pending) return finish({success:false,compiled:false,error:'Applied indicator calculation did not finish before timeout.'});
+    if (!context.unchanged) return finish({success:false,compiled:false,error:context.runtime_error || 'Applied indicator identity could not be verified.'});
   }
-  if (!strategyMode && context.unchanged) return {success:true,compiled:true,compile_performed:false,
-    unchanged:true,has_errors:false,errors:[],warnings:[]};
+  if (!strategyMode && context.unchanged) return finish({success:true,compiled:true,compile_performed:false,
+    unchanged:true,has_errors:false,errors:[],warnings:[]});
   const literal = source.match(/^\s*strategy\s*\(\s*(?:title\s*=\s*)?("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/m)?.[1];
   const strategyName = literal ? literal.slice(1, -1).replace(/\\([\\"'nrt])/g, (_, ch) => ({ n: '\n', r: '\r', t: '\t' }[ch] || ch)) : null;
   const begun = await inspect(`(() => { ${STRATEGY_PAGE_CODE}; return beginCompilation(window, ${JSON.stringify(token)}, ${JSON.stringify(sourceHash(canonicalPineSource(source)))}, ${strategyMode}, ${JSON.stringify(strategyName)}, ${JSON.stringify(context.identity?.scriptIdPart || null)}, ${JSON.stringify(context.target_id || null)},${Boolean(context.same_version_refresh)}); })()`);
-  if (begun?.phase === 'unchanged') return { success: true, compiled: true, compile_performed: false, unchanged: true,
+  if (begun?.phase === 'unchanged') return finish({ success: true, compiled: true, compile_performed: false, unchanged: true,
     has_errors: false, errors: [], warnings: [], strategy_id: begun.strategy_id, strategy_inputs: begun.inputs,
-    compilation_token: begun.token, report_ready: true };
+    compilation_token: begun.token, report_ready: true });
   const awaiting = begun?.phase === 'awaiting';
-  const activeToken = awaiting ? begun.token : token;
+  activeToken = awaiting ? begun.token : token;
   if (!awaiting) {
     const observed = await inspect(`(() => {const controller = ${FIND_CONTROLLER};
       return (${observePineCompilation.toString()})(window, controller, ${JSON.stringify(token)}); })()`);
@@ -417,17 +475,16 @@ export async function smartCompile({ timeout = 30000, save: saveChanges = false,
         if (${saveChanges}) (${confirmPineCompileSaveDialog.toString()})(document);
         return (${pineCompilationStatus.toString()})(window, ${JSON.stringify(token)});
       })()`);
-      if (progress.replaced) return { success:false,compiled:false,error:'Pine compilation operation was replaced.' };
+      if (progress.replaced) return finish({ success:false,compiled:false,code:'COMPILATION_REPLACED',error:'Pine compilation operation was replaced.' });
       if (progress.error) {
         await inspect(`(${pineCompilationStatus.toString()})(window, ${JSON.stringify(token)}, true)`);
-        await inspect(`(() => { ${STRATEGY_PAGE_CODE}; return failCompilation(window, ${JSON.stringify(token)}, ${JSON.stringify(progress.error)}, 'NATIVE_ACTION_REJECTED'); })()`);
-        return {success:false,compiled:false,error:progress.error,
-          ...(context.save_required && saveChanges ? {saved:false,code:'SAVE_NOT_CONFIRMED'} : {})};
+        return finish({success:false,compiled:false,error:progress.error,
+          code:progress.error_code||undefined,native_action_error:progress.error});
       }
       completed = progress.completed;
       if (completed && progress.validation?.code) {
         await inspect(`(${pineCompilationStatus.toString()})(window, ${JSON.stringify(token)}, true)`);
-        return {success:false,compiled:false,report_ready:false,...progress.validation};
+        return finish({success:false,compiled:false,report_ready:false,...progress.validation});
       }
       if (completed && progress.validation?.pending) continue;
       if (completed && progress.validation?.verified) await inspect(`(() => {
@@ -438,8 +495,8 @@ export async function smartCompile({ timeout = 30000, save: saveChanges = false,
       if (completed && context.save_required && saveChanges) {
         if (!progress.identity?.scriptIdPart || progress.modified !== false) {
           await inspect(`(${pineCompilationStatus.toString()})(window, ${JSON.stringify(token)}, true)`);
-          return {success:false,compiled:false,saved:false,code:'SAVE_NOT_CONFIRMED',
-            error:'Pine compilation finished without a confirmed saved identity and clean editor.'};
+          return finish({success:false,compiled:false,saved:false,code:'SAVE_NOT_CONFIRMED',
+            error:'Pine compilation finished without a confirmed saved identity and clean editor.'});
         }
         persistence = {saved:true,script_id:progress.identity.scriptIdPart};
       }
@@ -454,20 +511,21 @@ export async function smartCompile({ timeout = 30000, save: saveChanges = false,
     const diagnostics = splitMarkers(uniqueMarkers);
     if (diagnostics.errors.length) {
       if (!awaiting) await inspect(`(${pineCompilationStatus.toString()})(window, ${JSON.stringify(token)}, true)`);
-      return { success: false, compiled: false, has_errors: true, ...diagnostics, compilation_token: activeToken };
+      return finish({ success: false, compiled: false, has_errors: true, ...diagnostics, compilation_token: activeToken });
     }
     if (!completed) continue;
-    if (!strategyMode) return { success: true, compiled: true, has_errors: false, ...diagnostics, ...persistence, button_clicked: button || 'keyboard_shortcut', compilation_token: token };
+    if (!strategyMode) return finish({ success: true, compiled: true, has_errors: false, ...diagnostics, ...persistence, button_clicked: button || 'keyboard_shortcut', compilation_token: token });
     state = await inspect(`(() => { ${STRATEGY_PAGE_CODE}; return compilationState(window); })()`);
-    if (state.phase === 'failed') return { success: false, compiled: true, has_errors: false, ...diagnostics, runtime_error: state.error, error: state.error };
-    if (state.phase === 'ready') return { success: true, compiled: true, has_errors: false, ...diagnostics, ...persistence,
+    if (state.phase === 'failed') return finish({ success: false, compiled: true, has_errors: false, ...diagnostics, runtime_error: state.error, error: state.error });
+    if (state.phase === 'ready') return finish({ success: true, compiled: true, has_errors: false, ...diagnostics, ...persistence,
       button_clicked: awaiting ? null : button || 'keyboard_shortcut', ...(awaiting && { compile_performed: false }),
-      strategy_id: state.strategy_id, strategy_inputs: state.inputs, compilation_token: activeToken, report_ready: true };
+      strategy_id: state.strategy_id, strategy_inputs: state.inputs, compilation_token: activeToken, report_ready: true });
   } while (now() - start < timeout);
   if (!awaiting) await inspect(`(${pineCompilationStatus.toString()})(window, ${JSON.stringify(token)}, true)`);
-  return { success: false, compiled: false, has_errors: false, ...splitMarkers(markers || []),
+  return finish({ success: false, compiled: false, has_errors: false,code:'REPORT_TIMEOUT',calculation_pending:awaiting,...splitMarkers(markers || []),
     error: awaiting ? 'Strategy recalculation did not produce a verified report before timeout.' : 'Compilation did not produce a provably fresh report before timeout.',
-    compilation_token: activeToken, report_ready: false, ...(awaiting && { compile_performed: false }) };
+    compilation_token: activeToken, report_ready: false, ...(awaiting && { compile_performed: false }) });
+  }catch(error){return finish({success:false,compiled:false,code:error.code||'NATIVE_ACTION_REJECTED',error:error.message});}
 }
 
 export async function newScript({ type, _deps }) {

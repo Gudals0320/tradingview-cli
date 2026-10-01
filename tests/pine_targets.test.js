@@ -1,7 +1,7 @@
 import {it} from 'node:test';
 import assert from 'node:assert/strict';
 import {setImmediate} from 'node:timers';
-import {planPineCompilation,dispatchPineCompilation,verifyPineCompilation,pineCompileContext,refreshSavedPine} from '../src/core/pine-state.js';
+import {planPineCompilation,dispatchPineCompilation,verifyPineCompilation,pineCompileContext,refreshSavedPine,readPineOutcome} from '../src/core/pine-state.js';
 import {smartCompile} from '../src/core/pine.js';
 
 function fixture(items=[{id:'p',pine:'P',text:'old'}]) {
@@ -32,7 +32,7 @@ it('rejects duplicate targets before dispatch and before unchanged shortcuts',as
   assert.throws(()=>dispatchPineCompilation(f.window,f.controller,'token'),/AMBIGUOUS_TARGET/);
   f.controller.isModified=()=>false;
   const context=pineCompileContext(f.window,f.controller);assert.equal(context.code,'AMBIGUOUS_TARGET');
-  let inspections=0;const result=await smartCompile({_deps:{source:'strategy("Same title")',evaluate:()=>{inspections++;return context;}}});
+  let inspections=0;const result=await smartCompile({_deps:{source:'strategy("Same title")',readOutcome:async()=>readPineOutcome(f.window,f.controller,null,'token'),evaluate:expression=>{if(expression.includes('return failCompilation('))return true;inspections++;return context;}}});
   assert.equal(result.code,'AMBIGUOUS_TARGET');assert.equal(inspections,1);assert.deepEqual(f.counts(),{adds:0,updates:0});
 });
 it('rejects native duplicate addition instead of choosing a report',()=>{
@@ -70,9 +70,19 @@ it('clean saved refresh translates the saved version but targets the old applied
   f.sources[0].restart=()=>{restarted++;};
   f.controller.getSource=()=> 'indicator("P")\nplot(close)';
   f.controller._editorStore={getStore:()=>({getState:()=>({script:{scriptName:'P'}})}),
-    addPendingRequest:()=>{},removePendingRequest:()=>{},translateScript:async opts=>{translated=opts;return {success:true,metaInfo:{}};}};
+    addPendingRequest:()=>{},removePendingRequest:()=>{},pushScriptError:()=>{},translateScript:async opts=>{translated=opts;return {success:true,metaInfo:{}};}};
   f.controller._replaceStubByStudy=async (opts,stub,update,modified)=>{assert.equal(stub,null);assert.equal(update,true);assert.equal(modified,true);assert.equal(opts.oldPineVersion,'1.0');assert.equal(opts.pineVersion,'2.0');};
   const plan=planPineCompilation(f.window,f.controller);await refreshSavedPine(f.window,f.controller,plan);
   assert.deepEqual(translated,{scriptIdPart:'P',scriptVersion:'2.0'});assert.equal(restarted,1);
   assert.deepEqual(f.counts(),{adds:0,updates:0});
+});
+it('failed saved translation returns diagnostics without replacing or restarting any study',async()=>{
+  const f=fixture();let replaced=0,restarted=0,diagnostics=0;
+  f.sources[0].restart=()=>{restarted++;};
+  f.controller._editorStore={getStore:()=>({getState:()=>({script:{scriptName:'P'}})}),addPendingRequest:()=>{},removePendingRequest:()=>{},
+    pushScriptError:()=>{diagnostics++;},translateScript:async()=>({success:false,compileErrors:{errors:[{message:'syntax'}]}})};
+  f.controller._replaceStubByStudy=async()=>{replaced++;};
+  const plan=planPineCompilation(f.window,f.controller);
+  await assert.rejects(refreshSavedPine(f.window,f.controller,plan),/failed native compilation/);
+  assert.equal(replaced,0);assert.equal(restarted,0);assert.equal(diagnostics,1);assert.equal(f.sources[0].text,'old');
 });

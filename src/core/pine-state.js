@@ -32,7 +32,7 @@ export function pineCompilationStatus(window, token, finish = false) {
   if (operation?.token !== token) return { replaced: true, completed: false };
   if (finish) operation.dispose?.();
   operation.refresh?.();
-  return { started: operation.started, completed: operation.completed, error: operation.error,
+  return { started: operation.started, completed: operation.completed, error: operation.error,error_code:operation.error_code,
     diagnostics: operation.diagnostics, identity: operation.controller?.getScriptIdVersion?.(),
     modified: operation.controller?.isModified?.(),
     validation: operation.actionDone ? operation.check?.() : null };
@@ -58,7 +58,7 @@ export function planPineCompilation(window, controller) {
     return {code:'TARGETS_UNREADABLE',error:'Could not read Pine chart targets: ' + error.message};
   }
   const matches = identity?.scriptIdPart ? before.filter(item => item.pine_id === identity.scriptIdPart) : [];
-  if (matches.length > 1) return { error:'More than one chart study uses this Pine document.', code:'AMBIGUOUS_TARGET', target_count:matches.length };
+  if (matches.length > 1) return { error:'More than one chart study uses this Pine document.', code:'AMBIGUOUS_TARGET', target_count:matches.length,before };
   return { method:matches.length === 1 ? 'updateOnChart' : 'addToChart', before,
     script_id:identity?.scriptIdPart || null, target_id:matches[0]?.id || null,target_version:matches[0]?.version };
 }
@@ -71,14 +71,22 @@ export async function refreshSavedPine(window, controller, plan) {
     throw new Error('CLEAN_UPDATE_UNSUPPORTED: native saved-source refresh is unavailable.');
   }
   const store=controller._editorStore,request='tv-cli-refresh-'+Date.now();
+  for(const method of ['addPendingRequest','removePendingRequest','pushScriptError'])if(typeof store[method]!=='function')throw new Error('CLEAN_UPDATE_UNSUPPORTED: native '+method+' is unavailable.');
   store.addPendingRequest(request);
+  store.resetStatus?.();
   try {
     const translated=await store.translateScript({scriptIdPart:identity.scriptIdPart,scriptVersion:identity.version});
+    if(!translated.success){
+      const raw=translated.compileErrors,entries=Array.isArray(raw)?raw:raw?.errors||raw?.errors2||[];
+      for(const e of entries)window.__tvCliPineCompile?.diagnostics?.push({line:e.start?.line||e.line,column:e.start?.column||e.column,
+        message:String(e.message||e.error||'Saved-source compilation error').replace(/\{([^}]+)\}/g,(t,k)=>e.ctx?.[k]==null?t:String(e.ctx[k])),severity:8});
+      try{store.pushScriptError(raw,store.getStore().getState().script.scriptName);}catch{/* Normalized diagnostics remain available. */}
+      const error=new Error('Saved source failed native compilation.');error.code='PINE_COMPILE_ERROR';throw error;
+    }
     // The native updater requires its explicit update branch (no loading stub).
     // These arguments select that branch; they do not alter editor draft state.
     await controller._replaceStubByStudy({metaInfo:translated.metaInfo,compileErrors:translated.compileErrors,
       pineId:identity.scriptIdPart,pineVersion:identity.version,oldPineVersion:plan.target_version},null,true,true);
-    if(!translated.success){store.pushScriptError(translated.compileErrors,store.getStore().getState().script.scriptName);throw new Error('Saved source failed native compilation.');}
   } finally {store.removePendingRequest(request);}
   const chart=window.TradingViewApi?._activeChartWidgetWV?.value();
   let target;
@@ -105,6 +113,10 @@ export function verifyPineCompilation(window, operation) {
   if (matches.length > 1) return {code:'DUPLICATE_ADDED',target_count:matches.length,error:'Compilation created or retained multiple studies for this Pine document.'};
   if (matches.length === 0) return {pending:true};
   if(String(matches[0].version)!==String(controller.getScriptIdVersion()?.version))return {pending:true,reason:'APPLIED_VERSION_PENDING'};
+  const chart=window.TradingViewApi?._activeChartWidgetWV?.value();
+  const native=chart?._chartWidget.model().model().dataSources().find(s=>s.id()===matches[0].id);
+  let status=native?.status?.();if(status?.value)status=status.value();
+  if(status?.type===0||status?.type===1)return {pending:true,reason:'CALCULATION_PENDING'};
   if (plan.target_id && matches[0].id !== plan.target_id) return {code:'TARGET_MISMATCH',error:'Compilation replaced the target chart study.'};
   const oldOther = plan.before.filter(item => item.id !== plan.target_id);
   const newOther = after.filter(item => item.id !== matches[0].id);
@@ -129,14 +141,14 @@ export function dispatchPineCompilation(window, controller, token) {
   Promise.resolve().then(() => refresh?refreshSavedPine(window,controller,plan):controller[method]()).then(() => {
     operation.actionDone = true; operation.refresh();
   }, error => {
-    operation.error = error?.message || String(error); operation.actionDone = true; operation.refresh();
+    operation.error = error?.message || String(error);operation.error_code=error?.code||null; operation.actionDone = true; operation.refresh();
   });
   return method;
 }
 
 export function pineCompileContext(window, controller) {
   const plan = planPineCompilation(window, controller);
-  if (plan.error) return plan;
+  if (plan.error) return {...plan,identity:controller?.getScriptIdVersion?.(),draft:controller?.isDraft?.(),modified:controller?.isModified?.()};
   const identity = controller?.getScriptIdVersion?.();
   const modified = controller?.isModified?.();
   const saveRequired = Boolean(identity?.scriptIdPart && modified && !controller.isDraft?.());
@@ -158,8 +170,35 @@ export function pineCompileContext(window, controller) {
     }
   }
   return { save_required: saveRequired, unchanged, pending:pending && !unchanged, runtime_error:runtimeError, identity,
+    draft:controller?.isDraft?.(),before:plan.before,
     target_id:plan.target_id,target_version:plan.target_version,
     same_version_refresh:Boolean(plan.target_id && modified===false && String(plan.target_version)===String(identity?.version)) };
 }
 
-export const PINE_TARGET_PAGE_CODE = [pineStudySnapshot,planPineCompilation,verifyPineCompilation,refreshSavedPine].map(fn => fn.toString()).join('\n');
+/** Current diagnostics and target state, independent of native Promise rejection. */
+export function readPineOutcome(window, controller, monaco, token) {
+  const identity=controller?.getScriptIdVersion?.();
+  const model=monaco?.editor.getModel();
+  const markers=model?monaco.env.editor.getModelMarkers({resource:model.uri}).map(m=>({
+    line:m.startLineNumber,column:m.startColumn,message:m.message,severity:m.severity})):[];
+  const all=pineStudySnapshot(window);
+  const targets=all.filter(s=>s.pine_id===identity?.scriptIdPart);
+  const chart=window.TradingViewApi?._activeChartWidgetWV?.value();
+  const runtime=[];
+  for(const target of targets){
+    const source=chart._chartWidget.model().model().dataSources().find(s=>s.id()===target.id);
+    let status=source?.status?.();if(status?.value)status=status.value();
+    target.status_type=status?.type;
+    if(status?.type===3){
+      const detail=status.errorDescription||{};
+      const message=String(detail.error||status.errorMessage||status.error||'Pine study execution failed.')
+        .replace(/\{([^}]+)\}/g,(t,k)=>detail.ctx?.[k]==null?t:String(detail.ctx[k]));
+      runtime.push({message,context:detail.ctx||{},native_description:detail,native_code:detail.code||detail.ctx?.code||status.errorCode||null,
+        version:target.version});
+    }
+  }
+  return {identity,modified:controller?.isModified?.(),draft:controller?.isDraft?.(),markers,targets,runtime_diagnostics:runtime,
+    native_diagnostics:window.__tvCliPineCompile?.token===token?window.__tvCliPineCompile.diagnostics:[]};
+}
+
+export const PINE_TARGET_PAGE_CODE = [pineStudySnapshot,planPineCompilation,verifyPineCompilation,refreshSavedPine,readPineOutcome].map(fn => fn.toString()).join('\n');

@@ -39,6 +39,19 @@ function fixture() {
 }
 
 describe('Strategy report identity and metadata', () => {
+  it('confirmed save awaits only its exact target/version and never adopts a pre-save report', () => {
+    for(const matches of [true,false]){
+      const f=fixture(),chart=f.window.TradingViewApi._activeChartWidgetWV.value(),inputs=chart.getStudyById;let version='1.0';
+      chart.getStudyById=id=>({getInputValues:()=>[...inputs(id).getInputValues(),{id:'pineId',value:'P'},{id:'pineVersion',value:version}]});
+      beginCompilation(f.window,'save','newhash',true,null,'P','strategy');
+      Object.assign(f.window.__tvCliCompilation,{persistence_confirmed:true,saved_version:'2.0'});
+      if(matches)version='2.0';
+      const begun=beginCompilation(f.window,'compile','newhash',true,null,'P','strategy');
+      assert.equal(begun.phase,matches?'awaiting':'pending');
+      assert.equal(compilationState(f.window).phase,'pending');
+      if(matches){f.compile();f.status(1);f.status(2);f.update();assert.equal(compilationState(f.window).phase,'ready');}
+    }
+  });
   it('restores canonical verified identity through beginCompilation itself', () => {
     const f=fixture(),chart=f.window.TradingViewApi._activeChartWidgetWV.value();const inputs=chart.getStudyById;
     chart.getStudyById=id=>({getInputValues:()=>[...inputs(id).getInputValues(),{id:'pineId',value:'P'}]});
