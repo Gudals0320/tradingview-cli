@@ -136,3 +136,8 @@ it('compile --save requires saved identity and a clean editor after native compl
   assert.equal(dirty.success, false); assert.equal(dirty.saved, false);
   assert.equal(dirty.code, 'SAVE_NOT_CONFIRMED');
 });
+it('dispatch exceptions retain target protection codes instead of becoming native refusal',async()=>{
+  let dispatches=0;const deps=dependencies();const evaluate=deps.evaluate;
+  deps.evaluate=expression=>{if(expression.includes('return (function dispatchPineCompilation')){dispatches++;throw new Error('AMBIGUOUS_TARGET: changed before dispatch');}return evaluate(expression);};
+  const r=await smartCompile({_deps:deps});assert.equal(r.code,'AMBIGUOUS_TARGET');assert.equal(dispatches,1);assert.equal(r.success,false);
+});

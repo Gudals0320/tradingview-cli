@@ -7,7 +7,7 @@ import { evaluate, evaluateAsync } from '../connection.js';
 import { findPineEditor, findPineController, readPineConsole, confirmPineSaveDialog, confirmPineCompileSaveDialog, requestPineEditor } from './desktop-dom.js';
 import { STRATEGY_PAGE_CODE, splitMarkers, formatDiagnostic } from '../strategy-state.js';
 import { sourceHash } from '../session.js';
-import { canonicalPineSource } from '../pine-source.js';
+import { canonicalPineSource,pineDeclaration,libraryTitleDiagnostic } from '../pine-source.js';
 import { randomUUID } from 'node:crypto';
 import { observePineCompilation, pineCompilationStatus, dispatchPineCompilation, pineCompileContext, PINE_TARGET_PAGE_CODE } from './pine-state.js';
 
@@ -142,11 +142,14 @@ export function analyze({ source }) {
   };
 }
 
-export async function check({ source }) {
+export async function check({ source,_deps }) {
+  const titleError=libraryTitleDiagnostic(source);
+  if(titleError)return {success:true,compiled:false,code:'INVALID_LIBRARY_TITLE',error_count:1,warning_count:0,errors:[titleError],
+    validation_scope:'local_library_title',desktop_validated:false};
   const formData = new URLSearchParams();
   formData.append('source', source);
 
-  const response = await fetch(
+  const response = await (_deps?.fetch||fetch)(
     'https://pine-facade.tradingview.com/pine-facade/translate_light?user_name=Guest&pine_id=00000000-0000-0000-0000-000000000000',
     {
       method: 'POST',
@@ -193,11 +196,13 @@ export async function check({ source }) {
   return {
     success: true,
     compiled,
+    validation_scope:'light_server_translation',desktop_validated:false,
+    source_type:pineDeclaration(source).kind,
     error_count: errors.length,
     warning_count: warnings.length,
     errors: errors.length > 0 ? errors : undefined,
     warnings: warnings.length > 0 ? warnings : undefined,
-    note: compiled ? 'Pine Script compiled successfully.' : undefined,
+    note: compiled ? 'Light server translation succeeded. Desktop execution, chart application, library publication and imports are not verified.' : undefined,
   };
 }
 
@@ -390,7 +395,7 @@ export async function finalizePineCompile(result, {source,token,context={},saveC
     outcome.warnings=unique([...(result.warnings||[]),...diagnostics.warnings]);
     const currentRuntime=(observed?.runtime_diagnostics||[]).filter(d=>String(d.version)===String(observed.identity?.version));
     if(currentRuntime.length)outcome.runtime_diagnostics=currentRuntime;
-    const protectedCode=/TARGET|DUPLICATE|SAVE_|AMBIGUOUS/.test(result.code||'');
+    const protectedCode=/TARGET|DUPLICATE|SAVE_|AMBIGUOUS|LIBRARY|REPLACED/.test(result.code||'');
     if(outcome.errors.length){outcome.success=false;outcome.compiled=false;outcome.has_errors=true;
       if(!protectedCode){outcome.code='PINE_COMPILE_ERROR';outcome.error=outcome.errors[0].message;}}
     else if(currentRuntime.length&&!protectedCode){outcome.success=false;outcome.compiled=true;outcome.has_errors=false;
@@ -401,7 +406,7 @@ export async function finalizePineCompile(result, {source,token,context={},saveC
     const after=observed?.targets||[];
     outcome.applied=after.length===1&&String(after[0].version)===String(observed.identity?.version);
     outcome.calculation_ready=outcome.applied&&after[0].status_type===2;
-    outcome.chart_changed=context.before?JSON.stringify(before.map(s=>[s.id,s.compiled_identity]))!==JSON.stringify(after.map(s=>[s.id,s.compiled_identity])):null;
+    outcome.chart_changed=result.compile_performed===false?false:context.before?JSON.stringify(before.map(s=>[s.id,s.compiled_identity]))!==JSON.stringify(after.map(s=>[s.id,s.compiled_identity])):null;
     outcome.chart={target_count:after.length,studies:after.map(s=>({id:s.id,version:s.version,status_type:s.status_type}))};
     outcome.editor_modified=observed?.modified;
     if(observed?.runtime_diagnostics?.length&&!currentRuntime.length)outcome.previous_target_diagnostics=observed.runtime_diagnostics;
@@ -433,6 +438,10 @@ export async function smartCompile({ timeout = 30000, save: saveChanges = false,
   const token=randomUUID();let activeToken=token,context;
   const finish=result=>finalizePineCompile(result,{source,token:activeToken,context,saveChanges,inspect,inspectAsync:_deps?.evaluateAsync||evaluateAsync,_deps});
   try {
+  const declaration=pineDeclaration(source),titleError=libraryTitleDiagnostic(source);
+  if(declaration.kind==='library')return finish({success:false,compiled:false,compile_performed:false,source_type:'library',
+    code:titleError?'INVALID_LIBRARY_TITLE':'LIBRARY_NOT_APPLICABLE',has_errors:Boolean(titleError),errors:titleError?[titleError]:[],
+    error:titleError?.message||'Library chart application is not supported by this CLI. Use pine check for scoped light-server validation.'});
   const contextExpression = `(() => { ${PINE_TARGET_PAGE_CODE}; const controller = ${FIND_CONTROLLER};
     return (${pineCompileContext.toString()})(window, controller); })()`;
   context = await inspect(contextExpression);
@@ -525,7 +534,7 @@ export async function smartCompile({ timeout = 30000, save: saveChanges = false,
   return finish({ success: false, compiled: false, has_errors: false,code:'REPORT_TIMEOUT',calculation_pending:awaiting,...splitMarkers(markers || []),
     error: awaiting ? 'Strategy recalculation did not produce a verified report before timeout.' : 'Compilation did not produce a provably fresh report before timeout.',
     compilation_token: activeToken, report_ready: false, ...(awaiting && { compile_performed: false }) });
-  }catch(error){return finish({success:false,compiled:false,code:error.code||'NATIVE_ACTION_REJECTED',error:error.message});}
+  }catch(error){const code=error.code||String(error.message||'').match(/\b([A-Z][A-Z_]+):/)?.[1]||'COMPILE_EXCEPTION';return finish({success:false,compiled:false,code,error:error.message});}
 }
 
 export async function newScript({ type, _deps }) {
