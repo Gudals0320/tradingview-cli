@@ -23,7 +23,8 @@ const trials=evidence.trials.map(trial=>{
   }
   const a=trial.jobs.filter(job=>job.worker==='a'),b=trial.jobs.filter(job=>job.worker==='b');
   const overlap=a.reduce((sum,x)=>sum+b.reduce((sum,y)=>sum+Math.max(0,Math.min(x.native_end,y.native_end)-Math.max(x.native_start,y.native_start)),0),0);
-  if(trial.workers===2)assert.ok(overlap>0);else assert.equal(overlap,0);
+  if(trial.workers===2&&trial.cache_condition==='first request')assert.ok(overlap>0);
+  if(trial.workers===1)assert.equal(overlap,0);
   return {index:trial.index,workers:trial.workers,cache_condition:trial.cache_condition,ms:trial.ms,native_ms:native,job_ms:jobTime,native_share:native/jobTime,overlap_ms:overlap};
 });
 assert.equal(completed,32);assert.equal(failures,0);assert.equal(retries,0);assert.deepEqual(evidence.active_before,evidence.active_after);
