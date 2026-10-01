@@ -1,0 +1,1089 @@
+{
+  "scenario": "S02 — UTC session volume/range/bar-count dashboard",
+  "slug": "s02-session-dashboard",
+  "cwd": "C:\\Codex\\.worktrees\\tradingview-cli-pinescript-qa",
+  "branch": "codex/pine-qa",
+  "product_baseline": "57ee8e7",
+  "recorded_at": "2026-10-01T03:30:08.516Z",
+  "environment": {
+    "cli": "node src/cli/index.js",
+    "target": "7980FA5955C48DD48FF5EDBF9615BD45",
+    "layout": "CLI-QA-S02-20261001",
+    "chart_id": "nipHauoX",
+    "final_symbol": "BINANCE:ETHUSDT",
+    "final_timeframe": "15",
+    "final_studies": [
+      "rLenrk:Volume",
+      "XvcQgK:CLI-QA-S02 Session Dashboard 20261001"
+    ],
+    "saved_document": {
+      "name": "CLI-QA-S02 Session Dashboard 20261001",
+      "script_id": "USER;6b325663a8a24b548558d60895ec3bc8",
+      "final_version": "5.0"
+    }
+  },
+  "commands": {
+    "total_recorded": 109,
+    "with_nonzero_exit": [
+      {
+        "label": "10-check-v1-baseline",
+        "exit_code": 1,
+        "args": "pine check --file qa/pine/scenarios/s02-session-dashboard/v1-baseline.pine"
+      },
+      {
+        "label": "32-indicator-set-keep5",
+        "exit_code": 1,
+        "args": "--target 7980FA5955C48DD48FF5EDBF9615BD45 indicator set XvcQgK --inputs {\\ in_4\\:5}"
+      },
+      {
+        "label": "44-compile-v2-save",
+        "exit_code": 1,
+        "args": "--target 7980FA5955C48DD48FF5EDBF9615BD45 pine compile --save"
+      },
+      {
+        "label": "48-compile-v2-retry",
+        "exit_code": 1,
+        "args": "--target 7980FA5955C48DD48FF5EDBF9615BD45 pine compile"
+      },
+      {
+        "label": "80-clear-console",
+        "exit_code": 1,
+        "args": "--target 7980FA5955C48DD48FF5EDBF9615BD45 ui click --text 콘솔 지우기"
+      },
+      {
+        "label": "91-repro-compile-v2",
+        "exit_code": 1,
+        "args": "--target 7980FA5955C48DD48FF5EDBF9615BD45 pine compile --save"
+      },
+      {
+        "label": "97-status-after-recovery",
+        "exit_code": 1,
+        "args": "--target 7980FA5955C48DD48FF5EDBF9615BD45 ui eval (function(){var c=window.TradingViewApi._activeChartWidgetWV.value();var st=c.getStudyById('XvcQgK');var m=c._chartWidget.model().model();var s=null;m.dataSources().forEach(function(x){try{if(x.id()==='XvcQgK')s=x}catch(e){}});var out={inputPineVersion:null,status:null};var iv=st.getInputValues();for(var i of iv){if(i.id()==='pineVersion')out.inputPineVersion=i.value}if(s){var stt=s.status();out.status={type:stt&&stt.type,error:stt&&stt.errorDescription&&stt.errorDescription.error}}return JSON.stringify(out)})()"
+      }
+    ],
+    "key": [
+      {
+        "step": "tab new (dedicated layout)",
+        "label": "01-tab-new",
+        "exit_code": 0,
+        "elapsed_ms": 4883,
+        "args": "new --layout new --name CLI-QA-S02-20261001"
+      },
+      {
+        "step": "timeframe 15",
+        "label": "07-timeframe-15",
+        "exit_code": 0,
+        "elapsed_ms": 802,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 timeframe 15"
+      },
+      {
+        "step": "ohlcv 500 bars",
+        "label": "08-ohlcv-15m-500",
+        "exit_code": 0,
+        "elapsed_ms": 149,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 ohlcv --count 500"
+      },
+      {
+        "step": "pine new indicator",
+        "label": "21-pine-new-indicator",
+        "exit_code": 0,
+        "elapsed_ms": 226,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine new indicator"
+      },
+      {
+        "step": "pine set v1 baseline",
+        "label": "22-set-v1",
+        "exit_code": 0,
+        "elapsed_ms": 139,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine set --file qa/pine/scenarios/s02-session-dashboard/v1-baseline.pine"
+      },
+      {
+        "step": "pine save v1",
+        "label": "23-save-v1",
+        "exit_code": 0,
+        "elapsed_ms": 2187,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine save"
+      },
+      {
+        "step": "pine compile v1",
+        "label": "24-compile-v1",
+        "exit_code": 0,
+        "elapsed_ms": 446,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine compile"
+      },
+      {
+        "step": "data tables v1",
+        "label": "26-tables-v1",
+        "exit_code": 0,
+        "elapsed_ms": 143,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 data tables --filter CLI-QA-S02"
+      },
+      {
+        "step": "pine console v1",
+        "label": "27-console-v1",
+        "exit_code": 0,
+        "elapsed_ms": 149,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine console"
+      },
+      {
+        "step": "indicator set keep=5",
+        "label": "32-indicator-set-keep5",
+        "exit_code": 0,
+        "elapsed_ms": 141,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 indicator set XvcQgK --inputs {\"in_4\":5}"
+      },
+      {
+        "step": "data tables keep=5",
+        "label": "35-tables-keep5",
+        "exit_code": 0,
+        "elapsed_ms": 136,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 data tables --filter CLI-QA-S02"
+      },
+      {
+        "step": "range back to 2026-09-25",
+        "label": "36-range-back",
+        "exit_code": 0,
+        "elapsed_ms": 4264,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 range --from 1789166400 --to 1789195200"
+      },
+      {
+        "step": "ohlcv after range",
+        "label": "37-ohlcv-after-range",
+        "exit_code": 0,
+        "elapsed_ms": 141,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 ohlcv --count 500"
+      },
+      {
+        "step": "data tables keep=5 (500 bar window)",
+        "label": "39-tables-keep5-500",
+        "exit_code": 0,
+        "elapsed_ms": 134,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 data tables --filter CLI-QA-S02"
+      },
+      {
+        "step": "pine set v2 (injected)",
+        "label": "42-set-v2-injected",
+        "exit_code": 0,
+        "elapsed_ms": 157,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine set --file qa/pine/scenarios/s02-session-dashboard/v2-array-error.pine"
+      },
+      {
+        "step": "pine save v2",
+        "label": "43-save-v2",
+        "exit_code": 0,
+        "elapsed_ms": 1478,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine save"
+      },
+      {
+        "step": "pine compile --save v2 (rejected)",
+        "label": "44-compile-v2-save",
+        "exit_code": 1,
+        "elapsed_ms": 365,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine compile --save"
+      },
+      {
+        "step": "pine compile v2 retry (rejected)",
+        "label": "48-compile-v2-retry",
+        "exit_code": 1,
+        "elapsed_ms": 396,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine compile"
+      },
+      {
+        "step": "pine set v3 (fixed)",
+        "label": "53-set-v3-fixed",
+        "exit_code": 0,
+        "elapsed_ms": 147,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine set --file qa/pine/scenarios/s02-session-dashboard/v3-array-fixed.pine"
+      },
+      {
+        "step": "pine save v3",
+        "label": "54-save-v3",
+        "exit_code": 0,
+        "elapsed_ms": 2149,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine save"
+      },
+      {
+        "step": "pine compile v3",
+        "label": "55-compile-v3",
+        "exit_code": 0,
+        "elapsed_ms": 139,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine compile"
+      },
+      {
+        "step": "data tables after v3",
+        "label": "57-tables-after-v3",
+        "exit_code": 0,
+        "elapsed_ms": 148,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 data tables --filter CLI-QA-S02"
+      },
+      {
+        "step": "replay start 2026-09-30",
+        "label": "67-replay-start",
+        "exit_code": 0,
+        "elapsed_ms": 536,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 replay start --date 2026-09-30"
+      },
+      {
+        "step": "replay stop",
+        "label": "74-replay-stop",
+        "exit_code": 0,
+        "elapsed_ms": 410,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 replay stop"
+      },
+      {
+        "step": "indicator set keep=20",
+        "label": "78-input-keep20",
+        "exit_code": 0,
+        "elapsed_ms": 163,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 indicator set XvcQgK --inputs {\"in_4\":20}"
+      },
+      {
+        "step": "pine set v2 (repro 2)",
+        "label": "89-repro-set-v2",
+        "exit_code": 0,
+        "elapsed_ms": 156,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine set --file qa/pine/scenarios/s02-session-dashboard/v2-array-error.pine"
+      },
+      {
+        "step": "pine save v2 (repro 2)",
+        "label": "90-repro-save-v2",
+        "exit_code": 0,
+        "elapsed_ms": 1075,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine save"
+      },
+      {
+        "step": "pine compile --save v2 (repro 2 rejected)",
+        "label": "91-repro-compile-v2",
+        "exit_code": 1,
+        "elapsed_ms": 368,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine compile --save"
+      },
+      {
+        "step": "study status probe (runtime error)",
+        "label": "92-probe-study-status",
+        "exit_code": 0,
+        "elapsed_ms": 134,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 ui eval (function(){var c=window.TradingViewApi._activeChartWidgetWV.value();var st=c.getStudyById('XvcQgK');var m=window.TradingViewApi._activeChartWidgetWV.value()._chartWidget.model().model();var s=null;m.dataSources().forEach(function(x){try{if(x.id()==='XvcQgK')s=x}catch(e){}});var out={inputPineVersion:null,status:null};try{var iv=st.getInputValues();for(var i of iv){if(i.id==='pineVersion')out.inputPineVersion=i.value;}}catch(e){out.ivErr=String(e)}if(s){try{var stt=s.status();out.status={type:stt&&stt.type,error:stt&&stt.errorDescription&&stt.errorDescription.error,desc:stt&&stt.errorDescription};}catch(e){out.statusErr=String(e)}}return JSON.stringify(out)})()"
+      },
+      {
+        "step": "pine set v3 (recovery)",
+        "label": "94-restore-set-v3",
+        "exit_code": 0,
+        "elapsed_ms": 159,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine set --file qa/pine/scenarios/s02-session-dashboard/v3-array-fixed.pine"
+      },
+      {
+        "step": "pine save v3 (recovery)",
+        "label": "95-restore-save-v3",
+        "exit_code": 0,
+        "elapsed_ms": 1175,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine save"
+      },
+      {
+        "step": "pine compile --save v3 (recovery)",
+        "label": "96-restore-compile-v3",
+        "exit_code": 0,
+        "elapsed_ms": 136,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine compile --save"
+      },
+      {
+        "step": "study status probe (recovered)",
+        "label": "101-probe-study-status",
+        "exit_code": 0,
+        "elapsed_ms": 142,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 ui eval (function(){var out={};var c=window.TradingViewApi._activeChartWidgetWV.value();var m=c._chartWidget.model().model();var s=null;m.dataSources().forEach(function(x){try{if(x.id()==='XvcQgK')s=x}catch(e){}});try{var iv=c.getStudyById('XvcQgK').getInputValues();out.pineId=null;out.pineVersion=null;out.keep=null;iv.forEach(function(x){if(x.id==='pineId')out.pineId=x.value;if(x.id==='pineVersion')out.pineVersion=x.value;if(x.id==='in_4')out.keep=x.value})}catch(e){out.ivErr=String(e)}try{var stt=s&&s.status();out.statusType=stt&&stt.type;out.statusError=stt&&stt.errorDescription&&stt.errorDescription.error||null}catch(e){out.statusErr=String(e)}var studies=c.getAllStudies().map(function(x){return x.id+':'+(x.name||x.title)});out.studies=studies;return JSON.stringify(out)})()"
+      },
+      {
+        "step": "data tables final",
+        "label": "100-tables-final",
+        "exit_code": 0,
+        "elapsed_ms": 153,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 data tables --filter CLI-QA-S02"
+      },
+      {
+        "step": "pine open saved name",
+        "label": "104-open-saved",
+        "exit_code": 0,
+        "elapsed_ms": 431,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine open CLI-QA-S02 Session Dashboard 20261001"
+      },
+      {
+        "step": "pine get after reopen",
+        "label": "105-get-reopened",
+        "exit_code": 0,
+        "elapsed_ms": 150,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine get"
+      },
+      {
+        "step": "pine save final",
+        "label": "103-save-final",
+        "exit_code": 0,
+        "elapsed_ms": 405,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine save"
+      },
+      {
+        "step": "pine errors final",
+        "label": "113-final-errors",
+        "exit_code": 0,
+        "elapsed_ms": 138,
+        "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine errors"
+      }
+    ]
+  },
+  "pine_commands_attempted": [
+    {
+      "label": "10-check-v1-baseline",
+      "args": "pine check --file qa/pine/scenarios/s02-session-dashboard/v1-baseline.pine",
+      "exit_code": 1
+    },
+    {
+      "label": "11-analyze-v1-baseline",
+      "args": "pine analyze --file qa/pine/scenarios/s02-session-dashboard/v1-baseline.pine",
+      "exit_code": 0
+    },
+    {
+      "label": "20-pine-get-current",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine get",
+      "exit_code": 0
+    },
+    {
+      "label": "21-pine-new-indicator",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine new indicator",
+      "exit_code": 0
+    },
+    {
+      "label": "22-set-v1",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine set --file qa/pine/scenarios/s02-session-dashboard/v1-baseline.pine",
+      "exit_code": 0
+    },
+    {
+      "label": "23-save-v1",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine save",
+      "exit_code": 0
+    },
+    {
+      "label": "24-compile-v1",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine compile",
+      "exit_code": 0
+    },
+    {
+      "label": "27-console-v1",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine console",
+      "exit_code": 0
+    },
+    {
+      "label": "28-errors-v1",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine errors",
+      "exit_code": 0
+    },
+    {
+      "label": "29-list-v1",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine list",
+      "exit_code": 0
+    },
+    {
+      "label": "34-console-keep5",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine console",
+      "exit_code": 0
+    },
+    {
+      "label": "38-console-keep5-500",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine console",
+      "exit_code": 0
+    },
+    {
+      "label": "40-analyze-v2-v3",
+      "args": "pine analyze --file qa/pine/scenarios/s02-session-dashboard/v3-array-fixed.pine",
+      "exit_code": 0
+    },
+    {
+      "label": "41-analyze-v2-injected",
+      "args": "pine analyze --file qa/pine/scenarios/s02-session-dashboard/v2-array-error.pine",
+      "exit_code": 0
+    },
+    {
+      "label": "42-set-v2-injected",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine set --file qa/pine/scenarios/s02-session-dashboard/v2-array-error.pine",
+      "exit_code": 0
+    },
+    {
+      "label": "43-save-v2",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine save",
+      "exit_code": 0
+    },
+    {
+      "label": "44-compile-v2-save",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine compile --save",
+      "exit_code": 1
+    },
+    {
+      "label": "46-errors-v2",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine errors",
+      "exit_code": 0
+    },
+    {
+      "label": "47-console-v2",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine console",
+      "exit_code": 0
+    },
+    {
+      "label": "48-compile-v2-retry",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine compile",
+      "exit_code": 1
+    },
+    {
+      "label": "49-console-v2-retry",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine console",
+      "exit_code": 0
+    },
+    {
+      "label": "53-set-v3-fixed",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine set --file qa/pine/scenarios/s02-session-dashboard/v3-array-fixed.pine",
+      "exit_code": 0
+    },
+    {
+      "label": "54-save-v3",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine save",
+      "exit_code": 0
+    },
+    {
+      "label": "55-compile-v3",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine compile",
+      "exit_code": 0
+    },
+    {
+      "label": "58-console-v3",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine console",
+      "exit_code": 0
+    },
+    {
+      "label": "62-console-btc-fresh",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine console",
+      "exit_code": 0
+    },
+    {
+      "label": "64-console-1m",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine console",
+      "exit_code": 0
+    },
+    {
+      "label": "70-console-replay",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine console",
+      "exit_code": 0
+    },
+    {
+      "label": "89-repro-set-v2",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine set --file qa/pine/scenarios/s02-session-dashboard/v2-array-error.pine",
+      "exit_code": 0
+    },
+    {
+      "label": "90-repro-save-v2",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine save",
+      "exit_code": 0
+    },
+    {
+      "label": "91-repro-compile-v2",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine compile --save",
+      "exit_code": 1
+    },
+    {
+      "label": "93-console-repro",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine console",
+      "exit_code": 0
+    },
+    {
+      "label": "94-restore-set-v3",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine set --file qa/pine/scenarios/s02-session-dashboard/v3-array-fixed.pine",
+      "exit_code": 0
+    },
+    {
+      "label": "95-restore-save-v3",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine save",
+      "exit_code": 0
+    },
+    {
+      "label": "96-restore-compile-v3",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine compile --save",
+      "exit_code": 0
+    },
+    {
+      "label": "102-get-editor-source",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine get",
+      "exit_code": 0
+    },
+    {
+      "label": "103-save-final",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine save",
+      "exit_code": 0
+    },
+    {
+      "label": "104-open-saved",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine open CLI-QA-S02 Session Dashboard 20261001",
+      "exit_code": 0
+    },
+    {
+      "label": "105-get-reopened",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine get",
+      "exit_code": 0
+    },
+    {
+      "label": "106-list-final",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine list",
+      "exit_code": 0
+    },
+    {
+      "label": "113-final-errors",
+      "args": "7980FA5955C48DD48FF5EDBF9615BD45 pine errors",
+      "exit_code": 0
+    }
+  ],
+  "static_analysis": {
+    "pine analyze v1": {
+      "success": true,
+      "issue_count": 0,
+      "diagnostics": [],
+      "note": "No static analysis issues found. Use `tv pine compile` against the open editor or `tv pine check` for a server-side compilation check."
+    },
+    "pine analyze v3": {
+      "success": true,
+      "issue_count": 0,
+      "diagnostics": [],
+      "note": "No static analysis issues found. Use `tv pine compile` against the open editor or `tv pine check` for a server-side compilation check."
+    },
+    "pine analyze v2 (injected, not detected)": {
+      "success": true,
+      "issue_count": 0,
+      "diagnostics": [],
+      "note": "No static analysis issues found. Use `tv pine compile` against the open editor or `tv pine check` for a server-side compilation check."
+    },
+    "server_check_v1": {
+      "label": "10-check-v1-baseline (escalated)"
+    },
+    "server_check_v1_result": {
+      "compiled": true,
+      "error_count": 0,
+      "warning_count": 0
+    },
+    "server_check_v2_result": {
+      "compiled": true,
+      "error_count": 0,
+      "warning_count": 0,
+      "note": "server accepts the injected source; the failure is a runtime array error"
+    }
+  },
+  "acceptance": {
+    "C1_no_error_before_first_completion": "PASS (bounded: no error entries and no runtime error state in any captured log; the very first computation window is outside the captured snapshots)",
+    "C2_exactly_one_record_per_session": "PASS",
+    "C3_new_session_reset": "PASS",
+    "C4_limit_5_keeps_newest_5_table_array_consistent": "PASS",
+    "C5_two_completed_sessions_vs_independent_ohlcv": "PASS (5 of 5 table rows exact; 15m: BTCUSDT 9 sessions / ETHUSDT 24 sessions on the study series)",
+    "C6_console_real_log_rows_only": "PASS (bounded)",
+    "C7_array_error_observed_then_fixed": "PASS",
+    "C8_save_reopen_preserves_source": "PASS",
+    "C9_fresh_empty_archive_start_observed_live": "NOT TESTED (initial computation window not observable in the available 500-bar extraction window / 40-line console buffer; whether the live study began with an empty archive is not claimed)",
+    "C10_live_session_rollover": "NOT TESTED"
+  },
+  "independent_verification": {
+    "evidence_selection": "Only table-vs-OHLCV and the study-series checks are used as pass evidence. console_vs_table and ohlcv_recomputation.console_vs_ohlcv disagree for two explained reasons and are kept as raw material only: (1) different snapshots/kept windows — the table snapshot spans 2026-09-12..2026-10-01 while the console snapshot spans 2026-09-21..2026-09-29, so sessions missing from the console are capture-time differences; (2) the console completion log prints volume with 4 decimals, giving ±0.0001..0.0004 deltas versus the exact value (e.g. printed 4418.377 vs exact 4418.3769).",
+    "console_vs_table": {
+      "entry_count": 40,
+      "started": 9,
+      "completed": 9,
+      "removed": 8,
+      "checks": {
+        "exactly_one_start_per_session": true,
+        "duplicate_starts": [],
+        "duplicate_completes": [],
+        "completed_without_start": [],
+        "exactly_one_completion_per_session": true,
+        "all_started_sessions_completed": true,
+        "first_session_prior_completed_zero": false,
+        "removed_sessions_were_completed": false,
+        "removal_only_after_limit": true,
+        "errors_before_first_completion": [],
+        "sessions_with_unexpected_bar_count": [],
+        "sessions_monotonic": true,
+        "range_equals_high_minus_low": true,
+        "error_entries": []
+      },
+      "table_check": {
+        "stored": 20,
+        "limit": 20,
+        "removedTotal": 195,
+        "avgVol": 9671.008,
+        "tableRowCount": 20,
+        "mismatches": [
+          {
+            "i": 0,
+            "field": "session",
+            "table": "2026-09-12 00:00",
+            "console": "2026-09-21 00:00"
+          },
+          {
+            "i": 0,
+            "field": "vol",
+            "table": 6819.4654,
+            "console": 54303.54
+          },
+          {
+            "i": 0,
+            "field": "high",
+            "table": 2517.74,
+            "console": 2707.7
+          },
+          {
+            "i": 0,
+            "field": "low",
+            "table": 2510.76,
+            "console": 2643.99
+          },
+          {
+            "i": 1,
+            "field": "session",
+            "table": "2026-09-13 00:00",
+            "console": "2026-09-22 00:00"
+          },
+          {
+            "i": 1,
+            "field": "vol",
+            "table": 1882.2226,
+            "console": 13713.73
+          },
+          {
+            "i": 1,
+            "field": "high",
+            "table": 2527.24,
+            "console": 2777.55
+          },
+          {
+            "i": 1,
+            "field": "low",
+            "table": 2523.35,
+            "console": 2752.96
+          },
+          {
+            "i": 2,
+            "field": "session",
+            "table": "2026-09-14 00:00",
+            "console": "2026-09-23 00:00"
+          },
+          {
+            "i": 2,
+            "field": "vol",
+            "table": 11797.132,
+            "console": 8193.786
+          },
+          {
+            "i": 2,
+            "field": "high",
+            "table": 2491.63,
+            "console": 2766.99
+          },
+          {
+            "i": 2,
+            "field": "low",
+            "table": 2464.71,
+            "console": 2749
+          },
+          {
+            "i": 3,
+            "field": "session",
+            "table": "2026-09-15 00:00",
+            "console": "2026-09-24 00:00"
+          },
+          {
+            "i": 3,
+            "field": "vol",
+            "table": 11955.0141,
+            "console": 4216.515
+          },
+          {
+            "i": 3,
+            "field": "high",
+            "table": 2517.46,
+            "console": 2692.74
+          },
+          {
+            "i": 3,
+            "field": "low",
+            "table": 2506.8,
+            "console": 2679.11
+          },
+          {
+            "i": 4,
+            "field": "session",
+            "table": "2026-09-16 00:00",
+            "console": "2026-09-25 00:00"
+          },
+          {
+            "i": 4,
+            "field": "vol",
+            "table": 5792.053,
+            "console": 5029.104
+          },
+          {
+            "i": 4,
+            "field": "high",
+            "table": 2406,
+            "console": 2697.78
+          },
+          {
+            "i": 4,
+            "field": "low",
+            "table": 2397.44,
+            "console": 2688.05
+          },
+          {
+            "i": 5,
+            "field": "session",
+            "table": "2026-09-17 00:00",
+            "console": "2026-09-26 00:00"
+          },
+          {
+            "i": 5,
+            "field": "vol",
+            "table": 7956.4253,
+            "console": 4418.377
+          },
+          {
+            "i": 5,
+            "field": "high",
+            "table": 2427.85,
+            "console": 2694.6
+          },
+          {
+            "i": 5,
+            "field": "low",
+            "table": 2415.87,
+            "console": 2681
+          },
+          {
+            "i": 6,
+            "field": "session",
+            "table": "2026-09-18 00:00",
+            "console": "2026-09-27 00:00"
+          },
+          {
+            "i": 6,
+            "field": "vol",
+            "table": 5702.1925,
+            "console": 3224.06
+          },
+          {
+            "i": 6,
+            "field": "high",
+            "table": 2448.55,
+            "console": 2696.46
+          },
+          {
+            "i": 6,
+            "field": "low",
+            "table": 2436.89,
+            "console": 2690.11
+          },
+          {
+            "i": 7,
+            "field": "session",
+            "table": "2026-09-19 00:00",
+            "console": "2026-09-28 00:00"
+          },
+          {
+            "i": 7,
+            "field": "vol",
+            "table": 13955.592,
+            "console": 12518.146
+          },
+          {
+            "i": 7,
+            "field": "high",
+            "table": 2626.99,
+            "console": 2703.51
+          },
+          {
+            "i": 7,
+            "field": "low",
+            "table": 2606.87,
+            "console": 2672
+          },
+          {
+            "i": 8,
+            "field": "session",
+            "table": "2026-09-20 00:00",
+            "console": "2026-09-29 00:00"
+          },
+          {
+            "i": 8,
+            "field": "vol",
+            "table": 3607.1637,
+            "console": 5865.945
+          },
+          {
+            "i": 8,
+            "field": "high",
+            "table": 2632.97,
+            "console": 2695.38
+          },
+          {
+            "i": 8,
+            "field": "low",
+            "table": 2625.98,
+            "console": 2677.23
+          },
+          {
+            "i": 9,
+            "reason": "no console event"
+          },
+          {
+            "i": 10,
+            "reason": "no console event"
+          },
+          {
+            "i": 11,
+            "reason": "no console event"
+          },
+          {
+            "i": 12,
+            "reason": "no console event"
+          },
+          {
+            "i": 13,
+            "reason": "no console event"
+          },
+          {
+            "i": 14,
+            "reason": "no console event"
+          },
+          {
+            "i": 15,
+            "reason": "no console event"
+          },
+          {
+            "i": 16,
+            "reason": "no console event"
+          },
+          {
+            "i": 17,
+            "reason": "no console event"
+          },
+          {
+            "i": 18,
+            "reason": "no console event"
+          },
+          {
+            "i": 19,
+            "reason": "no console event"
+          }
+        ],
+        "rowCountMatchesStored": true,
+        "avgVolMatchesConsole": false,
+        "latestRow": {
+          "session": "2026-10-01 00:00",
+          "bars": 4,
+          "vol": 6123.1644,
+          "high": 2688.12,
+          "low": 2678.54,
+          "range": 9.58
+        }
+      }
+    },
+    "ohlcv_recomputation": {
+      "sessions_found": 6,
+      "console_events": 9,
+      "table_rows": 5,
+      "checks": {
+        "every_session_has_exactly_four_15m_bars": true,
+        "four_dp_volume_round_trip_exact": true,
+        "console_matches_ohlcv": false,
+        "table_matches_ohlcv": true
+      },
+      "latest_session": {
+        "session": "2026-10-01 00:00",
+        "bars": 4,
+        "vol": 6123.1644,
+        "high": 2688.12,
+        "low": 2678.54,
+        "range": 9.58
+      }
+    },
+    "study_series": {
+      "keep": 20,
+      "archive_baseline": 19,
+      "sessions_recomputed": 24,
+      "checks": {
+        "one_increment_per_completed_session": true,
+        "increments_match_independent_stats": true,
+        "archive_growth_one_at_a_time_until_cap": true,
+        "retention_cap_never_exceeded": true,
+        "removals_monotonic": true,
+        "one_completion_bar_per_session": true,
+        "new_session_reset_ok": true,
+        "empty_history_has_no_values_before_first_completion": false,
+        "archive_baseline_is_zero_for_fresh_start": false,
+        "stored_equals_min_completed_cap": true,
+        "last_volume_matches_latest_session": true,
+        "last_range_matches_latest_session": true,
+        "last_bars_matches_latest_session": true,
+        "average_matches_latest_window": true
+      },
+      "final_row": {
+        "stored": 20,
+        "removed": 195,
+        "avgVol": 9671.008,
+        "lastVol": 6123.1644,
+        "lastRange": 9.58,
+        "lastBars": 4,
+        "runBars": 0,
+        "inSession": 0
+      },
+      "expected_final": {
+        "stored": 20,
+        "avgVol": 9671.008,
+        "lastVol": 6123.1644,
+        "lastRange": 9.58
+      },
+      "empty_history_state": {
+        "snapshots_before_first_completion": 41,
+        "all_have_no_stored_sessions": false,
+        "all_have_no_derived_values": false,
+        "all_have_zero_removals": false,
+        "sample": [
+          {
+            "t": "2026-09-07 00:45",
+            "hc": 20,
+            "rm": 171,
+            "lv": 8399.6048,
+            "lb": 4,
+            "av": 11730.190749999998,
+            "ins": 1
+          },
+          {
+            "t": "2026-09-07 01:00",
+            "hc": 20,
+            "rm": 171,
+            "lv": 8399.6048,
+            "lb": 4,
+            "av": 11730.190749999998,
+            "ins": 0
+          },
+          {
+            "t": "2026-09-08 00:00",
+            "hc": 20,
+            "rm": 171,
+            "lv": 8399.6048,
+            "lb": 4,
+            "av": 11730.190749999998,
+            "ins": 1
+          }
+        ]
+      }
+    },
+    "source_identity": {
+      "hashes": {
+        "v1-baseline.pine": {
+          "bytes": 7796,
+          "sha256_normalized": "31fcd30252b1860290b0fb36ed9f34c96d91054dcc6455ad39d9f70c8829c5a3"
+        },
+        "v2-array-error.pine": {
+          "bytes": 7272,
+          "sha256_normalized": "6c0ffc573914c8662c26ce0a0897f500b34c34f168007addcb786fbecff65f4f"
+        },
+        "v3-array-fixed.pine": {
+          "bytes": 7577,
+          "sha256_normalized": "eb174c78d3374a7cc13a6d2d82f2d1d51e9b0cc1e14ae3d7c12a8ddf394b2251"
+        }
+      },
+      "editor_matches_fixture_v3": true,
+      "reopened_matches_fixture_v3": true,
+      "reopened_sha256_normalized": "eb174c78d3374a7cc13a6d2d82f2d1d51e9b0cc1e14ae3d7c12a8ddf394b2251",
+      "reopened_reported_lines": 141
+    }
+  },
+  "defects": [
+    {
+      "id": "D1",
+      "title": "Runtime-erroring Pine script rejects chart update with a bare Rejected message",
+      "severity": "medium (diagnostics)",
+      "trigger": "pine set (v2 with unguarded array.get) -> pine save (succeeds) -> pine compile or pine compile --save (updateOnChart path)",
+      "minimal_repro": "Compile a saved script whose runtime fails at the first session start against an empty archive (observed bar_index 18, line 53) onto an existing chart study.",
+      "expected": "A structured diagnostic identifying the runtime error (the chart study itself reports RE10045 with funcName/index/size/bar_index).",
+      "actual": "{\"success\":false,\"compiled\":false,\"error\":\"Rejected\"} with exit 1 and no code/diagnostics; the editor has no markers and the declaration-time button is disabled.",
+      "frequency": "3/3 attempts (labels 44, 48, 91 across two injection cycles: compile --save, compile, compile --save). The healthy v1 first add used addToChart and is not the same condition (and is not recorded as a failure).",
+      "workaround": "Fix the script; the corrected v3 updates successfully through the same path.",
+      "suspected_component": "src/core/pine-state.js (dispatchPineCompilation / verifyPineCompilation) or the native updateOnChart rejection path",
+      "evidence": [
+        "44-compile-v2-save",
+        "48-compile-v2-retry",
+        "91-repro-compile-v2",
+        "92-probe-study-status",
+        "50-probe-rejected",
+        "51-markers"
+      ]
+    }
+  ],
+  "environment_notes": [
+    {
+      "id": "E1",
+      "type": "environment",
+      "title": "pine check fails with a bare \"fetch failed\" without network access",
+      "trigger": "node src/cli/index.js pine check --file <pine> without network access",
+      "expected": "A message that distinguishes network reachability from a compile result.",
+      "actual": "{success:false,error:\"fetch failed\"}, exit 1",
+      "frequency": "1/1 attempts; passes with network (escalated)",
+      "workaround": "Run with network access.",
+      "evidence": [
+        "10-check-v1-baseline"
+      ]
+    }
+  ],
+  "known_limitations": [
+    {
+      "id": "L1",
+      "title": "pine analyze does not flag a computed-index array.get on an empty array",
+      "trigger": "pine analyze --file on v2-array-error.pine (array.get on a run-time-indexed empty array)",
+      "observed": "issue_count 0; the tool only bounds-checks integer-literal indices, and the protocol documents analyze as heuristic.",
+      "frequency": "1/1",
+      "classification": "known heuristic coverage, not a product defect",
+      "evidence": [
+        "41-analyze-v2-injected"
+      ]
+    },
+    {
+      "id": "L2",
+      "title": "Runtime-error rejection surfaced only on the updateOnChart path",
+      "detail": "Both chart updates used updateOnChart because the study was added once via addToChart; the addToChart path was not re-exercised with a failing script.",
+      "classification": "coverage limitation"
+    }
+  ],
+  "fixture_errors": [
+    {
+      "id": "F1",
+      "area": "QA harness",
+      "detail": "extract-study.mjs treated series values as [plot0..] instead of [time, plot0..]; fixed by offsetting plot indices."
+    },
+    {
+      "id": "F2",
+      "area": "QA harness",
+      "detail": "verify-series.mjs dropped the open session when leaving the window; fixed to push on window exit."
+    },
+    {
+      "id": "F3",
+      "area": "QA harness",
+      "detail": "ui click --text is harness invalid usage; the supported form is --by text --value."
+    }
+  ],
+  "limitations": [
+    "The Pine console ring buffer retains only the latest 40 messages, so a complete fresh-run log (first session started with prior_completed=0) is not observable after ~9 sessions; empty-archive behaviour was verified from the study series instead.",
+    "The initial-computation window is not observable with the available extraction window (max 500 bars of 2300 available) and the 40-line console buffer; the study may or may not have begun with a pre-filled archive, which this run does not claim.",
+    "Label 82-console-clean referenced in an earlier draft does not exist; the console evidence labels are 27, 34, 38, 47, 49, 58 and 93."
+  ],
+  "qa_state": {
+    "layout": "CLI-QA-S02-20261001 (chart nipHauoX)",
+    "documents": [
+      "CLI-QA-S02 Session Dashboard 20261001 (USER;6b325663a8a24b548558d60895ec3bc8, v5.0)"
+    ],
+    "studies_on_chart": 2,
+    "replay": "stopped, current_date null",
+    "dialogs": 0,
+    "other_scenario_assets_touched": "none (S01 document verified still present, v6.0)"
+  }
+}

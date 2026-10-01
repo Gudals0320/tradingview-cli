@@ -1,0 +1,140 @@
+//@version=6
+// CLI-QA-S02 — UTC session dashboard.
+// Aggregates volume / high / low / bar count per explicit UTC session, stores only
+// completed sessions once each, keeps the most recent `maxKeep` of them in parallel
+// arrays and renders a per-session table plus data-window plots for verification.
+indicator("CLI-QA-S02 Session Dashboard 20261001", overlay = false, shorttitle = "S02 Session")
+
+// ── Explicit UTC session definition ──────────────────────────────────────────
+startHour = input.int(0,  "Session start hour (UTC)",   minval = 0, maxval = 23)
+startMin  = input.int(0,  "Session start minute (UTC)", minval = 0, maxval = 59)
+endHour   = input.int(1,  "Session end hour (UTC)",     minval = 0, maxval = 23)
+endMin    = input.int(0,  "Session end minute (UTC)",   minval = 0, maxval = 59)
+maxKeep   = input.int(20, "Completed sessions kept",    minval = 1, maxval = 50)
+showTable = input.bool(true, "Show dashboard table")
+
+DAY_SEC  = 86400
+startSec = startHour * 3600 + startMin * 60
+endSec   = endHour * 3600 + endMin * 60
+wraps    = endSec <= startSec
+sessLen  = wraps ? DAY_SEC - startSec + endSec : endSec - startSec
+tfSec    = timeframe.in_seconds()
+
+// ── Session math from the UTC epoch (independent of the chart time zone) ─────
+timeSec     = math.floor(time / 1000)
+secOfDay    = timeSec % DAY_SEC
+dayStartSec = timeSec - secOfDay
+inSession   = wraps ? (secOfDay >= startSec or secOfDay < endSec) : (secOfDay >= startSec and secOfDay < endSec)
+baseDay     = inSession ? (wraps ? (secOfDay >= startSec ? dayStartSec : dayStartSec - DAY_SEC) : dayStartSec) : na
+sessStartTs = na(baseDay) ? na : baseDay + startSec
+sessEndTs   = na(sessStartTs) ? na : sessStartTs + sessLen
+barEndsSess = inSession and (timeSec + tfSec >= sessEndTs)
+
+// ── In-progress session accumulators ─────────────────────────────────────────
+var int   runStartTs = na
+var float runVol     = 0.0
+var float runHigh    = na
+var float runLow     = na
+var int   runBars    = 0
+
+// ── Completed-session history: parallel arrays, exactly one entry per session ─
+var array<int>   histStart = array.new<int>()
+var array<int>   histEnd   = array.new<int>()
+var array<float> histVol   = array.new<float>()
+var array<float> histHigh  = array.new<float>()
+var array<float> histLow   = array.new<float>()
+var array<int>   histBars  = array.new<int>()
+var int removedCount = 0
+
+// ── Per-bar session transitions and accumulation ─────────────────────────────
+int priorCount = array.size(histStart)
+newSession = inSession and (na(runStartTs) or runStartTs != sessStartTs)
+if newSession
+    runStartTs := sessStartTs
+    runVol     := 0.0
+    runHigh    := na
+    runLow     := na
+    runBars    := 0
+    log.info("S02 session started utc={0} prior_completed={1}", str.format_time(sessStartTs * 1000, "yyyy-MM-dd HH:mm", "UTC"), priorCount)
+
+if inSession
+    runVol  += nz(volume)
+    runHigh := na(runHigh) ? high : math.max(runHigh, high)
+    runLow  := na(runLow) ? low : math.min(runLow, low)
+    runBars += 1
+
+if barEndsSess
+    array.push(histStart, runStartTs)
+    array.push(histEnd, sessEndTs)
+    array.push(histVol, runVol)
+    array.push(histHigh, runHigh)
+    array.push(histLow, runLow)
+    array.push(histBars, runBars)
+    log.info("S02 session completed utc={0} bars={1} vol={2} high={3} low={4} range={5}", str.format_time(runStartTs * 1000, "yyyy-MM-dd HH:mm", "UTC"), runBars, runVol, runHigh, runLow, runHigh - runLow)
+    runStartTs := na
+    while array.size(histStart) > maxKeep
+        int dropStart = array.shift(histStart)
+        array.shift(histEnd)
+        array.shift(histVol)
+        array.shift(histHigh)
+        array.shift(histLow)
+        array.shift(histBars)
+        removedCount += 1
+        log.info("S02 oldest session removed utc={0} stored_after={1}", str.format_time(dropStart * 1000, "yyyy-MM-dd HH:mm", "UTC"), array.size(histStart))
+
+// ── Derived view of the stored history (bounds-checked before every access) ──
+int   histCount = array.size(histStart)
+float lastVol   = na
+float lastHigh  = na
+float lastLow   = na
+float lastRange = na
+int   lastBars  = na
+float avgVol    = na
+if histCount > 0
+    lastVol   := array.get(histVol, histCount - 1)
+    lastHigh  := array.get(histHigh, histCount - 1)
+    lastLow   := array.get(histLow, histCount - 1)
+    lastRange := lastHigh - lastLow
+    lastBars  := array.get(histBars, histCount - 1)
+    avgVol    := array.sum(histVol) / histCount
+
+// ── Data-window companions used by the QA harness ────────────────────────────
+plot(histCount,   "histCount",  display = display.data_window)
+plot(removedCount,"removed",    display = display.data_window)
+plot(lastVol,     "lastVol",    display = display.data_window)
+plot(lastHigh,    "lastHigh",   display = display.data_window)
+plot(lastLow,     "lastLow",    display = display.data_window)
+plot(lastRange,   "lastRange",  display = display.data_window)
+plot(lastBars,    "lastBars",   display = display.data_window)
+plot(avgVol,      "avgVol",     display = display.data_window)
+plot(runBars,     "runBars",    display = display.data_window)
+plot(runVol,      "runVol",     display = display.data_window)
+plot(runHigh,     "runHigh",    display = display.data_window)
+plot(runLow,      "runLow",     display = display.data_window)
+plot(inSession ? 1 : 0, "inSession", display = display.data_window)
+plot(runStartTs,  "runStartTs", display = display.data_window)
+
+// ── Dashboard table ──────────────────────────────────────────────────────────
+var table dash = table.new(position.top_right, 8, 30, border_width = 1)
+if barstate.islast and showTable
+    int n = histCount
+    table.cell(dash, 0, 0, "CLI-QA-S02 UTC session dashboard", text_color = color.white, bgcolor = color.new(color.blue, 0))
+    table.cell(dash, 0, 1, str.format("session {0}:{1}-{2}:{3} UTC len={4}s tf={5}s wraps={6}", startHour, startMin, endHour, endMin, sessLen, tfSec, wraps), text_color = color.black, bgcolor = color.new(color.silver, 30))
+    table.cell(dash, 0, 2, str.format("in progress start={0} bars={1} vol={2} high={3} low={4}", str.format_time(runStartTs * 1000, "yyyy-MM-dd HH:mm", "UTC"), runBars, runVol, runHigh, runLow), text_color = color.black, bgcolor = color.new(color.yellow, 40))
+    table.cell(dash, 0, 3, str.format("stored={0} limit={1} removed={2} avgVol={3}", n, maxKeep, removedCount, avgVol), text_color = color.black, bgcolor = color.new(color.green, 60))
+    table.cell(dash, 0, 5, "session (UTC)", text_color = color.white, bgcolor = color.new(color.gray, 0))
+    table.cell(dash, 1, 5, "bars",          text_color = color.white, bgcolor = color.new(color.gray, 0))
+    table.cell(dash, 2, 5, "volume",        text_color = color.white, bgcolor = color.new(color.gray, 0))
+    table.cell(dash, 3, 5, "high",          text_color = color.white, bgcolor = color.new(color.gray, 0))
+    table.cell(dash, 4, 5, "low",           text_color = color.white, bgcolor = color.new(color.gray, 0))
+    table.cell(dash, 5, 5, "range",         text_color = color.white, bgcolor = color.new(color.gray, 0))
+    if n > 0
+        for i = 0 to n - 1
+            int row = 6 + i
+            table.cell(dash, 0, row, str.format_time(array.get(histStart, i) * 1000, "yyyy-MM-dd HH:mm", "UTC"), text_color = color.black)
+            table.cell(dash, 1, row, str.tostring(array.get(histBars, i)), text_color = color.black)
+            table.cell(dash, 2, row, str.tostring(array.get(histVol, i), "#.####"), text_color = color.black)
+            table.cell(dash, 3, row, str.tostring(array.get(histHigh, i), "#.####"), text_color = color.black)
+            table.cell(dash, 4, row, str.tostring(array.get(histLow, i), "#.####"), text_color = color.black)
+            table.cell(dash, 5, row, str.tostring(array.get(histHigh, i) - array.get(histLow, i), "#.####"), text_color = color.black)
+
