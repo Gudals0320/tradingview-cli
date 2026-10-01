@@ -410,13 +410,21 @@ export async function smartCompile({ timeout = 30000, save: saveChanges = false,
       if (progress.replaced) return { success:false,compiled:false,error:'Pine compilation operation was replaced.' };
       if (progress.error) {
         await inspect(`(${pineCompilationStatus.toString()})(window, ${JSON.stringify(token)}, true)`);
-        return {success:false,compiled:false,error:progress.error};
+        return {success:false,compiled:false,error:progress.error,
+          ...(context.save_required && saveChanges ? {saved:false,code:'SAVE_NOT_CONFIRMED'} : {})};
       }
       completed = progress.completed;
-      if (completed && context.save_required && saveChanges) persistence = {saved:true,script_id:progress.identity?.scriptIdPart};
+      if (completed && context.save_required && saveChanges) {
+        if (!progress.identity?.scriptIdPart || progress.modified !== false) {
+          await inspect(`(${pineCompilationStatus.toString()})(window, ${JSON.stringify(token)}, true)`);
+          return {success:false,compiled:false,saved:false,code:'SAVE_NOT_CONFIRMED',
+            error:'Pine compilation finished without a confirmed saved identity and clean editor.'};
+        }
+        persistence = {saved:true,script_id:progress.identity.scriptIdPart};
+      }
       nativeMarkers = progress.diagnostics || [];
       if (!completed) continue;
-      if (completed) await inspect(`(${pineCompilationStatus.toString()})(window, ${JSON.stringify(token)}, true)`);
+      await inspect(`(${pineCompilationStatus.toString()})(window, ${JSON.stringify(token)}, true)`);
     }
     markers = await inspect(`(() => { const m = ${FIND_MONACO}; const model = m?.editor.getModel();
       return model ? m.env.editor.getModelMarkers({resource:model.uri}).map(marker => ({line:marker.startLineNumber,column:marker.startColumn,message:marker.message,severity:marker.severity})) : []; })()`);

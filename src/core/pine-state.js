@@ -33,7 +33,8 @@ export function pineCompilationStatus(window, token, finish = false) {
   if (finish) operation.dispose?.();
   operation.refresh?.();
   return { started: operation.started, completed: operation.completed, error: operation.error,
-    diagnostics: operation.diagnostics, identity: operation.controller?.getScriptIdVersion?.() };
+    diagnostics: operation.diagnostics, identity: operation.controller?.getScriptIdVersion?.(),
+    modified: operation.controller?.isModified?.() };
 }
 
 /** Await the controller's complete action, including saved-version translation. */

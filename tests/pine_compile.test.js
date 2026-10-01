@@ -38,15 +38,20 @@ it('does not claim a fresh completion when the native action did no work', async
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(pineCompilationStatus(f.window, 'token').completed, false);
 });
-function dependencies({ delayedError = false, neverComplete = false } = {}) {
+function dependencies({ delayedError = false, neverComplete = false, saveRequired = false, modifiedAfter = false } = {}) {
   const f = fixture(); let ticks = 0;
+  f.controller.getScriptIdVersion = () => ({ scriptIdPart: 'saved A', version: '2.0' });
+  f.controller.isModified = () => modifiedAfter;
   const context = { window: f.window, document: f.document };
   return { source: '//@version=6\nindicator("QA")\nplot(close)',
     evaluate: expression => {
-      if (expression.includes('function pineCompileContext')) return {};
+      if (expression.includes('function pineCompileContext')) return {save_required:saveRequired};
       if (expression.includes('return beginCompilation(')) return { phase: 'pending' };
       if (expression.includes('return (function observePineCompilation')) return observePineCompilation(f.window, f.controller, 'token');
-      if (expression.includes('return (function dispatchPineCompilation')) return 'addToChart';
+      if (expression.includes('return (function dispatchPineCompilation')) {
+        f.window.__tvCliPineCompile.controller = f.controller;
+        return 'addToChart';
+      }
       if (expression.includes('function pineCompilationStatus')) {
         // Execute the real status helper, with the generated token mirrored.
         const token = expression.match(/\)\(window, "([^"]+)"/)?.[1];
@@ -114,4 +119,11 @@ it('smartCompile verifies late clean completion and fails closed on timeout', as
   assert.equal((await smartCompile({ _deps: dependencies() })).compiled, true);
   const result = await smartCompile({ timeout: 1000, _deps: dependencies({ neverComplete: true }) });
   assert.equal(result.compiled, false); assert.match(result.error, /timeout/);
+});
+it('compile --save requires saved identity and a clean editor after native completion', async () => {
+  const good = await smartCompile({ save:true, _deps:dependencies({saveRequired:true}) });
+  assert.equal(good.saved, true); assert.equal(good.script_id, 'saved A');
+  const dirty = await smartCompile({ save:true, _deps:dependencies({saveRequired:true,modifiedAfter:true}) });
+  assert.equal(dirty.success, false); assert.equal(dirty.saved, false);
+  assert.equal(dirty.code, 'SAVE_NOT_CONFIRMED');
 });
