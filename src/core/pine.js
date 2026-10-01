@@ -4,7 +4,7 @@
  * They throw on error (callers catch and format).
  */
 import { evaluate, evaluateAsync, getClient } from '../connection.js';
-import { findPineEditor, findPineController, readPineConsole, requestPineEditor, clickPineCompileButton } from './desktop-dom.js';
+import { findPineEditor, findPineController, readPineConsole, confirmPineSaveDialog, requestPineEditor, clickPineCompileButton } from './desktop-dom.js';
 import { STRATEGY_PAGE_CODE, splitMarkers, formatDiagnostic } from '../strategy-state.js';
 import { sourceHash } from '../session.js';
 import { randomUUID } from 'node:crypto';
@@ -287,38 +287,62 @@ export async function getErrors({ _deps } = {}) {
   };
 }
 
-export async function save() {
-  const editorReady = await ensurePineEditorOpen();
-  if (!editorReady) throw new Error('Could not open Pine Editor.');
-
-  const c = await getClient();
-  await c.Input.dispatchKeyEvent({ type: 'keyDown', modifiers: 2, key: 's', code: 'KeyS', windowsVirtualKeyCode: 83 });
-  await c.Input.dispatchKeyEvent({ type: 'keyUp', key: 's', code: 'KeyS' });
-  await new Promise(r => setTimeout(r, 800));
-
-  // Handle "Save Script" name dialog that appears for new/unsaved scripts
-  const dialogHandled = await evaluate(`
-    (function() {
-      var saveBtn = null;
-      var btns = document.querySelectorAll('button');
-      for (var i = 0; i < btns.length; i++) {
-        var text = btns[i].textContent.trim();
-        if (text === 'Save' && btns[i].offsetParent !== null) {
-          // Check if it's in a dialog (not the Pine Editor save button)
-          var parent = btns[i].closest('[class*="dialog"], [class*="modal"], [class*="popup"], [role="dialog"]');
-          if (parent) { saveBtn = btns[i]; break; }
-        }
-      }
-      if (saveBtn) { saveBtn.click(); return true; }
-      return false;
-    })()
-  `);
-
-  if (dialogHandled) await new Promise(r => setTimeout(r, 500));
-
-  return { success: true, action: dialogHandled ? 'saved_with_dialog' : 'Ctrl+S_dispatched' };
+export async function save({ timeout = 15000, _deps } = {}) {
+  if (!_deps && !await ensurePineEditorOpen()) throw new Error('Could not open Pine Editor.');
+  const inspect = _deps?.evaluate || evaluate;
+  const inspectAsync = _deps?.evaluateAsync || evaluateAsync;
+  const sleep = _deps?.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
+  const now = _deps?.now || Date.now;
+  const token = randomUUID();
+  await inspect(`(() => {
+    const controller = ${FIND_CONTROLLER};
+    const m = ${FIND_MONACO};
+    if (!controller || !m) throw new Error('Pine save controller unavailable.');
+    if (window.__tvCliSave?.pending) throw new Error('A Pine save is already pending.');
+    const operation = window.__tvCliSave = {token:${JSON.stringify(token)}, pending:true, source:m.editor.getValue()};
+    if (controller.getScriptIdVersion()?.scriptIdPart && !controller.isModified()) {
+      operation.pending = false; return true;
+    }
+    Promise.resolve().then(() => controller.saveScript()).then(() => { operation.pending=false; },
+      error => {operation.pending=false; operation.error=error?.message || String(error);});
+    return true;
+  })()`);
+  const start = now(); let dialogHandled = false;
+  do {
+    await sleep(100);
+    const state = await inspect(`(() => {
+      const operation = window.__tvCliSave;
+      if (operation?.token !== ${JSON.stringify(token)}) return {error:'Pine save operation was replaced.'};
+      const controller = ${FIND_CONTROLLER};
+      if (!controller) return {error:'Pine save controller disappeared.'};
+      const clicked = (${confirmPineSaveDialog.toString()})(document);
+      return {pending:operation.pending,error:operation.error,clicked,
+        identity:controller.getScriptIdVersion(),modified:controller.isModified()};
+    })()`);
+    dialogHandled ||= Boolean(state.clicked);
+    if (state.error) return { success:false, saved:false, error:state.error };
+    if (!state.pending) {
+      if (!state.identity?.scriptIdPart || state.modified) return { success:false, saved:false,
+        error:'Pine save finished without a saved document identity or with unsaved changes.' };
+      const verified = await inspectAsync(`(async () => {
+        const operation = window.__tvCliSave, controller = ${FIND_CONTROLLER};
+        if (operation?.token !== ${JSON.stringify(token)}) return false;
+        const identity = controller.getScriptIdVersion();
+        const response = await fetch('https://pine-facade.tradingview.com/pine-facade/get/' +
+          encodeURIComponent(identity.scriptIdPart) + '/' + encodeURIComponent(identity.version), {credentials:'include'});
+        if (!response.ok) throw new Error('Could not verify persisted Pine source: HTTP ' + response.status);
+        const data = await response.json();
+        const normalize = value => value.replace(/\\r\\n/g, '\\n');
+        return typeof data.source === 'string' && normalize(data.source) === normalize(operation.source)
+          && normalize((${FIND_MONACO}).editor.getValue()) === normalize(operation.source);
+      })()`);
+      return verified ? { success:true,saved:true,action:dialogHandled?'saved_with_dialog':'saved',
+        script_id:state.identity.scriptIdPart,version:state.identity.version }
+        : {success:false,saved:false,error:'Persisted Pine source did not match the editor source.'};
+    }
+  } while (now() - start < timeout);
+  return { success:false,saved:false,error:'Pine save did not complete before timeout.' };
 }
-
 export async function getConsole({ _deps } = {}) {
   if (!_deps && !await ensurePineEditorOpen()) throw new Error('Could not open Pine Editor.');
   const entries = await (_deps?.evaluate || evaluate)(`(() => {

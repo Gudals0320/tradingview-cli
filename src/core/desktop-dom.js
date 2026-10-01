@@ -89,6 +89,15 @@ export function readPineConsole(document, controller) {
   return entries;
 }
 
+export function confirmPineSaveDialog(document) {
+  const buttons = document.querySelectorAll('button[data-qa-id="save-btn"][name="save"]');
+  const button = Array.from(buttons).find(item => item.offsetParent !== null && !item.disabled
+    && item.getAttribute('aria-disabled') !== 'true');
+  if (!button) return false;
+  button.click();
+  return true;
+}
+
 export function clickPineCompileButton(document) {
   const buttons = Array.from(document.querySelectorAll('button')).filter((button) =>
     button.offsetParent !== null && !button.disabled && button.getAttribute('aria-disabled') !== 'true');
