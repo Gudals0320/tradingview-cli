@@ -143,6 +143,14 @@ describe('Pine DOM compatibility', () => {
     await assert.rejects(ensurePineEditorOpen({_deps:{evaluate:expression=>runInNewContext(expression,{document,window:{innerWidth:0,innerHeight:0}}),sleep:async()=>{}}}),error=>error.code==='PINE_VIEWPORT_UNAVAILABLE');
     assert.equal(sidebar.clicks,0);
   });
+  it('never toggles a pane back closed while its mounted container stays zero-sized',async()=>{
+    let ticks=0,visible=false;const sidebar=button('Pine'),document=page({sidebar}),ready=editorFixture();
+    ready.document.containers[0].getBoundingClientRect=()=>({width:visible?900:0,height:visible?600:0});
+    sidebar.click=()=>{sidebar.clicks++;document.containers=ready.document.containers;};
+    assert.equal(await ensurePineEditorOpen({_deps:{evaluate:expression=>runInNewContext(expression,{document,window:{innerWidth:1280,innerHeight:720}}),
+      sleep:async()=>{if(++ticks===12)visible=true;}}}),true);
+    assert.equal(sidebar.clicks,1);assert.equal(ticks,12);
+  });
 });
 
 describe('Pine compile button selection', () => {

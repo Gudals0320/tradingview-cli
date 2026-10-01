@@ -21,12 +21,14 @@ export async function ensurePineEditorOpen({ _deps } = {}) {
   const sleep = _deps?.sleep || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   const ready = () => evaluatePage(`(() => {const m=${FIND_MONACO},c=${FIND_CONTROLLER};return Boolean(m&&c&&(${pinePanelState.toString()})(document,window).panel_visible);})()`);
   if (await ready()) return true;
-  let requests=0,lastState;
+  let requests=0,lastState,lastClickSignature=null,openingObserved=false;
   for (let attempt = 0; attempt < 150; attempt++) {
     if(attempt%5===0&&requests<8){
       lastState=await evaluatePage(`(${pinePanelState.toString()})(document,window)`);
       if(lastState.viewport_width===0||lastState.viewport_height===0){const error=new Error('Pine target viewport is zero. Restore the TradingView window and make this tab visible, then retry.');error.code='PINE_VIEWPORT_UNAVAILABLE';error.details=lastState;throw error;}
-      await evaluatePage(`(${requestPineEditor.toString()})(document, window.TradingView)`);requests++;
+      if(lastClickSignature!==null&&lastState.panel_signature!==lastClickSignature)openingObserved=true;
+      const requested=await evaluatePage(`(${requestPineEditor.toString()})(document, window.TradingView,{suppressToggle:${openingObserved}})`);requests++;
+      if(requested==='sidebar')lastClickSignature=lastState.panel_signature;
     }
     await sleep(200);
     if (await ready()) return true;

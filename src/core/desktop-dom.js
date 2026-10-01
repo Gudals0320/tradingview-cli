@@ -40,10 +40,11 @@ export function findPineEditor(document) {
   return null;
 }
 
-export function requestPineEditor(document, tradingView) {
+export function requestPineEditor(document, tradingView, {suppressToggle=false}={}) {
   const visible=element=>element.offsetParent!==null&&(!element.getBoundingClientRect||
     (element.getBoundingClientRect().width>0&&element.getBoundingClientRect().height>0));
   const containers = Array.from(document.querySelectorAll('.monaco-editor.pine-editor-monaco'));
+  if(suppressToggle)return 'mounting';
   if (containers.some(visible)) return 'mounting';
   const buttons = Array.from(document.querySelectorAll('[data-name="pine-dialog-button"], [aria-label="Pine"]'));
   const button = buttons.find((element) => visible(element) && !element.disabled&&element.getAttribute?.('aria-disabled')!=='true');
@@ -61,9 +62,12 @@ export function pinePanelState(document, window) {
   const containers=Array.from(document.querySelectorAll('.monaco-editor.pine-editor-monaco'));
   const visible=containers.some(e=>e.offsetParent!==null&&(!e.getBoundingClientRect||
     (e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0)));
+  const controls=Array.from(document.querySelectorAll('[data-name="pine-dialog-button"], [aria-label="Pine"]'));
+  const signature=JSON.stringify({containers:containers.map(e=>({visible:e.offsetParent!==null,rect:e.getBoundingClientRect?{width:e.getBoundingClientRect().width,height:e.getBoundingClientRect().height}:null})),
+    controls:controls.map(e=>({disabled:e.disabled,pressed:e.getAttribute?.('aria-pressed'),expanded:e.getAttribute?.('aria-expanded'),cls:e.className||''}))});
   return {viewport_width:typeof window.innerWidth==='number'?window.innerWidth:null,
     viewport_height:typeof window.innerHeight==='number'?window.innerHeight:null,
-    document_ready:document.readyState||'unknown',panel_visible:visible};
+    document_ready:document.readyState||'unknown',panel_visible:visible,panel_signature:signature};
 }
 
 /** Controller owns script identity; Monaco.setValue only changes its text. */
