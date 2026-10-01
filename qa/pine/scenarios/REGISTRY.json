@@ -154,9 +154,23 @@
       "status": "reviewed",
       "started_at_utc": "2026-10-01T05:19:43.000Z",
       "outcome": "Identity/source/ambiguity/unsaved contracts PASS; unchanged strategy reopen compile/raw Rejected2of2 and REPORT_PENDING",
-      "accepted_handoff_at_utc": "2026-10-01T05:31:43.000Z"
+      "accepted_handoff_at_utc": "2026-10-01T05:31:43.000Z",
+      "commit": "5777b59"
     }
   ],
   "sequential_dispatch_verified": true,
-  "status": "all_handoffs_reviewed"
+  "status": "complete",
+  "aggregate_issue": {
+    "number": 13,
+    "url": "https://github.com/Gudals0320/tradingview-cli/issues/13",
+    "body_file": "qa/pine/scenarios/AGGREGATE-ISSUE.md",
+    "readback_verified": true
+  },
+  "final_checks": {
+    "unit_tests_passed": 308,
+    "unit_tests_failed": 0,
+    "network_tests_disabled": true,
+    "lint": "passed",
+    "product_files_unchanged": true
+  }
 }

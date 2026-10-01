@@ -142,3 +142,10 @@ Product baseline: 57ee8e7. Shared product source stays unchanged during this run
 - Final TRADINGVIEW_SKIP_NETWORK_TESTS=1 npm test:308 pass,0 fail; lint passes.
 - Only QA fixtures/harnesses/evidence/review docs changed. No merge/PR/push.
 - Existing issues#4–#12 stay untouched; user requested one new aggregate report.
+
+## Published aggregate
+
+- [GitHub issue #13](https://github.com/Gudals0320/tradingview-cli/issues/13) created
+  from AGGREGATE-ISSUE.md after all six handoffs were accepted.
+- Full remote body was read back and compared with the reviewed local file.
+- All six worker runs ended; no further Executor work or automation was started.
