@@ -37,8 +37,8 @@ register('pine', {
       handler: () => core.smartCompile(),
     }],
     ['raw-compile', {
-      description: 'Click compile/add button without smart detection',
-      handler: () => core.compile(),
+      description: 'Deprecated alias of compile: smart verification; unchanged strategies may skip dispatch',
+      handler: () => core.smartCompile(),
     }],
     ['analyze', {
       description: 'Offline static analysis (no TradingView needed)',

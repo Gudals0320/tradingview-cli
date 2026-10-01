@@ -141,6 +141,10 @@ tv replay stop
 tv stream quote --interval 500
 ```
 
+`pine raw-compile`은 deprecated 호환 별칭이며 `pine compile`과 같은 스마트 검증을 수행합니다.
+검증된 동일 전략은 `unchanged:true, compile_performed:false`로 실행을 생략할 수 있습니다.
+버튼 강제 클릭을 요청하는 명령으로 사용하지 마세요.
+
 현재 옵션은 `tv --help`, `tv <명령> --help`, `tv <명령> <하위 명령> --help`로 확인할 수 있습니다.
 
 전용 실험 레이아웃을 선택하고 소스·결과를 확인한 뒤 원래 상태를 복원하는 사용법은 [Pine 배치 예제](examples/README.md)를 참고하세요.
