@@ -12,6 +12,13 @@ import { analyze as analyzeSource } from '../src/core/pine.js';
 const analyze = source => analyzeSource({ source }).diagnostics;
 
 describe('pine_analyze — static analysis', () => {
+  it('preserves diagnostic lines while analyzing an unterminated string', () => {
+    const source = '//@version=6\nindicator("x)\nplot(close, title="t")\na = array.from(1)\nb = array.get(a, 5)';
+    const diagnostics = analyze(source);
+    assert.equal(diagnostics.length, 1);
+    assert.equal(diagnostics[0].line, 5);
+    assert.match(diagnostics[0].message, /out of bounds/);
+  });
   it('ignores full-line/inline comments and escaped string contents', () => {
     const source = `//@version=6
 indicator("strategy.entry // text")

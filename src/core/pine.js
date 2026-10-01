@@ -33,7 +33,7 @@ export async function ensurePineEditorOpen({ _deps } = {}) {
 export function analyze({ source }) {
   const lines = source.split('\n');
   // Keep offsets while hiding comments and string contents from code rules.
-  const codeLines = source.replace(/("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|\/\/[^\r\n]*/g,
+  const codeLines = source.replace(/("(?:\\[^\r\n]|[^"\\\r\n])*"|'(?:\\[^\r\n]|[^'\\\r\n])*')|\/\/[^\r\n]*/g,
     (text, literal) => literal ? '_'.repeat(text.length) : ' '.repeat(text.length)).split('\n');
   const diagnostics = [];
 
