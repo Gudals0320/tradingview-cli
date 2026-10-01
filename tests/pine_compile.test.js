@@ -6,11 +6,14 @@ import { smartCompile } from '../src/core/pine.js';
 import { observePineCompilation, dispatchPineCompilation, pineCompilationStatus, pineCompileContext } from '../src/core/pine-state.js';
 
 function fixture({ error = false, pending = false } = {}) {
-  const window = {}; let state = { ui: { pendingRequests: {} }, console: { messages: [] } };
+  const window = { TradingViewApi: { _activeChartWidgetWV: { value: () => ({
+    _chartWidget: {model: () => ({model: () => ({dataSources: () => []})})},
+  }) } } }; let state = { ui: { pendingRequests: {} }, console: { messages: [] } };
   const listeners = new Set();
   const emit = changes => { state = { ...state, ...changes }; listeners.forEach(fn => fn()); };
   const store = { getState: () => state, subscribe: fn => { listeners.add(fn); return () => listeners.delete(fn); } };
   const controller = { _editorStore: { getStore: () => store },
+    getScriptIdVersion: () => null,
     addToChart: async () => {
       emit({ ui: { pendingRequests: { compile: true } } });
       if (pending) await new Promise(() => {});

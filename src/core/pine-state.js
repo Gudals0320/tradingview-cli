@@ -34,22 +34,60 @@ export function pineCompilationStatus(window, token, finish = false) {
   operation.refresh?.();
   return { started: operation.started, completed: operation.completed, error: operation.error,
     diagnostics: operation.diagnostics, identity: operation.controller?.getScriptIdVersion?.(),
-    modified: operation.controller?.isModified?.() };
+    modified: operation.controller?.isModified?.(),
+    validation: operation.actionDone ? operation.check?.() : null };
+}
+
+export function pineStudySnapshot(window) {
+  const chart = window.TradingViewApi?._activeChartWidgetWV?.value();
+  if (!chart) throw new Error('Pine chart targets are unavailable.');
+  return chart._chartWidget.model().model().dataSources().flatMap(source => {
+    const info = source.metaInfo?.();
+    if (!info?.isTVScript) return [];
+    const inputs = chart.getStudyById(source.id()).getInputValues();
+    return [{ id: source.id(), pine_id: inputs.find(input => input.id === 'pineId')?.value,
+      compiled_identity: JSON.stringify(inputs.filter(input => ['text','pineId','pineVersion'].includes(input.id))) }];
+  });
+}
+
+export function planPineCompilation(window, controller) {
+  const identity = controller?.getScriptIdVersion?.();
+  const before = pineStudySnapshot(window);
+  const matches = identity?.scriptIdPart ? before.filter(item => item.pine_id === identity.scriptIdPart) : [];
+  if (matches.length > 1) return { error:'More than one chart study uses this Pine document.', code:'AMBIGUOUS_TARGET', target_count:matches.length };
+  return { method:matches.length === 1 ? 'updateOnChart' : 'addToChart', before,
+    script_id:identity?.scriptIdPart || null, target_id:matches[0]?.id || null };
+}
+
+export function verifyPineCompilation(window, operation) {
+  const { plan, controller } = operation;
+  const currentId = controller.getScriptIdVersion()?.scriptIdPart;
+  if (!currentId || (plan.script_id && plan.script_id !== currentId)) return {
+    code:'TARGET_MISMATCH',error:'Pine document identity changed during compilation.' };
+  const after = pineStudySnapshot(window);
+  const matches = after.filter(item => item.pine_id === currentId);
+  if (matches.length > 1) return {code:'DUPLICATE_ADDED',target_count:matches.length,error:'Compilation created or retained multiple studies for this Pine document.'};
+  if (matches.length === 0) return {pending:true};
+  if (plan.target_id && matches[0].id !== plan.target_id) return {code:'TARGET_MISMATCH',error:'Compilation replaced the target chart study.'};
+  const oldOther = plan.before.filter(item => item.id !== plan.target_id);
+  const newOther = after.filter(item => item.id !== matches[0].id);
+  if (oldOther.length !== newOther.length || oldOther.some(old => !newOther.some(item =>
+    item.id === old.id && item.compiled_identity === old.compiled_identity))) return {
+    code:'TARGET_MISMATCH',error:'Compilation changed an unrelated Pine study.' };
+  return {verified:true,script_id:currentId,target_id:matches[0].id};
 }
 
 /** Await the controller's complete action, including saved-version translation. */
-export function dispatchPineCompilation(window, controller, token, document) {
+export function dispatchPineCompilation(window, controller, token) {
   const operation = window.__tvCliPineCompile;
   if (operation?.token !== token) throw new Error('Pine compile observer was replaced.');
-  // Desktop uses the same QA id for add and update. Read the native handler's
-  // referenced action instead of inferring behavior from the icon or caption.
-  const button = Array.from(document.querySelectorAll('button[data-qa-id="add-script-to-chart"],button[data-qa-id="update-script-on-chart"]'))
-    .find(button => button.offsetParent !== null && !button.disabled);
-  const propsKey = button && Object.keys(button).find(key => key.startsWith('__reactProps$'));
-  const update = /\.updateOnChart\(/.test(String(button?.[propsKey]?.onClick || ''));
-  const method = update ? 'updateOnChart' : 'addToChart';
+  const plan = planPineCompilation(window, controller);
+  if (plan.error) throw new Error(plan.code + ': ' + plan.error);
+  const method = plan.method;
   if (typeof controller?.[method] !== 'function') throw new Error('Pine native compilation action unavailable.');
   operation.controller = controller;
+  operation.plan = plan;
+  operation.check = () => verifyPineCompilation(window, operation);
   Promise.resolve().then(() => controller[method]()).then(() => {
     operation.actionDone = true; operation.refresh();
   }, error => {
@@ -59,6 +97,8 @@ export function dispatchPineCompilation(window, controller, token, document) {
 }
 
 export function pineCompileContext(window, controller) {
+  const plan = planPineCompilation(window, controller);
+  if (plan.error) return plan;
   const identity = controller?.getScriptIdVersion?.();
   const modified = controller?.isModified?.();
   const saveRequired = Boolean(identity?.scriptIdPart && modified && !controller.isDraft?.());
@@ -79,5 +119,8 @@ export function pineCompileContext(window, controller) {
       } catch { /* unavailable source */ }
     }
   }
-  return { save_required: saveRequired, unchanged, pending:pending && !unchanged, runtime_error:runtimeError, identity };
+  return { save_required: saveRequired, unchanged, pending:pending && !unchanged, runtime_error:runtimeError, identity,
+    target_id:plan.target_id };
 }
+
+export const PINE_TARGET_PAGE_CODE = [pineStudySnapshot,planPineCompilation,verifyPineCompilation].map(fn => fn.toString()).join('\n');

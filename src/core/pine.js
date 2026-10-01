@@ -8,7 +8,7 @@ import { findPineEditor, findPineController, readPineConsole, confirmPineSaveDia
 import { STRATEGY_PAGE_CODE, splitMarkers, formatDiagnostic } from '../strategy-state.js';
 import { sourceHash } from '../session.js';
 import { randomUUID } from 'node:crypto';
-import { observePineCompilation, pineCompilationStatus, dispatchPineCompilation, pineCompileContext } from './pine-state.js';
+import { observePineCompilation, pineCompilationStatus, dispatchPineCompilation, pineCompileContext, PINE_TARGET_PAGE_CODE } from './pine-state.js';
 
 // Shared helpers execute unchanged in the page and in offline DOM regression tests.
 const FIND_MONACO = `(${findPineEditor.toString()})(document)`;
@@ -365,9 +365,10 @@ export async function smartCompile({ timeout = 30000, save: saveChanges = false,
   const inspect = _deps?.evaluate || evaluate;
   if (!_deps && !await ensurePineEditorOpen()) throw new Error('Could not open Pine Editor.');
   const source = _deps?.source || (await getSource()).source;
-  const contextExpression = `(() => {const controller = ${FIND_CONTROLLER};
+  const contextExpression = `(() => { ${PINE_TARGET_PAGE_CODE}; const controller = ${FIND_CONTROLLER};
     return (${pineCompileContext.toString()})(window, controller); })()`;
   let context = await inspect(contextExpression);
+  if (context.error) return {success:false,compiled:false,report_ready:false,code:context.code,error:context.error,target_count:context.target_count};
   if (context.save_required && !saveChanges) return { success:false,compiled:false,code:'SAVE_REQUIRED',
     error:'This saved script has unsaved changes. Run pine save first or compile with --save.' };
   const token = randomUUID();
@@ -384,7 +385,7 @@ export async function smartCompile({ timeout = 30000, save: saveChanges = false,
     unchanged:true,has_errors:false,errors:[],warnings:[]};
   const literal = source.match(/^\s*strategy\s*\(\s*(?:title\s*=\s*)?("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/m)?.[1];
   const strategyName = literal ? literal.slice(1, -1).replace(/\\([\\"'nrt])/g, (_, ch) => ({ n: '\n', r: '\r', t: '\t' }[ch] || ch)) : null;
-  const begun = await inspect(`(() => { ${STRATEGY_PAGE_CODE}; return beginCompilation(window, ${JSON.stringify(token)}, ${JSON.stringify(sourceHash(source))}, ${strategyMode}, ${JSON.stringify(strategyName)}); })()`);
+  const begun = await inspect(`(() => { ${STRATEGY_PAGE_CODE}; return beginCompilation(window, ${JSON.stringify(token)}, ${JSON.stringify(sourceHash(source))}, ${strategyMode}, ${JSON.stringify(strategyName)}, ${JSON.stringify(context.identity?.scriptIdPart || null)}, ${JSON.stringify(context.target_id || null)}); })()`);
   if (begun?.phase === 'unchanged') return { success: true, compiled: true, compile_performed: false, unchanged: true,
     has_errors: false, errors: [], warnings: [], strategy_id: begun.strategy_id, strategy_inputs: begun.inputs,
     compilation_token: begun.token, report_ready: true };
@@ -395,7 +396,7 @@ export async function smartCompile({ timeout = 30000, save: saveChanges = false,
       return (${observePineCompilation.toString()})(window, controller, ${JSON.stringify(token)}); })()`);
     if (!observed) throw new Error('Pine compile completion signals unavailable; cannot verify compilation.');
   }
-  const button = awaiting ? null : await inspect(`(() => { const controller = ${FIND_CONTROLLER};
+  const button = awaiting ? null : await inspect(`(() => { ${PINE_TARGET_PAGE_CODE}; const controller = ${FIND_CONTROLLER};
     return (${dispatchPineCompilation.toString()})(window, controller, ${JSON.stringify(token)}, document); })()`);
   const sleep = _deps?.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
   const now = _deps?.now || Date.now; const start = now(); let markers = [], state = null, persistence = {};
@@ -414,6 +415,16 @@ export async function smartCompile({ timeout = 30000, save: saveChanges = false,
           ...(context.save_required && saveChanges ? {saved:false,code:'SAVE_NOT_CONFIRMED'} : {})};
       }
       completed = progress.completed;
+      if (completed && progress.validation?.code) {
+        await inspect(`(${pineCompilationStatus.toString()})(window, ${JSON.stringify(token)}, true)`);
+        return {success:false,compiled:false,report_ready:false,...progress.validation};
+      }
+      if (completed && progress.validation?.pending) continue;
+      if (completed && progress.validation?.verified) await inspect(`(() => {
+        const epoch=window.__tvCliCompilation;
+        if(epoch?.token===${JSON.stringify(token)}) {epoch.script_id=${JSON.stringify(progress.validation.script_id)};epoch.target_study_id=${JSON.stringify(progress.validation.target_id)};}
+        return true;
+      })()`);
       if (completed && context.save_required && saveChanges) {
         if (!progress.identity?.scriptIdPart || progress.modified !== false) {
           await inspect(`(${pineCompilationStatus.toString()})(window, ${JSON.stringify(token)}, true)`);
