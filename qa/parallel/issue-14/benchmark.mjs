@@ -8,13 +8,16 @@ import CDP from 'chrome-remote-interface';
 const exec=promisify(execFile), hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const workers=[{name:'a',study:'DGZDCG'},{name:'b',study:'WbFocA'}];
 const file=name=>`qa/parallel/issue-14/live/worker-${name}.json`;
-const heavy=process.env.QA_HEAVY==='1',balanced=process.env.QA_BALANCED_CACHE==='1',prefix=heavy?(balanced?'heavy-balanced-':'heavy-'):'',workloads=heavy?{a:[22,23],b:[26,27]}:{a:[22,23,24,25],b:[22,23,24,25]};
+const heavy=process.env.QA_HEAVY==='1',balanced=process.env.QA_BALANCED_CACHE==='1',prefix=heavy?(balanced?'heavy-balanced-':'heavy-'):'',workloads=heavy?(balanced?{a:[100,101],b:[120,121]}:{a:[22,23],b:[26,27]}):{a:[22,23,24,25],b:[22,23,24,25]};
 const plannedJobs=Object.values(workloads).reduce((sum,values)=>sum+values.length,0);
-const evidence={started_at:new Date().toISOString(),revision:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),workloads,planned_jobs_per_trial:plannedJobs,mode_order:heavy?[1,2,2,1]:[1,2,2,1,1,2,2,1],trials:[],
+const productDiff=execFileSync('git',['diff','--binary','HEAD','--','src','package.json'],{encoding:'utf8'}),status=execFileSync('git',['status','--porcelain'],{encoding:'utf8'});
+const evidence={started_at:new Date().toISOString(),revision:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),dirty_at_start:Boolean(status.trim()),source_dirty_at_start:Boolean(productDiff.trim()),source_diff_hash:hash(productDiff),working_tree_status:status,
+  workloads,planned_jobs_per_trial:plannedJobs,mode_order:heavy?(balanced?[1,2,2,1,2,1,1,2]:[1,2,2,1]):[1,2,2,1,1,2,2,1],trials:[],
   assignment:'static four jobs per workspace; one sequential workflow or two concurrent workflows',
   timer:'Date.now millisecond resolution; before first CLI spawn through last ledger child exit (result committed)',
   comparison:'Full ledger and all strategy metrics except live buy_hold_return / buy_hold_return_percent',
-  cache_balance:balanced?'cohort 0: 1 cold then 2 repeated; cohort 1: 2 cold then 1 repeated; same inputs within each cohort':null,
+  cache_balance:balanced?'four fresh cohorts; first/repeated per cohort; each mode first twice and repeated twice':null,
+  primary_metric:balanced?'first-request native-dominant throughput; all first-request jobs included, labels checked against repeated native times':null,
   emulation:{width:1280,height:800,focus:true,fixed:true,tab_switching:false},active_before:await activeTabs()};
 let label='warmup';
 async function cli(worker,args) {
@@ -58,9 +61,9 @@ async function bundle(worker,length) {
 try {
   const version=await CDP.Version({port:9222});evidence.desktop={browser:version.Browser,protocol:version['Protocol-Version']};
   evidence.resources=workers.map(worker=>{const w=JSON.parse(readFileSync(file(worker.name)));return {worker:worker.name,target:w.target,layout:w.layout,pine:w.pine,viewport:w.binding.snapshot.viewport,visibility:w.binding.snapshot.visibility};});
-  const warmupStart=Date.now();evidence.warmup={excluded:true,jobs:await Promise.all(workers.map(worker=>bundle(worker,heavy&&worker.name==='b'?(balanced?30:25):21))),ms:Date.now()-warmupStart};
+  const warmupStart=Date.now();evidence.warmup={excluded:true,jobs:await Promise.all(workers.map(worker=>bundle(worker,balanced?(worker.name==='a'?98:118):(heavy&&worker.name==='b'?25:21)))),ms:Date.now()-warmupStart};
   for(const [index,mode] of evidence.mode_order.entries()){
-    const currentWorkloads=balanced&&index>=2?{a:[24,25],b:[28,29]}:workloads;
+    const cohort=Math.floor(index/2),currentWorkloads=balanced?{a:[100+2*cohort,101+2*cohort],b:[120+2*cohort,121+2*cohort]}:workloads;
     label=`t${index}`;const start=Date.now(),trial={index,workers:mode,planned_jobs:plannedJobs,workloads:currentWorkloads,cache_condition:balanced?(index%2===0?'first request':'repeated request'):null,started_at:start,jobs:[]};
     if(mode===1){for(const worker of workers)for(const length of currentWorkloads[worker.name])trial.jobs.push(await bundle(worker,length));}
     else {
