@@ -1,0 +1,4 @@
+//@version=6
+indicator("CLI-QA Comments")
+// Development note: strategy.entry could be added in a strategy variant.
+plot(close)
