@@ -1,0 +1,42 @@
+[
+  {
+    "key": "document-identity",
+    "title": "[P1] pine new/open이 문서 연결을 바꾸지 않아 save가 기존 스크립트를 덮어씀",
+    "url": "https://github.com/Gudals0320/tradingview-cli/issues/4"
+  },
+  {
+    "key": "compile-completion",
+    "title": "[P1] pine compile이 잘못된 지표를 컴파일 완료 전에 성공으로 반환함",
+    "url": "https://github.com/Gudals0320/tradingview-cli/issues/5"
+  },
+  {
+    "key": "warning-errors",
+    "title": "[P2] pine errors가 경고만 있는 스크립트를 has_errors:true 및 exit 1로 반환함",
+    "url": "https://github.com/Gudals0320/tradingview-cli/issues/6"
+  },
+  {
+    "key": "save-confirmation",
+    "title": "[P2] 한국어 Pine 저장 창이 열린 채 pine save가 성공을 반환하고 저장되지 않음",
+    "url": "https://github.com/Gudals0320/tradingview-cli/issues/7"
+  },
+  {
+    "key": "console-dom",
+    "title": "[P2] pine console이 로그 대신 Pine 에디터 전체 소스를 중복 반환함",
+    "url": "https://github.com/Gudals0320/tradingview-cli/issues/8"
+  },
+  {
+    "key": "analyze-comments",
+    "title": "[P2] pine analyze가 주석의 strategy.entry를 실행 코드로 해석해 오류를 보고함",
+    "url": "https://github.com/Gudals0320/tradingview-cli/issues/9"
+  },
+  {
+    "key": "new-invalid-type",
+    "title": "[P2] pine new의 잘못된 타입이 성공 처리되며 현재 소스를 지표 템플릿으로 덮어씀",
+    "url": "https://github.com/Gudals0320/tradingview-cli/issues/10"
+  },
+  {
+    "key": "raw-compile-contract",
+    "title": "[P3] pine raw-compile이 도움말과 달리 smart compile로 동작하며 같은 전략은 실행을 생략함",
+    "url": "https://github.com/Gudals0320/tradingview-cli/issues/11"
+  }
+]
