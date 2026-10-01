@@ -1,0 +1,12 @@
+import {create,cli,state,inspect} from './harness.mjs';
+import assert from 'node:assert/strict';
+const name='CLI-QA-I13-Library';
+if(!state.documents[name])await create(name,'indicator',`//@version=6\nindicator("${name}")\nplot(close)\n`);
+const source=`//@version=6\nlibrary("CLI_QA_I13_Math")\nexport twice(float x)=>x*2\n`;
+await cli('R4-set-library',['pine','set'],{input:source});await cli('R4-save-library',['pine','save']);
+const checked=await cli('R4-light-check',['pine','check'],{input:source});assert.equal(checked.out.compiled,true);assert.equal(checked.out.desktop_validated,false);
+const before=await inspect();const refusal=await cli('R4-chart-refusal',['pine','compile'],{exit:1});assert.equal(refusal.out.code,'LIBRARY_NOT_APPLICABLE');assert.equal(refusal.out.chart_changed,false);assert.equal(refusal.after.studies.length,before.studies.length);
+const bad=source.replace('CLI_QA_I13_Math','CLI QA I13 Math');await cli('R4-bad-title-set',['pine','set'],{input:bad});
+const local=await cli('R4-bad-title-check',['pine','check'],{input:bad,exit:1});assert.equal(local.out.code,'INVALID_LIBRARY_TITLE');assert.equal(local.out.errors[0].line,2);
+const native=await cli('R4-bad-title-compile',['pine','compile'],{exit:1});assert.equal(native.out.code,'INVALID_LIBRARY_TITLE');assert.equal(native.after.studies.length,before.studies.length);
+await cli('R4-restore-library',['pine','set'],{input:source});
