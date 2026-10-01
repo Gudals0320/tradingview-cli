@@ -52,6 +52,26 @@ export function requestPineEditor(document, tradingView) {
   return null;
 }
 
+/** Controller owns script identity; Monaco.setValue only changes its text. */
+export function findPineController(document) {
+  for (const container of document.querySelectorAll('.monaco-editor.pine-editor-monaco')) {
+    if (container.offsetParent === null) continue;
+    let node = container, fiber;
+    for (let depth = 0; depth < 20 && node; depth++, node = node.parentElement) {
+      const key = Object.keys(node).find(name => name.startsWith('__reactFiber$'));
+      if (key) { fiber = node[key]; break; }
+    }
+    for (let depth = 0; depth < 30 && fiber; depth++, fiber = fiber.return) {
+      for (const props of [fiber.memoizedProps, fiber.alternate?.memoizedProps]) {
+        const value = props?.value;
+        if (typeof value?.openNewScript === 'function' && typeof value?.openScript === 'function'
+          && typeof value?.getScriptIdVersion === 'function' && value?._editorStore) return value;
+      }
+    }
+  }
+  return null;
+}
+
 export function clickPineCompileButton(document) {
   const buttons = Array.from(document.querySelectorAll('button')).filter((button) =>
     button.offsetParent !== null && !button.disabled && button.getAttribute('aria-disabled') !== 'true');

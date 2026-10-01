@@ -4,7 +4,7 @@
  * They throw on error (callers catch and format).
  */
 import { evaluate, evaluateAsync, getClient } from '../connection.js';
-import { findPineEditor, requestPineEditor, clickPineCompileButton } from './desktop-dom.js';
+import { findPineEditor, findPineController, requestPineEditor, clickPineCompileButton } from './desktop-dom.js';
 import { STRATEGY_PAGE_CODE, splitMarkers, formatDiagnostic } from '../strategy-state.js';
 import { sourceHash } from '../session.js';
 import { randomUUID } from 'node:crypto';
@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 // Shared helpers execute unchanged in the page and in offline DOM regression tests.
 const FIND_MONACO = `(${findPineEditor.toString()})(document)`;
 const CLICK_COMPILE = `(${clickPineCompileButton.toString()})(document)`;
+const FIND_CONTROLLER = `(${findPineController.toString()})(document)`;
 
 /** Open the Pine panel once, then wait for its editor to mount. */
 export async function ensurePineEditorOpen({ _deps } = {}) {
@@ -405,11 +406,11 @@ export async function smartCompile({ timeout = 30000, _deps } = {}) {
     compilation_token: activeToken, report_ready: false, ...(awaiting && { compile_performed: false }) };
 }
 
-export async function newScript({ type }) {
+export async function newScript({ type, _deps }) {
   if (!['indicator', 'strategy', 'library'].includes(type)) {
     throw new Error(`Invalid Pine script type "${type}". Expected indicator, strategy, or library.`);
   }
-  const editorReady = await ensurePineEditorOpen();
+  const editorReady = _deps ? true : await ensurePineEditorOpen();
   if (!editorReady) throw new Error('Could not open Pine Editor.');
 
   const typeMap = { indicator: 'indicator', strategy: 'strategy', library: 'library' };
@@ -421,14 +422,16 @@ export async function newScript({ type }) {
 
   const template = templates[type] || templates.indicator;
 
-  // Simply set the source to a new template — this is the most reliable approach
+  // Await the document transition before replacing the asynchronous template.
   const escaped = JSON.stringify(template);
-  const set = await evaluate(`
-    (function() {
+  const set = await (_deps?.evaluateAsync || evaluateAsync)(`
+    (async function() {
+      var controller = ${FIND_CONTROLLER};
+      if (!controller) throw new Error('Pine document controller unavailable; cannot safely create a script.');
+      await controller.openNewScript(${JSON.stringify(type)});
+      await controller.setScript(${escaped});
       var m = ${FIND_MONACO};
-      if (!m) return false;
-      m.editor.setValue(${escaped});
-      return true;
+      return !controller.getScriptIdVersion()?.scriptIdPart && m?.editor.getValue() === ${escaped};
     })()
   `);
 
@@ -437,13 +440,13 @@ export async function newScript({ type }) {
   return { success: true, type, action: 'new_script_created', template: typeMap[type] };
 }
 
-export async function openScript({ name }) {
-  const editorReady = await ensurePineEditorOpen();
+export async function openScript({ name, _deps }) {
+  const editorReady = _deps ? true : await ensurePineEditorOpen();
   if (!editorReady) throw new Error('Could not open Pine Editor.');
 
   const escapedName = JSON.stringify(name.toLowerCase());
 
-  const result = await evaluateAsync(`
+  const result = await (_deps?.evaluateAsync || evaluateAsync)(`
     (function() {
       var target = ${escapedName};
       return fetch('https://pine-facade.tradingview.com/pine-facade/list/?filter=saved', { credentials: 'include' })
@@ -472,12 +475,16 @@ export async function openScript({ name }) {
             .then(function(data) {
               var source = data.source || '';
               if (!source) return {error: 'Script source is empty', name: match.scriptName || match.scriptTitle};
-              var m = ${FIND_MONACO};
-              if (m) {
-                m.editor.setValue(source);
-                return {success: true, name: match.scriptName || match.scriptTitle, id: id, lines: source.split('\\n').length};
-              }
-              return {error: 'Monaco editor not found to inject source', name: match.scriptName || match.scriptTitle};
+              var controller = ${FIND_CONTROLLER};
+              if (!controller) throw new Error('Pine document controller unavailable; cannot safely open a script.');
+              return controller.openScript({scriptIdPart:id, version:ver}).then(function() {
+                var m = ${FIND_MONACO};
+                if (controller.getScriptIdVersion()?.scriptIdPart !== id || !m ||
+                    m.editor.getValue().replace(/\\r\\n/g, '\\n') !== source.replace(/\\r\\n/g, '\\n')) {
+                  throw new Error('Pine document identity/source did not match the requested script.');
+                }
+                return {success:true,name:match.scriptName || match.scriptTitle,id:id,lines:source.split('\\n').length};
+              });
             });
         })
         .catch(function(e) { return {error: e.message}; });
