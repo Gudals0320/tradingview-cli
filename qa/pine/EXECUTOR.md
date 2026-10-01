@@ -39,6 +39,9 @@ Date: 2026-10-01 KST. No new worktree, merge, PR or push.
 ## Review
 
 Reviewer: `01a0f504-e284-7e21-be27-7c56c82b7cf6`, Opus 5.5 / Medium.
-Reviewer agreed #4, #6, #7, #9, #10, #11 and approved the #8 code with the split-view
-limitation documented. The final #5 saved-state verification (`f7984bb`) and this
-integration/evidence commit are awaiting the final agreement message.
+Reviewer explicitly agreed completion of **all issues #4–#11** at `ec701a6`.
+The reviewer independently confirmed 297 passing tests, lint, clean status and
+the sanitized evidence. The final #5 saved-state verification (`f7984bb`) and the
+#8 closed-log evidence/known limitations were accepted. The remaining limitations
+above are part of this agreement. The reviewer authorized this documentation-only
+agreement record without another review; the branch is left clean for the user.

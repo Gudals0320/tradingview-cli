@@ -143,5 +143,7 @@ Lead will stop polling and await an explicit question.
 - Final offline suite (network tests disabled): 297 passed, 0 failed; lint passed.
   `npm test` includes the new lifecycle, diagnostics and compilation test files.
   The broad general-purpose E2E suite remains outside this focused QA scope.
-- Reviewer final agreement is recorded in the chat and `EXECUTOR.md` once received.
+- Reviewer explicitly agreed all issues #4–#11 at `ec701a6`; the agreement is
+  recorded in the reviewer chat and `EXECUTOR.md`. Only this agreement record was
+  updated afterward, with the reviewer's approval and no product changes.
   No merge, PR or push was requested or performed.
