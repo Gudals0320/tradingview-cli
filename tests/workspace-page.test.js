@@ -58,4 +58,9 @@ describe('atomic workspace page guards', () => {
     const f = fixture(); f.window.__tvCliWorkspace.controller = {};
     assert.throws(() => f.call('guardWorkspacePage', f.owner), /GENERATION_CHANGED/);
   });
+  it('permits native save retranslation but rejects unrelated input changes', () => {
+    const f = fixture();f.call('startWorkspacePage', f.owner, 'op', { save: true });
+    f.inputs[1].value = 'new compiled identity';f.call('guardWorkspacePage', f.owner);
+    f.inputs[2].value = 99;assert.throws(() => f.call('guardWorkspacePage', f.owner), /EXTERNAL_CHANGE/);
+  });
 });

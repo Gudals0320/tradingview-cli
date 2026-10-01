@@ -169,7 +169,7 @@ export function abandonWorkspace(file, { workspaceId, operationId } = {}, option
     if (expected && operationId !== expected) fail('WORKSPACE_OPERATION_MISMATCH', 'Pass the exact active/interrupted operation ID.');
     if (row.operation) {
       try { process.kill(row.operation.pid, 0); fail('WORKSPACE_BUSY', 'Active PID still exists; cannot abandon.'); }
-      catch (error) { if (error.code !== 'ESRCH') throw error; }
+      catch (error) { if (error.code !== 'ESRCH') fail('WORKSPACE_BUSY', 'Active PID exists or cannot be verified; cannot abandon.'); }
     }
     const directory = join(dirname(row.file), '.tv-workspaces', row.id);
     mkdirSync(directory, { recursive: true });

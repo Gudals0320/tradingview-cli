@@ -73,8 +73,10 @@ export function guardWorkspacePage(window, document, owner) {
       const expected = old.inputs.map(input => Object.hasOwn(permit.inputs, input.id) ? { ...input, value: permit.inputs[input.id] } : input);
       if (JSON.stringify(current.inputs) !== JSON.stringify(expected)) fail();
       delete permit.inputs;
-    } else if (permit.save && old?.id === current?.id && JSON.stringify(old?.inputs) === JSON.stringify(current?.inputs)) {
-      // Saving changes the editor version without requiring chart application.
+    } else if (permit.save && old?.id === current?.id) {
+      // Native save may retranslate the same study. Preserve all ordinary inputs.
+      const stable = inputs => inputs?.filter(input => !['text', 'pineVersion', 'pineFeatures'].includes(input.id));
+      if (JSON.stringify(stable(old?.inputs)) !== JSON.stringify(stable(current?.inputs))) fail();
     } else fail();
     before.studies = actual.studies; before.version = actual.version;
   }

@@ -21,7 +21,7 @@ try {
   // Editing the owned source must not switch B's document or change its source.
   const sourceBeforeB=await identity('b');
   const changed=await cli(['pine','set','--file','qa/parallel/issue-14/missing-fixture.pine'],{workspace:'a'});
-  evidence.empty_source_validation=changed;
+  evidence.missing_source_file_validation=changed;
   writeFileSync(new URL('live/fixture-a-edited.pine',import.meta.url),readFileSync(new URL('fixture-a.pine',import.meta.url),'utf8')+'// Independent workspace source mutation\n');
   await run(['pine','set','--file','qa/parallel/issue-14/live/fixture-a-edited.pine']);
   assert.deepEqual(await identity('b'),sourceBeforeB);
