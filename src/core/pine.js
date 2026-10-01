@@ -259,11 +259,11 @@ export async function setSource({ source }) {
 
 export async function compile() { return smartCompile(); }
 
-export async function getErrors() {
-  const editorReady = await ensurePineEditorOpen();
+export async function getErrors({ _deps } = {}) {
+  const editorReady = _deps ? true : await ensurePineEditorOpen();
   if (!editorReady) throw new Error('Could not open Pine Editor.');
 
-  const errors = await evaluate(`
+  const markers = await (_deps?.evaluate || evaluate)(`
     (function() {
       var m = ${FIND_MONACO};
       if (!m) return [];
@@ -276,11 +276,14 @@ export async function getErrors() {
     })()
   `);
 
+  const { errors, warnings } = splitMarkers(markers || []);
   return {
     success: true,
-    has_errors: errors?.length > 0,
-    error_count: errors?.length || 0,
-    errors: errors || [],
+    has_errors: errors.length > 0,
+    error_count: errors.length,
+    warning_count: warnings.length,
+    errors,
+    warnings,
   };
 }
 
