@@ -40,3 +40,14 @@ Executor. Executor requests Reviewer when needed; no merge or PR.
 No product source or existing tests were modified by Lead. This is a workflow
 validation attempt of every requested command, not exhaustive certification of
 all OS/language/error/latency combinations. Issue links are in `issues/index.json`.
+
+## Executor regression
+
+All eight defects have focused fixes and tests. `npm test` now runs the new
+Pine lifecycle, diagnostics and compilation tests: 297 passed / 0 failed with
+network tests disabled; lint passed. Actual CLI assertions and sanitized results
+are in `executor-regression.mjs`, `executor-compile-regression.mjs` and their
+evidence JSON files. The document/save round trips, invalid→warning→corrected
+compilation, repeated indicator counts and explicit `--save` flow passed.
+Reviewer agreement/status is recorded in `EXECUTOR.md`; detailed limitations and
+the retained disposable QA assets are listed in `HANDOFF.md`.

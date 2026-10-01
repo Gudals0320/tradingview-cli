@@ -1,0 +1,405 @@
+{
+  "target_layout": "CLI-QA-Pine-20261001",
+  "saved_indicator_study_count": {
+    "before": 17,
+    "after": 17
+  },
+  "fresh_indicator_study_count": {
+    "before": 17,
+    "first_compile": 18,
+    "second_compile": 18
+  },
+  "records": [
+    {
+      "label": "executor-repeat-open-saved",
+      "args": [
+        "pine",
+        "open",
+        "CLI-QA-20261001 Indicator"
+      ],
+      "elapsed_ms": 544,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "name": "CLI-QA-20261001 Indicator",
+        "lines": 7,
+        "opened": true
+      }
+    },
+    {
+      "label": "executor-repeat-original-get",
+      "args": [
+        "pine",
+        "get"
+      ],
+      "elapsed_ms": 143,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "line_count": 7,
+        "char_count": 266
+      }
+    },
+    {
+      "label": "executor-repeat-saved-first",
+      "args": [
+        "pine",
+        "compile"
+      ],
+      "elapsed_ms": 135,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "compiled": true,
+        "compile_performed": false,
+        "unchanged": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": []
+      }
+    },
+    {
+      "label": "executor-repeat-saved-second",
+      "args": [
+        "pine",
+        "compile"
+      ],
+      "elapsed_ms": 141,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "compiled": true,
+        "compile_performed": false,
+        "unchanged": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": []
+      }
+    },
+    {
+      "label": "executor-save-required-set",
+      "args": [
+        "pine",
+        "set"
+      ],
+      "elapsed_ms": 137,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "lines_set": 8
+      }
+    },
+    {
+      "label": "executor-save-required-compile",
+      "args": [
+        "pine",
+        "compile"
+      ],
+      "elapsed_ms": 129,
+      "exit_code": 1,
+      "output": {
+        "success": false,
+        "compiled": false,
+        "code": "SAVE_REQUIRED",
+        "error": "This saved script has unsaved changes. Run pine save first or compile with --save."
+      }
+    },
+    {
+      "label": "executor-explicit-save-compile",
+      "args": [
+        "pine",
+        "compile",
+        "--save"
+      ],
+      "elapsed_ms": 778,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "compiled": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": [],
+        "saved": true,
+        "button_clicked": "updateOnChart"
+      }
+    },
+    {
+      "label": "executor-repeat-restore-set",
+      "args": [
+        "pine",
+        "set"
+      ],
+      "elapsed_ms": 132,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "lines_set": 7
+      }
+    },
+    {
+      "label": "executor-repeat-restore-save",
+      "args": [
+        "pine",
+        "save"
+      ],
+      "elapsed_ms": 702,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "saved": true,
+        "action": "saved",
+        "version": "17.0"
+      }
+    },
+    {
+      "label": "executor-repeat-new",
+      "args": [
+        "pine",
+        "new",
+        "indicator"
+      ],
+      "elapsed_ms": 182,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "type": "indicator",
+        "action": "new_script_created",
+        "template": "indicator"
+      }
+    },
+    {
+      "label": "executor-repeat-new-set",
+      "args": [
+        "pine",
+        "set"
+      ],
+      "elapsed_ms": 137,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "lines_set": 4
+      }
+    },
+    {
+      "label": "executor-repeat-new-first",
+      "args": [
+        "pine",
+        "compile"
+      ],
+      "elapsed_ms": 591,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "compiled": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": [],
+        "button_clicked": "addToChart"
+      }
+    },
+    {
+      "label": "executor-repeat-new-second",
+      "args": [
+        "pine",
+        "compile"
+      ],
+      "elapsed_ms": 139,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "compiled": true,
+        "compile_performed": false,
+        "unchanged": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": []
+      }
+    },
+    {
+      "label": "executor-draft-invalid-set",
+      "args": [
+        "pine",
+        "set",
+        "--file",
+        "qa/pine/invalid.pine"
+      ],
+      "elapsed_ms": 141,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "lines_set": 4
+      }
+    },
+    {
+      "label": "executor-draft-invalid-compile",
+      "args": [
+        "pine",
+        "compile"
+      ],
+      "elapsed_ms": 787,
+      "exit_code": 1,
+      "output": {
+        "success": false,
+        "compiled": false,
+        "has_errors": true,
+        "errors": [
+          {
+            "line": 3,
+            "column": 6,
+            "message": "Could not find function or function reference 'qa_missing_function'",
+            "severity": 8
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "label": "executor-draft-error-console",
+      "args": [
+        "pine",
+        "console"
+      ],
+      "elapsed_ms": 132,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "entry_count": 6
+      }
+    },
+    {
+      "label": "executor-draft-warning-set",
+      "args": [
+        "pine",
+        "set",
+        "--file",
+        "qa/pine/warning.pine"
+      ],
+      "elapsed_ms": 139,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "lines_set": 7
+      }
+    },
+    {
+      "label": "executor-draft-warning-compile",
+      "args": [
+        "pine",
+        "compile"
+      ],
+      "elapsed_ms": 566,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "compiled": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": [],
+        "button_clicked": "addToChart"
+      }
+    },
+    {
+      "label": "executor-draft-warning-errors",
+      "args": [
+        "pine",
+        "errors"
+      ],
+      "elapsed_ms": 142,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "has_errors": false,
+        "error_count": 0,
+        "warning_count": 0,
+        "errors": [],
+        "warnings": []
+      }
+    },
+    {
+      "label": "executor-draft-warning-errors",
+      "args": [
+        "pine",
+        "errors"
+      ],
+      "elapsed_ms": 135,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "has_errors": false,
+        "error_count": 0,
+        "warning_count": 1,
+        "errors": [],
+        "warnings": [
+          {
+            "line": 5,
+            "column": 14,
+            "message": "The function \"ta.sma\" should be called on each calculation for consistency. It is recommended to extract the call from this scope",
+            "severity": 4
+          }
+        ]
+      }
+    },
+    {
+      "label": "executor-draft-corrected-set",
+      "args": [
+        "pine",
+        "set",
+        "--file",
+        "qa/pine/indicator.pine"
+      ],
+      "elapsed_ms": 140,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "lines_set": 7
+      }
+    },
+    {
+      "label": "executor-draft-corrected-compile",
+      "args": [
+        "pine",
+        "compile"
+      ],
+      "elapsed_ms": 596,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "compiled": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": [],
+        "button_clicked": "addToChart"
+      }
+    },
+    {
+      "label": "executor-final-copy-open-after-compile",
+      "args": [
+        "pine",
+        "open",
+        "CLI-QA-20261001 Copy"
+      ],
+      "elapsed_ms": 801,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "name": "CLI-QA-20261001 Copy",
+        "lines": 12,
+        "opened": true
+      }
+    },
+    {
+      "label": "executor-final-copy-get-after-compile",
+      "args": [
+        "pine",
+        "get"
+      ],
+      "elapsed_ms": 132,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "line_count": 12,
+        "char_count": 280
+      }
+    }
+  ]
+}

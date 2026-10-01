@@ -95,3 +95,53 @@ Existing #2 concerns concurrent GUI editing/recovery and is outside this scope.
 All issue titles/bodies were read back from GitHub and compared to local drafts.
 Lead handoff is complete once artifacts are committed and Executor dispatched;
 Lead will stop polling and await an explicit question.
+
+## Executor results — 2026-10-01 KST
+
+- Reviewer chat: `01a0f504-e284-7e21-be27-7c56c82b7cf6`, requested Opus 5.5 / Medium.
+  Fast mode has no API field and was not verified.
+- Fixes are preserved in separate commits: #9 `843739c` + `fc59f12`,
+  #10 `a2caf3d`, #4 `a099564` + `ce09ca4`, #6 `6470b3b`, #8 `5aa9d92`,
+  #7 `17a0f9c` + `9c99ac3`, #5 `3978948` + `7c18a9b` + `f7984bb`, #11 `8615dd3`.
+- `executor-regression.mjs` asserts the actual CLI document/save round trips;
+  `executor-evidence.json` omits source, script IDs, strategy blobs and user tabs.
+  A new document saved/reopened correctly and retained the old A source. Opening
+  A from B, editing/saving A, then reopening B retained B's source; A's update was
+  present when reopened. A was restored and saved; final editor is the original
+  QA Copy strategy, verified against the fixture.
+- `new/open` replace unsaved editor changes without another confirmation. This
+  behavior is documented in README. Actual unsaved→open and unsaved→new library
+  completed promptly; indicator, strategy and library templates were accepted.
+- `executor-compile-evidence.json`: saved indicator repeated compile study count
+  17→17; fresh indicator first application 17→18, repeated compile retained 18.
+  A pending applied indicator is awaited rather than dispatched again. Invalid
+  draft compilation returned one fatal diagnostic and exit 1; correction passed.
+- Editing an already saved script and compiling without `--save` now returns
+  `SAVE_REQUIRED` / exit 1 before any chart or persistence action. `--save` is
+  explicit permission and successful persistence is reported with `saved:true`
+  and `script_id`. Draft compilation still uses Desktop's temporary draft path.
+- Native save waits for completion and verifies the saved server source against
+  the editor. A Korean script-name dialog is confirmed once using scoped stable
+  attributes, input and title. Desktop suggests the script declaration title;
+  duplicate QA titles were suffixed (`Indicator 1`, `Indicator 2`) with new IDs.
+  A deliberately canceled QA name dialog returned `success:false, saved:false`.
+  Timeout and interrupted-process stale lock recovery are covered by tests.
+- Console QA used the overlay editor. Korean 오전 timestamps and compiler error
+  levels were retained; the real `logContainer/msg` row structure was captured.
+  Closing Pine Logs removed the QA log row and retained only the compiler/editor
+  message. Split view was not tested. `executor-console-evidence.json` records it.
+- Monaco warning markers can arrive after the native action completes. The live
+  warning-only `errors` check was polled until the marker appeared; it reported
+  warning_count 1, error_count 0, has_errors false and exit 0.
+- Additional disposable QA saved scripts/layout studies are retained as QA
+  assets, including `CLI-QA-20261001 Executor New`, suffixed Indicator documents,
+  temporary Compile Repeat drafts and studies created during reproduction.
+  The Canceled QA script-name dialog was canceled before saving; no named Canceled
+  script was created. The final list includes 12 saved account scripts, including
+  the retained QA assets; unrelated personal script contents were not changed.
+  Personal scripts and the original user layouts were not changed.
+- Final offline suite (network tests disabled): 297 passed, 0 failed; lint passed.
+  `npm test` includes the new lifecycle, diagnostics and compilation test files.
+  The broad general-purpose E2E suite remains outside this focused QA scope.
+- Reviewer final agreement is recorded in the chat and `EXECUTOR.md` once received.
+  No merge, PR or push was requested or performed.
