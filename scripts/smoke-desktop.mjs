@@ -172,7 +172,7 @@ try {
     writeFileSync(join(root, script.includes('pine') ? 'smoke-pine-private-run.json' : 'smoke-layout-private-run.json'), JSON.stringify(phase));
     assert.equal(phase.status, 0, phase.stderr);
     check(script.includes('pine') ? 'full dedicated Pine/workspace regression phase' : 'full dedicated layout/dialog regression phase',
-      'live natural QA only', () => {});
+      script.includes('pine') ? 'live natural QA + explicitly held workspace operation' : 'live natural QA + explicitly labeled layout injections', () => {});
   }
 } finally {
   const after = await protectedState();

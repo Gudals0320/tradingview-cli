@@ -8,8 +8,8 @@ import { writeFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 
 const root = resolve('results/issue-overhaul');
-const summary = { evidence: 'Korean Windows Desktop live natural QA layout dialogs', checks: [] };
-const record = name => { summary.checks.push({ name, passed: true }); console.log(name); };
+const summary = { evidence: 'Korean Windows Desktop natural QA switches and explicitly labeled injections', checks: [] };
+const record = (name, evidence = 'live natural QA only') => { summary.checks.push({ name, evidence, passed: true }); console.log(name); };
 const inventory = () => withReadOnlySession(() => getDesktopInventory());
 async function layoutTab(name) {
   const state = await inventory();
@@ -73,7 +73,7 @@ try {
     await new Promise(resolve=>setTimeout(resolve,250));
   }
   assert.equal(rebound,true,'Explicit QA generation destruction/stable rebind did not recover.');
-  record('opaque no-op stays fenced until explicit QA reload invalidates generation and stable rebind verifies');
+  record('opaque no-op stays fenced until explicit QA reload invalidates generation and stable rebind verifies', 'live injected void loader + explicit QA-only reload');
 
   originalSymbol = run(b, ['state']).value.symbol;
   const changed = originalSymbol === 'BINANCE:SOLUSDT' ? 'BINANCE:BTCUSDT' : 'BINANCE:SOLUSDT';
@@ -105,7 +105,7 @@ try {
   assert.equal(terminal.pending,false);assert.equal(terminal.state,'cancelled');assert.equal(terminal.action,'cancel');
   const recovery = run(b, ['session', 'status']).value;
   if (recovery.recovery_required) assert.equal(run(b, ['session', 'recover', '--run-id', recovery.recovery_run_id]).exit, 0);
-  record('late Korean QA-B confirmation remains fenced, captured Cancel settles and recovery clears without reload');
+  record('late Korean QA-B confirmation remains fenced, captured Cancel settles and recovery clears without reload', 'live injected 6500ms delay + natural Korean confirmation and captured Cancel');
 } finally {
   if(b)await withReadOnlySession(()=>inspectTarget(b,`(()=>{if(window.__qaOriginalLayoutLoader){window.TradingViewApi.loadChartFromServer=window.__qaOriginalLayoutLoader;delete window.__qaOriginalLayoutLoader;}return true})()`));
   if (b && originalSymbol) assert.equal(run(b, ['symbol', originalSymbol]).exit, 0);
