@@ -2,6 +2,23 @@
 
 ## Scope and ownership
 
+PR #23 is reopened after independent adversarial review of `ab0f463` found R1–R4.
+The previous final agreement and all-complete conclusion are superseded. H2/H7,
+F02/F03/F08 and native error/recovery/transport completion are not complete until
+the counterexamples below pass on a newly reviewed SHA. Original bug-asserting
+reproductions and private evidence in ignored results/pr23-review are preserved.
+
+- [ ] R1: post-dispatch observation/transport/progress errors must retain native fences independently of error class; pre-dispatch failures must clean safely.
+- [ ] R2: uncertain layout expansion must abort capacity fallback, provisioning and new tabs; quiescence requires all actual mutations settled.
+- [ ] R3: recovery must verify every recorded target and inactive pane; missing/unreadable/pending state must preserve the journal.
+- [ ] R4: CDP discovery and a never-upgrading TCP/WebSocket handshake must own cancellable transport and leave no child/socket alive after a deadline.
+
+Current restrictions: QA-A only for compile injection, no alert/personal-watchlist
+mutation, no live multi-feed with a personal tab. On resume the user explicitly
+preserved unsaved work and authorized a debug restart. Port 9222 already responded,
+so no additional restart was performed. The old QA smoke draft's server deletion
+was not verified; no deletion claim is made.
+
 Resolve all problems in open issues [19](https://github.com/Gudals0320/tradingview-cli/issues/19), [20](https://github.com/Gudals0320/tradingview-cli/issues/20), [21](https://github.com/Gudals0320/tradingview-cli/issues/21), and [22](https://github.com/Gudals0320/tradingview-cli/issues/22), including comments and N1–N3. Do not stop at the suggested P1 subset. Unconfirmed hypotheses require investigation and an evidence-based disposition; absence of reproduction is not proof of absence.
 
 - Baseline: `1780383fdfc5b72b2beaab08fb71b0555222817c`, latest origin/main when fetched on 2026-10-01 KST.
@@ -69,12 +86,12 @@ Candidate dispositions below are reconciled against implementation, regression s
 - [x] #21/4: 레포 비대화 — fixed: raw/private trials ignored, concise summaries/harnesses retained, .rgignore excludes historical bulk without rewriting history; operation-contracts policy.
 - [x] #21/5: 코드 위생 (P3) — fixed+test: upstream reference qualification, encoded Pine open, fail-closed list, declaration/constants cleanup and stream contracts; child rows and regression suites.
 - [x] #22/H1: stream 종료 시 lease가 해제되지 않고, 남은 lock이 workspace 등록을 계속 막음 — prior verdict: 재현됨; disposition: fixed+test+live: stream return/signal cleanup and dead lease reclamation under admission; session/lifetime and Desktop hard-kill fixtures.
-- [x] #22/H2: 실패한 compile·save가 남긴 page 상태 때문에 workspace가 영구적으로 `NATIVE_BUSY`가 될 수 있음 — prior verdict: 부분 재현; disposition: fixed+test+live injection: undispatched failures retire observers, dispatched promises stay fenced until authoritative quiescence; lifetime/pine_lifecycle/layout-lifetime tests.
+- [ ] #22/H2: 실패한 compile·save가 남긴 page 상태 때문에 workspace가 영구적으로 `NATIVE_BUSY`가 될 수 있음 — reopened R1/R3; corrected in b78aa6c, regression and QA injection pass; final independent review pending.
 - [x] #22/H3: `parseArgs({strict:false})` 때문에 인자 오류가 조용히 다른 동작으로 바뀜 — prior verdict: 부분 재현; disposition: fixed+test (arguments.test.js)
 - [x] #22/H4: `indicator set`이 존재하지 않는 input id를 무시하고 성공을 반환함 — prior verdict: 재현됨; disposition: fixed+test (arguments.test.js)
 - [x] #22/H5: `stream ohlcv`가 사용자의 기존 차트 pane과 레이아웃을 덮어씀 — prior verdict: 판단 불가; disposition: fixed+VM/adapter test: existing panes preserved by default, exact reassignment authorization required; multi_feed/data-contracts tests. Live provisioning intentionally unverified with personal tab present.
 - [x] #22/H6: `layout switch`가 미저장 변경을 자동으로 폐기함 — prior verdict: 재현 안 됨; disposition: investigated: automatic discard was not reproduced; confirmed Korean false-success fixed under N1/X1. No production dialog dismissal; layout-lifetime tests and QA cancellation.
-- [x] #22/H7: 모든 CDP 호출과 page 내 promise에 타임아웃이 없어, 하나의 hang이 전체 CLI를 막음 — prior verdict: 부분 재현; disposition: fixed+test+live injection: bounded connected CDP requests and strong native promise registry; timeout is not cancellation; lifetime/session/layout-lifetime tests.
+- [ ] #22/H7: 모든 CDP 호출과 page 내 promise에 타임아웃이 없어, 하나의 hang이 전체 CLI를 막음 — reopened R2/R4; corrected in b78aa6c/419c7b3, deadline/fence and real TCP cleanup tests pass; final independent review pending.
 - [x] #22/M1: 전략 컴파일에서 리포트 fingerprint 변화만으로 새 결과를 채택할 수 있음 — prior verdict: 재현 안 됨; disposition: investigated, no demonstrated early-ready defect: native compiled source/status/report trace (91 samples in prior QA fixture) and strategy_state/pine_targets regressions; retained legitimate fast/same-source behavior, no forced cycle.
 - [x] #22/M2: `quote SYMBOL`의 차트 복원 실패를 삼키고, 거래소가 다른 같은 티커는 전환하지 않음 — prior verdict: 부분 재현; disposition: fixed+test+live: qualified exchange identity and truthful restore/read-back; data-contracts and QA quote restoration.
 - [x] #22/M3: `pane symbol`이 focus 성공 여부를 확인하지 않고 "현재 활성 차트"를 바꿈 — prior verdict: 재현 안 됨; disposition: defensive fix+test: requested widget dispatch and verified focus/read-back; chart_indicator tests. Prior live focus itself worked; no claim of reproduced wrong-pane mutation.
@@ -155,13 +172,13 @@ All rows retain individual completion evidence; parent rows close only after eve
 - [x] #21/5h stream EPIPE/port/shared path — fixed+test+live: stream returns after signal/EPIPE, validates port, reuses shared collectors; lifetime/arguments tests and Desktop stream fixtures.
 - [x] #21/5i network test documentation — fixed: CONTRIBUTING describes offline/network discovery and dedicated smoke prerequisites.
 - [x] #22/F01: resolved: strict pre-admission parser/input contracts; arguments tests; Group A.
-- [x] #22/F02: resolved: lease/admission/cleanup lifetime; session/workspace-runtime tests and hard-kill fixtures; Group B.
-- [x] #22/F03: resolved: native phase/observer terminal fences; lifetime/pine_lifecycle/layout-lifetime tests and injected recovery; Group B/E1.
+- [ ] #22/F02: reopened R1–R4: corrected phase/transport/recovery lifetime; focused and integration validation pass; final independent review pending.
+- [ ] #22/F03: reopened R1–R3: dispatch errors retain terminal fences; every target/pane is probed; final independent review pending.
 - [x] #22/F04: resolved: resource preservation, explicit confirmations, late callback bounds; multi_feed/tab/layout-lifetime tests; Group C/E1.
 - [x] #22/F05: resolved: exact target identity and verified UID/pane/tab outcomes; tab/chart_indicator/layout-lifetime tests and QA layout smoke.
 - [x] #22/F06: resolved: context/exchange restoration/range/timeframe semantics; data-contracts/chart_history/arguments tests and QA quote/1m smoke.
 - [x] #22/F07: resolved: table shape, limits/order semantics, compiled-text exclusion; extraction/data-contracts tests and QA graphics smoke.
-- [x] #22/F08: resolved: bounded feed alias/provision/recovery client lifetime; multi_feed tests; VM-only under protected personal-tab policy.
+- [ ] #22/F08: reopened R2/R3: unknown layout outcomes abort fallback and all recorded resources participate in recovery; VM/adapter validation only; final independent review pending.
 - [x] #22/F09: resolved: pure observation, fail-closed lists and owned focus; command-policy/data-contracts tests and live read hashes; no personal watchlist writes.
 - [x] #22/F10: resolved: verified persistence and draft distinction; pine_lifecycle/pine_outcome tests and QA save/draft smoke.
 - [x] #22/F11: resolved: analyzer confidence and exit contract; pine_analyze/CLI tests.
@@ -250,3 +267,18 @@ Final code candidate `8c75ec4` (later edits only reconcile this ledger and label
 - Positive supported undefined+Cancel and negative no-capture, other non-boolean, wrong dialog/superseded token, unsettled chain and outstanding native-work regressions passed. Strict false/no-decision, switched and rejected outcomes remain tested. The older historical recovery description above is explicitly superseded.
 - Failed strict-false live trial: ignored review-final-layout.log and review-cancel-outcome.json. An immediate retry encountered its old page watcher and retained journal; that failure remains in review-final-layout-rerun.log. Exact saved QA-B invalidation and stable recovery cleaned the old watcher, without manually clearing a fence or touching a personal tab. Cleanup evidence is review-trial-cleanup.log.
 - Final correction validation: npm test 427/427, lint pass, npm run test:network 432/432 (427 offline plus five network checks). The fresh delayed-Cancel QA layout rerun passed all four checks, including natural B-to-A-to-B, injected opaque loader/invalidation and delayed real Korean Cancel with recovery without reload. Ignored agreed-final-{unit,network,layout}.log retain these trials; the prior full Desktop smoke on a1d43a0 remains valid evidence for unchanged Pine/read/lifetime phases.
+
+### Reopened adversarial review candidate (2026-10-02 KST)
+
+The preceding final agreements are historical. Independent report R1–R4 against
+ab0f463 superseded them; affected rows above remain open until new SHA agreement.
+Original bug-asserting repros/report and unsuccessful initial repair trials remain
+unchanged in ignored results/pr23-review. No issue is closed by removing evidence.
+
+- b78aa6c fixes R1–R3: compile dispatch/verified native outcome are tracked independently of error class; exact-token cancellation proves only undispatched work. Unknown compile/finalizer/save dispatch errors retain recovery. Layout expansion stops on unknown errors; only explicitly terminal capacity refusal permits fallback. Mutating feed promises are tracked, every mutated target must still be readable, and recovery verifies all historical targets, recorded panes, inactive loading/calculation and native tokens. Missing/unreadable/pending state retains NATIVE_BUSY. Clients are closed separately from remote-object cleanup.
+- 419c7b3 fixes R4: discovery/protocol/static HTTP requests are owned and aborted on deadline; the Chrome instance is owned before upgrade, enabling reset/termination of an incomplete handshake. Cleanup preserves the primary error. The internal CRI/ws dependency boundary is documented and tested with real loopback HTTP/TCP/WebSocket transports.
+- Offline final code: npm test 436/436 and npm run lint pass. npm run test:network 441/441 includes the same 436 offline checks plus five Pine-server checks. Logs: executor-unit-resume.log and executor-network-resume.log. Focused native/transport/save/feed checks: 43/43 in executor-focused-resume.log.
+- Live QA injection: scripts/smoke-native-fault-desktop.mjs held the QA translation promise and injected a getter error without actual translation/source writes. Compile failed with recovery_required:true; follow-up mutation was RECOVERY_REQUIRED; early recovery was NATIVE_BUSY. The fixture was explicitly rejected/awaited, then exact recovery succeeded. QA and protected personal state hashes were unchanged; lock and recovery were clear. executor-live-native-fault-resume.log and executor-native-fault-summary.json retain the outcome. This is injected evidence, not a naturally observed fault or document loss.
+- Full current-code Desktop: npm run smoke:desktop exit 0; 42 parent checks, 10 Pine and four layout checks (child confirmations are included in parent count). Windows/Node24.19.0/Desktop3.4.1/Electron41.7.1/Chromium146/Korean. Protected personal tab count one, state hash unchanged. executor-desktop-resume.log retains the output; underlying harness evidence remains in results/issue-overhaul. Pure-read invariance does not claim every query succeeded: data equity/depth intentionally failed when required data was unavailable.
+- Transport counterexamples are actual local TCP/HTTP, without Desktop: never-upgrade/no-response peers, child exit within finite cleanup time and peer sockets zero, plus successful upgrade/evaluation. R2 delayed planner and R3 inactive/multiple-target recovery are VM/adapter fixtures using the real deadline/planner/lease/recovery functions. Live multi-feed provisioning remains unverified with the personal tab present.
+- Limits remain explicit: unknown terminal capacity errors abort safely rather than automatically opening alternative tabs; vanished/unreadable recorded targets stay fenced. Supported layout invalidation remains the observed Desktop 3.4.1 page-local contract. The smoke draft's server deletion is unverified. No real alert/watchlist writes or additional restart occurred on resume.

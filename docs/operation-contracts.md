@@ -4,6 +4,33 @@ Native request completion, calculation completion, report freshness and saved
 source persistence are independent checks. The CLI must prove the checks required
 by its command before returning success.
 
+After attempted native dispatch, ordinary getter/progress errors and closed
+transports retain the recovery fence until native termination is proved. The
+error class alone cannot establish cancellation. Exact-token undispatched
+compile observers can be canceled safely; unreadable or replaced state remains
+unknown. Save dispatch is likewise considered attempted before awaiting CDP.
+
+Multi-feed layout expansion aborts on unknown outcomes, including deadlines.
+Fallback requires an explicit LAYOUT_CAPACITY_UNAVAILABLE error with
+native_terminal:true and no recovery_required flag. The production adapter does
+not infer that proof from error text; unclassified native rejection stays fenced.
+Layout/symbol/resolution promises have page-local registry tokens. Read-back must
+find every mutated target and readable, idle panes before clearing the journal.
+
+Session recovery checks every recorded target, its registry/save/compile flags,
+and every active or inactive pane's loading/calculation state. Missing targets,
+recorded panes or unreadable state produce NATIVE_BUSY and preserve the journal.
+All recorded chart targets must remain inspectable for this recovery path;
+vanished targets are not silently treated as settled. Stable rebind also compares
+the entire pane collection. Recovery acknowledges unknown outcome, not restoration.
+
+CDP connection deadlines cover HTTP discovery/protocol and WebSocket upgrade.
+Owned requests are aborted and an incomplete handshake's socket is reset and
+terminated. This uses chrome-remote-interface's internal Chrome constructor and
+ws transport fields; real loopback integration tests guard that dependency
+boundary, including a peer that never drains or upgrades its socket. Connected
+native request deadlines still do not cancel page actions.
+
 | Phase | Entry | Exit / verification | Failure and ownership |
 |---|---|---|---|
 | Validate | Parsed arguments, expected document, unique target | All inputs accepted before native dispatch | No native fence; no partial input update |
