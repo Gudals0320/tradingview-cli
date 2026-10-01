@@ -1,0 +1,61 @@
+//@version=6
+// CLI-QA-S05 NEGATIVE CONTROL: two deliberate type errors for `pine check` diagnostics.
+// @description Negative control fixture. Never saved to TradingView and never published.
+library("CLIQA S05 Math Lib 20261001")
+
+// Intentional defect 1 (clamp body): a float expression is concatenated with a string literal.
+// Intentional defect 2 (normalize body): a string literal is passed as the float argument of clamp.
+
+// >>> CLIQAS05-BODY-BEGIN
+export clamp(float value, float lo, float hi) =>
+    float lower = math.min(lo, hi)
+    float upper = math.max(lo, hi)
+    float clamped = math.max(lower, math.min(upper, value))
+    clamped + "px"
+
+export normalize(float value, float lo, float hi, float fallback = 0.0) =>
+    float span = hi - lo
+    float result = fallback
+    if span != 0.0
+        result := (value - lo) / clamp(hi, lo, "wide")
+    result
+
+export weighted_score(array<float> values, array<float> weights, float fallback = 0.0) =>
+    float result = fallback
+    int count = array.size(values)
+    if count > 0 and array.size(weights) == count
+        float weightSum = 0.0
+        float weightedSum = 0.0
+        for i = 0 to count - 1
+            float weight = array.get(weights, i)
+            weightSum += weight
+            weightedSum += array.get(values, i) * weight
+        if weightSum != 0.0
+            result := weightedSum / weightSum
+    result
+
+export array_mean(array<float> values, float fallback = 0.0) =>
+    float result = fallback
+    int count = array.size(values)
+    if count > 0
+        float total = 0.0
+        for i = 0 to count - 1
+            total += array.get(values, i)
+        result := total / count
+    result
+
+export array_variance(array<float> values, float fallback = 0.0) =>
+    float result = fallback
+    int count = array.size(values)
+    if count > 0
+        float total = 0.0
+        for i = 0 to count - 1
+            total += array.get(values, i)
+        float avg = total / count
+        float acc = 0.0
+        for i = 0 to count - 1
+            float diff = array.get(values, i) - avg
+            acc += diff * diff
+        result := acc / count
+    result
+// <<< CLIQAS05-BODY-END

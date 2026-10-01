@@ -1,0 +1,14 @@
+//@version=6
+strategy("CLI-QA-S03-EMA", overlay=true, initial_capital=100000, default_qty_type=strategy.fixed, default_qty_value=10, pyramiding=0, process_orders_on_close=true)
+fast = ta.ema(close, 5)
+slow = ta.ema(close, 12)
+atr = ta.atr(14)
+var float initialR = na
+var float entryPrice = na
+if strategy.position_size == 0 and ta.crossover(fast, slow) and not na(atr)
+    initialR := atr * 0.5
+    entryPrice := close
+    strategy.entry("L", strategy.long, qty=10)
+    strategy.exit("Fixed", "L", stop=entryPrice-initialR, limit=entryPrice+2*initialR, qty=10)
+plot(fast, "Fast EMA")
+plot(slow, "Slow EMA")

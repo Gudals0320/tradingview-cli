@@ -45,6 +45,28 @@ export function calculationKey(inputs, context) {
   return JSON.stringify({ inputs, symbol: context?.symbol, resolution: context?.resolution, chart_type: context?.chart_type });
 }
 
+export function rememberVerifiedCompilation(window, epoch) {
+  if (!epoch.report_verified || !epoch.strategy_id) return;
+  const cache = window.__tvCliVerifiedStrategies ||= new Map();
+  const old = cache.get(epoch.strategy_id);
+  if (old && old !== epoch) old.dispose?.();
+  cache.set(epoch.strategy_id, epoch);
+}
+
+export function forgetVerifiedCompilation(window, epoch) {
+  if(window.__tvCliVerifiedStrategies?.get(epoch.strategy_id)===epoch)window.__tvCliVerifiedStrategies.delete(epoch.strategy_id);
+  epoch.dispose?.();
+}
+
+export function failCompilation(window, token, error, code = 'COMPILATION_FAILED') {
+  const epoch = window.__tvCliCompilation;
+  if (epoch?.token !== token) return false;
+  forgetVerifiedCompilation(window,epoch);
+  epoch.phase = 'failed'; epoch.error = error; epoch.failure_code = code;
+  epoch.strategy_id ||= epoch.target_study_id; epoch.report_verified = false;
+  return true;
+}
+
 /** Keep native calculation transitions across separate CLI processes. */
 export function observeCalculation(window, epoch, item) {
   if (epoch.observer_source === item.source) return;
@@ -53,7 +75,7 @@ export function observeCalculation(window, epoch, item) {
   epoch.accepted_cycle = 0;
   const inspect = () => pageStrategies(window).find(value => value.id === item.id);
   const statusChanged = () => {
-    if (window.__tvCliCompilation !== epoch) { epoch.dispose?.(); return; }
+    if (window.__tvCliCompilation !== epoch && window.__tvCliVerifiedStrategies?.get(epoch.strategy_id) !== epoch) { epoch.dispose?.(); return; }
     let status, report;
     try {
       status = item.source.status?.(); if (status?.value) status = status.value();
@@ -66,7 +88,7 @@ export function observeCalculation(window, epoch, item) {
   };
   const reportChanged = () => {
     statusChanged();
-    if (window.__tvCliCompilation !== epoch || !epoch.calculation.active) return;
+    if ((window.__tvCliCompilation !== epoch && window.__tvCliVerifiedStrategies?.get(epoch.strategy_id) !== epoch) || !epoch.calculation.active) return;
     const current = inspect();
     if (epoch.calculation.active && current?.status_type === 2 && reportIsComplete(current.report)) {
       epoch.calculation.completed = { cycle: epoch.calculation.cycle,
@@ -97,21 +119,31 @@ export function prepareInputChange(window, strategyId) {
   return true;
 }
 
-export function beginCompilation(window, token, sourceHash, strategyMode, strategyName = null) {
+export function beginCompilation(window, token, sourceHash, strategyMode, strategyName = null, scriptId = null, targetStudyId = null, sameVersionRefresh = false) {
+  const cached = targetStudyId && window.__tvCliVerifiedStrategies?.get(targetStudyId);
+  if (cached?.script_id === scriptId && cached.source_hash === sourceHash) window.__tvCliCompilation = cached;
   // The identical-source shortcut must consume native calculation transitions
   // too: matching inputs alone cannot distinguish an unobserved A -> B -> A edit.
   if (window.__tvCliCompilation?.phase === 'ready') compilationState(window);
   const previous = window.__tvCliCompilation;
   const strategies = pageStrategies(window);
   const applied = strategies.find(item => item.id === previous?.strategy_id);
+  const matching = scriptId ? strategies.filter(item => item.inputs.find(input => input.id === 'pineId')?.value === scriptId) : strategies;
+  const sameDocument = !scriptId || (matching.length === 1 && matching[0].id === applied?.id && previous?.script_id === scriptId);
   const context = readChartContext(window);
-  if (strategyMode && previous?.phase === 'pending' && previous.report_verified
+  if(strategyMode && previous?.phase==='pending' && previous.persistence_confirmed && previous.source_hash===sourceHash
+    && previous.script_id===scriptId && matching.length===1
+    && matching[0].id===previous.target_study_id
+    && String(matching[0].inputs.find(i=>i.id==='pineVersion')?.value)===String(previous.saved_version)) {
+    return {phase:'awaiting',token:previous.token,strategy_id:matching[0].id};
+  }
+  if (strategyMode && sameDocument && previous?.phase === 'pending' && previous.report_verified
     && previous.requires_compiled_change === false && previous.source_hash === sourceHash
     && previous.compiled_identity && compiledIdentity(applied?.inputs || []) === previous.compiled_identity
     && previous.observer_source === applied?.source && !applied?.runtime_error) {
     return { phase: 'awaiting', token: previous.token, strategy_id: applied.id };
   }
-  if (strategyMode && previous?.phase === 'ready' && previous.report_verified && previous.source_hash === sourceHash
+  if (strategyMode && sameDocument && previous?.phase === 'ready' && previous.report_verified && previous.source_hash === sourceHash
     && previous.compiled_identity && compiledIdentity(applied?.inputs || []) === previous.compiled_identity
     && JSON.stringify(applied?.inputs) === previous.inputs_fingerprint && !applied?.runtime_error
     && reportIsComplete(applied?.report) && (applied.status_type == null || applied.status_type === 2)
@@ -119,8 +151,10 @@ export function beginCompilation(window, token, sourceHash, strategyMode, strate
     && context?.chart_type === previous.context?.chart_type) {
     return { phase: 'unchanged', token: previous.token, strategy_id: applied.id, inputs: applied.inputs };
   }
-  previous?.dispose?.();
+  if (window.__tvCliVerifiedStrategies?.get(previous?.strategy_id) !== previous) previous?.dispose?.();
   window.__tvCliCompilation = { token, source_hash: sourceHash, strategy_mode: strategyMode,
+    script_id:scriptId,target_study_id:targetStudyId,
+    allow_same_identity_refresh:sameVersionRefresh,
     strategy_name: strategyName, requires_compiled_change: true,
     phase: 'pending', baselines: strategies.map((item) => {
       let second = item.source.reportData?.(); if (second?.value) second = second.value();
@@ -128,6 +162,10 @@ export function beginCompilation(window, token, sourceHash, strategyMode, strate
         compiled_identity: compiledIdentity(item.inputs),
         stable_reference: item.report === second, runtime_error: item.runtime_error };
     }) };
+  const target=strategies.find(item=>item.id===targetStudyId);
+  const epoch=window.__tvCliCompilation;
+  epoch.rebind=()=>{const item=pageStrategies(window).find(item=>item.id===epoch.target_study_id);if(item)observeCalculation(window,epoch,item);};
+  if(strategyMode&&target){window.__tvCliCompilation.strategy_id=target.id;observeCalculation(window,window.__tvCliCompilation,target);}
   return { phase: 'pending', token };
 }
 
@@ -137,14 +175,16 @@ export function compilationState(window) {
   if (epoch.phase === 'ready') {
     const context = readChartContext(window);
     const selected = pageStrategies(window).find(item => item.id === epoch.strategy_id);
-    if (!selected) { epoch.dispose?.(); window.__tvCliCompilation = null; return { phase: 'not-strategy' }; }
+    if (!selected) { forgetVerifiedCompilation(window,epoch); window.__tvCliCompilation = null; return { phase: 'not-strategy' }; }
     if (epoch.observer_source !== selected.source) {
+      forgetVerifiedCompilation(window,epoch);
       epoch.report_verified = false; epoch.token = null; epoch.source_hash = null;
       observeCalculation(window, epoch, selected);
       return { phase: 'unverified', strategy_id: selected.id };
     }
     if (compiledIdentity(selected.inputs) !== epoch.compiled_identity) {
       epoch.phase = 'invalidated'; epoch.error = 'Compiled script changed outside this CLI compilation; its source hash is no longer verified.';
+      forgetVerifiedCompilation(window,epoch);
     }
     if (epoch.phase === 'invalidated') return { phase: epoch.phase, error: epoch.error };
     const calculation = epoch.calculation;
@@ -157,20 +197,23 @@ export function compilationState(window) {
         fingerprint: epoch.fingerprint, compiled_identity: epoch.compiled_identity, stable_reference: true, runtime_error: null }];
       // Old real-time ticks are not evidence of recalculation for new inputs.
       epoch.requires_compiled_change = false;
-    } else return { phase: 'ready', token: epoch.token, strategy_id: epoch.strategy_id, inputs: selected?.inputs || [] };
+    } else { rememberVerifiedCompilation(window, epoch); return { phase: 'ready', token: epoch.token, strategy_id: epoch.strategy_id, inputs: selected?.inputs || [] }; }
   }
   if (epoch.phase === 'invalidated') return { phase: epoch.phase, error: epoch.error };
   if (epoch.phase === 'failed') {
     if (epoch.strategy_id && !pageStrategies(window).some(item => item.id === epoch.strategy_id)) {
       window.__tvCliCompilation = null; return { phase: 'not-strategy' };
     }
-    return { phase: epoch.phase, token: epoch.token, strategy_id: epoch.strategy_id, error: epoch.error };
+    return { phase: epoch.phase, token: epoch.token, strategy_id: epoch.strategy_id, error: epoch.error, code:epoch.failure_code };
   }
-  const candidates = pageStrategies(window).filter(item => !epoch.strategy_name || item.name === epoch.strategy_name);
+  const candidates = pageStrategies(window).filter(item => epoch.script_id
+    ? item.inputs.find(input => input.id === 'pineId')?.value === epoch.script_id && (!epoch.target_study_id || item.id === epoch.target_study_id)
+    : !epoch.strategy_name || item.name === epoch.strategy_name);
   const changed = candidates.filter(item => {
     const old = epoch.baselines.find(baseline => baseline.id === item.id);
     const identity = compiledIdentity(item.inputs);
     return (identity && (!old || identity !== old.compiled_identity))
+      || (epoch.allow_same_identity_refresh && item.id===epoch.target_study_id)
       || (!epoch.requires_compiled_change && item.id === epoch.strategy_id);
   });
   if (changed.length > 1) return { phase: 'pending', token: epoch.token, error: 'More than one strategy changed; cannot identify the compiled script.' };
@@ -189,7 +232,10 @@ export function compilationState(window) {
       if (!completed || completed.cycle <= epoch.accepted_cycle
         || completed.key !== calculationKey(item.inputs, readChartContext(window))) continue;
     }
-    if (!old || (old.stable_reference && item.report !== old.report) || reportFingerprint(item.report) !== old.fingerprint) {
+    const completed=epoch.calculation?.completed;
+    const observed=completed&&completed.cycle>epoch.accepted_cycle&&completed.key===calculationKey(item.inputs,readChartContext(window));
+    if(epoch.allow_same_identity_refresh&&!observed)continue;
+    if (!old || observed || (old.stable_reference && item.report !== old.report) || reportFingerprint(item.report) !== old.fingerprint) {
       epoch.phase = 'ready'; epoch.strategy_id = item.id; epoch.baselines = [];
       epoch.context = readChartContext(window); epoch.report = item.report;
       epoch.fingerprint = reportFingerprint(item.report); epoch.inputs_fingerprint = JSON.stringify(item.inputs);
@@ -198,6 +244,7 @@ export function compilationState(window) {
       else epoch.accepted_cycle = epoch.calculation.completed.cycle;
       epoch.report_verified = epoch.observer_source === item.source;
       if (!epoch.report_verified) return { phase: 'unverified', strategy_id: item.id };
+      rememberVerifiedCompilation(window, epoch);
       return { phase: 'ready', token: epoch.token, strategy_id: item.id, inputs: item.inputs };
     }
   }
@@ -213,7 +260,7 @@ export function readStrategyReport(window, options = {}) {
   const compile = compilationState(window);
   if (['pending', 'failed', 'invalidated'].includes(compile.phase)) return { success: false,
     error: compile.error || 'Fresh strategy report is still pending after compilation.',
-    code: compile.phase === 'pending' ? 'REPORT_PENDING' : compile.phase === 'invalidated' ? 'REPORT_INVALIDATED' : 'STRATEGY_RUNTIME_ERROR' };
+    code: compile.phase === 'pending' ? 'REPORT_PENDING' : compile.phase === 'invalidated' ? 'REPORT_INVALIDATED' : compile.code || 'STRATEGY_RUNTIME_ERROR' };
   const strategies = pageStrategies(window);
   const id = options.strategy_id || (!options.strategy && compile.phase === 'ready' ? compile.strategy_id : null);
   const matching = strategies.filter((item) => (!id || item.id === id) && (!options.strategy || item.name === options.strategy));
@@ -263,7 +310,7 @@ export function readStrategyReport(window, options = {}) {
 }
 
 export const STRATEGY_PAGE_CODE = [readChartContext, formatDiagnostic, pageStrategies, reportFingerprint, reportIsComplete, compiledIdentity,
-  calculationKey, observeCalculation, prepareInputChange, beginCompilation, compilationState, readStrategyReport].map(fn => fn.toString()).join('\n');
+  calculationKey, rememberVerifiedCompilation, forgetVerifiedCompilation, failCompilation, observeCalculation, prepareInputChange, beginCompilation, compilationState, readStrategyReport].map(fn => fn.toString()).join('\n');
 
 export function reportExpression(options = {}) {
   return `(() => { ${STRATEGY_PAGE_CODE}; return readStrategyReport(window, ${JSON.stringify(options)}); })()`;

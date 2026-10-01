@@ -1,0 +1,73 @@
+//@version=6
+strategy("CLI-QA-S03-EMA", overlay=true, initial_capital=100000, default_qty_type=strategy.fixed, default_qty_value=10, pyramiding=0, process_orders_on_close=true)
+rMult = input.float(0.5, "Initial ATR risk", minval=0.1)
+trailMult = input.float(0.6, "Trail ATR", minval=0.1)
+maxBars = input.int(12, "Maximum bars", minval=1)
+fast = ta.ema(close, 5)
+slow = ta.ema(close, 12)
+atr = ta.atr(14)
+crossUp = ta.crossover(fast, slow)
+var float initialR = na
+var float entryPrice = na
+var float runnerStop = na
+var int entryBar = na
+var int tradeNo = 0
+var bool partialDone = false
+var int partialCount = 0
+var int timeCount = 0
+var int rViolations = 0
+var int stopViolations = 0
+var float snapshotR = na
+var array<string> trace = array.new_string()
+record(string event, float qty, float previousStop) =>
+    string row = str.tostring(tradeNo)+"|"+str.tostring(time)+"|"+event+"|qty="+str.tostring(qty)+"|entry="+str.tostring(entryPrice,"#.########")+"|R="+str.tostring(initialR,"#.########")+"|prev="+str.tostring(previousStop,"#.########")+"|stop="+str.tostring(runnerStop,"#.########")
+    array.push(trace, row)
+    if array.size(trace) > 100
+        array.shift(trace)
+    log.info(row)
+if strategy.position_size > 0
+    if strategy.position_size == 5 and not partialDone
+        partialDone := true
+        partialCount += 1
+        record("PARTIAL_OBSERVED", strategy.position_size, runnerStop)
+    float oldStop = runnerStop
+    if partialDone
+        runnerStop := math.max(runnerStop, math.max(entryPrice, close-atr*trailMult))
+    if runnerStop < oldStop
+        stopViolations += 1
+    if initialR != snapshotR
+        rViolations += 1
+    record("MANAGE", strategy.position_size, oldStop)
+    string meta = "T="+str.tostring(tradeNo)+";R="+str.tostring(initialR,"#.########")+";S="+str.tostring(runnerStop,"#.########")
+    if bar_index-entryBar >= maxBars
+        strategy.cancel("TP50")
+        strategy.cancel("Runner")
+        strategy.close("L", comment="TIME;"+meta)
+        timeCount += 1
+        record("TIME_ORDER", strategy.position_size, oldStop)
+    else
+        if not partialDone
+            strategy.exit("TP50", "L", qty=5, limit=entryPrice+initialR, stop=entryPrice-initialR, oca_name="TP50-OCA", comment_profit="TP1R;"+meta, comment_loss="INITIAL;"+meta)
+        strategy.exit("Runner", "L", qty=5, stop=runnerStop, oca_name="RUNNER-OCA", comment_loss="RUNNER;"+meta)
+if strategy.position_size == 0 and crossUp and not na(atr) and bar_index >= last_bar_index-400
+    tradeNo += 1
+    initialR := atr*rMult
+    snapshotR := initialR
+    entryPrice := close
+    runnerStop := entryPrice-initialR
+    entryBar := bar_index
+    partialDone := false
+    string meta = "T="+str.tostring(tradeNo)+";R="+str.tostring(initialR,"#.########")+";S="+str.tostring(runnerStop,"#.########")
+    strategy.entry("L", strategy.long, qty=10, comment="ENTRY;"+meta)
+    strategy.exit("TP50", "L", qty=5, limit=entryPrice+initialR, stop=runnerStop, oca_name="TP50-OCA", comment_profit="TP1R;"+meta, comment_loss="INITIAL;"+meta)
+    strategy.exit("Runner", "L", qty=5, stop=runnerStop, oca_name="RUNNER-OCA", comment_loss="RUNNER;"+meta)
+    record("ENTRY_ORDER", 10, runnerStop)
+plot(fast, "Fast EMA")
+plot(slow, "Slow EMA")
+plot(strategy.position_size>0 ? runnerStop : na, "Runner stop")
+var table diagnostics = table.new(position.top_right, 1, 102)
+if barstate.islast
+    table.cell(diagnostics, 0, 0, "partial="+str.tostring(partialCount)+";time="+str.tostring(timeCount)+";Rviol="+str.tostring(rViolations)+";stopViol="+str.tostring(stopViolations))
+    table.cell(diagnostics, 0, 1, "trade|UTC ms|event|qty|entry|R|previous stop|current stop")
+    for i=0 to array.size(trace)-1
+        table.cell(diagnostics, 0, i+2, array.get(trace, i))

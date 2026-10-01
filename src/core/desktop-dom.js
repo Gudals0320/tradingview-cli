@@ -40,16 +40,90 @@ export function findPineEditor(document) {
   return null;
 }
 
-export function requestPineEditor(document, tradingView) {
+export function requestPineEditor(document, tradingView, {suppressToggle=false}={}) {
+  const visible=element=>element.offsetParent!==null&&(!element.getBoundingClientRect||
+    (element.getBoundingClientRect().width>0&&element.getBoundingClientRect().height>0));
   const containers = Array.from(document.querySelectorAll('.monaco-editor.pine-editor-monaco'));
-  if (containers.some((element) => element.offsetParent !== null)) return 'mounting';
+  if(suppressToggle)return 'mounting';
+  if (containers.some(visible)) return 'mounting';
   const buttons = Array.from(document.querySelectorAll('[data-name="pine-dialog-button"], [aria-label="Pine"]'));
-  const button = buttons.find((element) => element.offsetParent !== null && !element.disabled);
-  if (button) { button.click(); return 'sidebar'; }
+  const button = buttons.find((element) => visible(element) && !element.disabled&&element.getAttribute?.('aria-disabled')!=='true');
+  if (button) {
+    if(button.getAttribute?.('aria-pressed')==='true'||button.getAttribute?.('aria-expanded')==='true')return 'mounting';
+    button.click(); return 'sidebar';
+  }
   const bar = tradingView?.bottomWidgetBar;
   if (typeof bar?.activateScriptEditorTab === 'function') { bar.activateScriptEditorTab(); return 'bottom-bar'; }
   if (typeof bar?.showWidget === 'function') { bar.showWidget('pine-editor'); return 'bottom-bar'; }
   return null;
+}
+
+export function pinePanelState(document, window) {
+  const containers=Array.from(document.querySelectorAll('.monaco-editor.pine-editor-monaco'));
+  const visible=containers.some(e=>e.offsetParent!==null&&(!e.getBoundingClientRect||
+    (e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0)));
+  const controls=Array.from(document.querySelectorAll('[data-name="pine-dialog-button"], [aria-label="Pine"]'));
+  const signature=JSON.stringify({containers:containers.map(e=>({visible:e.offsetParent!==null,rect:e.getBoundingClientRect?{width:e.getBoundingClientRect().width,height:e.getBoundingClientRect().height}:null})),
+    controls:controls.map(e=>({disabled:e.disabled,pressed:e.getAttribute?.('aria-pressed'),expanded:e.getAttribute?.('aria-expanded'),cls:e.className||''}))});
+  return {viewport_width:typeof window.innerWidth==='number'?window.innerWidth:null,
+    viewport_height:typeof window.innerHeight==='number'?window.innerHeight:null,
+    document_ready:document.readyState||'unknown',panel_visible:visible,panel_signature:signature};
+}
+
+/** Controller owns script identity; Monaco.setValue only changes its text. */
+export function findPineController(document) {
+  for (const container of document.querySelectorAll('.monaco-editor.pine-editor-monaco')) {
+    if (container.offsetParent === null) continue;
+    let node = container, fiber;
+    for (let depth = 0; depth < 20 && node; depth++, node = node.parentElement) {
+      const key = Object.keys(node).find(name => name.startsWith('__reactFiber$'));
+      if (key) { fiber = node[key]; break; }
+    }
+    for (let depth = 0; depth < 30 && fiber; depth++, fiber = fiber.return) {
+      for (const props of [fiber.memoizedProps, fiber.alternate?.memoizedProps]) {
+        const value = props?.value;
+        if (typeof value?.openNewScript === 'function' && typeof value?.openScript === 'function'
+          && typeof value?.setScript === 'function' && typeof value?.getScriptIdVersion === 'function' && value?._editorStore) return value;
+      }
+    }
+  }
+  return null;
+}
+
+/** Read actual message records/rows, never an editor or console container. */
+export function readPineConsole(document, controller) {
+  const messages = controller?._editorStore?.getStore?.().getState()?.console?.messages || [];
+  const entries = messages.filter(item => typeof item.text === 'string' && item.text.trim()).map(item => ({
+    timestamp: item.time || null, type: item.level || 'info', message: item.text,
+  }));
+  const rows = document.querySelectorAll('.widgetbar-widget-pine_logs [class*="logContainer-"]');
+  for (const row of rows) {
+    if (row.offsetParent === null) continue;
+    const message = row.querySelector('[class*="msg-"]')?.textContent?.trim();
+    if (!message) continue;
+    entries.push({ timestamp: message.match(/^\[([^\]]+)\]/)?.[1] || null,
+      type: /error/i.test(row.className) ? 'error' : /warn/i.test(row.className) ? 'warning' : 'info', message });
+  }
+  return entries;
+}
+
+export function confirmPineSaveDialog(document) {
+  const buttons = document.querySelectorAll('button[data-qa-id="save-btn"][name="save"]');
+  const button = Array.from(buttons).find(item => item.offsetParent !== null && !item.disabled
+    && item.getAttribute('aria-disabled') !== 'true'
+    && item.parentElement?.parentElement?.querySelector('input[data-qa-id="ui-lib-Input-input"]')
+    && /스크립트 저장|save script/i.test(item.parentElement.parentElement.textContent || ''));
+  if (!button) return false;
+  button.click();
+  return true;
+}
+
+export function confirmPineCompileSaveDialog(document) {
+  const button = Array.from(document.querySelectorAll('button[data-qa-id="yes-btn"][name="yes"]'))
+    .find(item => item.offsetParent !== null && !item.disabled
+      && /추가하기 전에 이 스크립트를 저장|save (?:this |the )?script before adding/i.test(item.parentElement?.parentElement?.textContent || ''));
+  if (!button) return false;
+  button.click(); return true;
 }
 
 export function clickPineCompileButton(document) {

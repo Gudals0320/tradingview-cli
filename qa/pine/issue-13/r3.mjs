@@ -1,0 +1,12 @@
+import {create,cli,state,open} from './harness.mjs';
+import assert from 'node:assert/strict';
+const name='CLI-QA-I13-R3Syntax',code=fn=>`//@version=6\nindicator("${name}")\nplot(${fn}(close,5))\n`;
+if(!state.documents[name]){await create(name,'indicator',code('ta.sma'));await cli('R3-valid',['pine','compile']);}else await open(name,'R3-open');
+await cli('R3-bad-set',['pine','set'],{input:code('qa_missing_avg')});
+const bad=await cli('R3-bad-compile-save',['pine','compile','--save'],{exit:1});
+assert.equal(bad.out.saved,true);assert.equal(bad.out.version,bad.after.version);assert.equal(bad.out.chart_changed,true);assert.equal(bad.out.errors[0].line,3);assert.equal(bad.after.epoch.phase,'failed');
+await cli('R3-fixed-set',['pine','set'],{input:code('ta.sma')});await cli('R3-fixed-compile',['pine','compile','--save']);
+const runtime='CLI-QA-I13-R3Runtime';
+if(!state.documents[runtime])await create(runtime,'indicator',`//@version=6\nindicator("${runtime}")\nvar a=array.new_float()\nplot(array.get(a,-1))\n`);else await open(runtime,'R3-runtime-open');
+const r=await cli('R3-runtime-compile',['pine','compile'],{exit:1});assert.equal(r.out.code,'PINE_RUNTIME_ERROR');assert.ok(r.out.runtime_diagnostics.length);assert.equal(r.out.compiled,true);
+const retry=await cli('R3-runtime-retry',['pine','compile','--save'],{exit:1});assert.equal(retry.out.code,'PINE_RUNTIME_ERROR');assert.equal(retry.out.saved,true);assert.equal(retry.out.save_performed,false);

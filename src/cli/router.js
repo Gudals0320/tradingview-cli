@@ -166,6 +166,6 @@ function handleError(err) {
     process.exitCode = 2;
     return;
   }
-  console.error(JSON.stringify({ success: false, error: message }, null, 2));
+  console.error(JSON.stringify({ success: false, error: message,...(err.code?{code:err.code}:{}),...(err.details?{details:err.details}:{}) }, null, 2));
   process.exitCode = 1;
 }

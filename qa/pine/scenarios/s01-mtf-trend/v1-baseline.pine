@@ -1,0 +1,18 @@
+//@version=6
+indicator("CLI-QA-S01 MTF Trend 20261001", shorttitle = "S01 MTF", overlay = true)
+
+// Stage 1 baseline: current-timeframe EMA cross signals only.
+fastLen = input.int(12, "Fast EMA", minval = 1)
+slowLen = input.int(36, "Slow EMA", minval = 1)
+
+emaFast = ta.ema(close, fastLen)
+emaSlow = ta.ema(close, slowLen)
+bullCross = ta.crossover(emaFast, emaSlow)
+bearCross = ta.crossunder(emaFast, emaSlow)
+rawCross = bullCross ? 1 : bearCross ? -1 : 0
+
+plot(emaFast, "EMA Fast", color.teal)
+plot(emaSlow, "EMA Slow", color.orange)
+plotshape(bullCross, "Bull cross", shape.triangleup, location.belowbar, color.green, size = size.small)
+plotshape(bearCross, "Bear cross", shape.triangledown, location.abovebar, color.red, size = size.small)
+plot(rawCross, "rawCross", display = display.data_window)

@@ -71,6 +71,33 @@ describe('CLI — help and routing', () => {
     assert.ok(stdout.includes('analyze'));
     assert.ok(stdout.includes('check'));
   });
+  it('raw-compile help advertises its deprecated smart alias contract', () => {
+    const { stdout, exitCode } = run(['pine', 'raw-compile', '--help']);
+    assert.equal(exitCode, 0);
+    assert.match(stdout, /Deprecated alias of compile/);
+    assert.match(stdout, /unchanged scripts may skip dispatch/);
+  });
+  it('both real Pine command adapters use smart compilation and preserve unchanged results', () => {
+    const adapter = join(__dirname, '..', 'src', 'cli', 'commands', 'pine.js');
+    const script = `import {SourceTextModule,SyntheticModule} from 'node:vm';
+      import {readFileSync} from 'node:fs';
+      let registered,calls=0;
+      const expected={success:true,compiled:true,unchanged:true,compile_performed:false};
+      const router=new SyntheticModule(['register'],function(){this.setExport('register',(_,config)=>{registered=config});});
+      const core=new SyntheticModule(['smartCompile'],function(){this.setExport('smartCompile',async()=>{calls++;return expected;});});
+      const fs=new SyntheticModule(['readFileSync'],function(){this.setExport('readFileSync',readFileSync);});
+      const adapter=new SourceTextModule(readFileSync(${JSON.stringify(adapter)},'utf8'));
+      await adapter.link(name=>name.includes('router')?router:name.includes('core')?core:fs);
+      await adapter.evaluate();
+      const compile=await registered.subcommands.get('compile').handler();
+      const raw=await registered.subcommands.get('raw-compile').handler();
+      console.log(JSON.stringify({compile,raw,calls}));`;
+    const result = JSON.parse(execFileSync(process.execPath, ['--experimental-vm-modules', '--input-type=module', '-e', script],
+      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }));
+    assert.equal(result.calls, 2);
+    assert.deepEqual(result.raw, result.compile);
+    assert.equal(result.raw.compile_performed, false);
+  });
 
   it('stream help advertises multi-feed OHLCV syntax', () => {
     const { stdout, exitCode } = run(['stream', '--help']);

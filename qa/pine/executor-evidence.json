@@ -1,0 +1,472 @@
+{
+  "target_layout": "CLI-QA-Pine-20261001",
+  "records": [
+    {
+      "label": "executor-layout-guard",
+      "args": [
+        "tab",
+        "list"
+      ],
+      "elapsed_ms": 160,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "tab_count": 3
+      }
+    },
+    {
+      "label": "executor-roundtrip-open-a-baseline",
+      "args": [
+        "pine",
+        "open",
+        "CLI-QA-20261001 Indicator"
+      ],
+      "elapsed_ms": 549,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "name": "CLI-QA-20261001 Indicator",
+        "lines": 7,
+        "opened": true
+      }
+    },
+    {
+      "label": "executor-roundtrip-a-baseline",
+      "args": [
+        "pine",
+        "get"
+      ],
+      "elapsed_ms": 135,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "line_count": 7,
+        "char_count": 266
+      }
+    },
+    {
+      "label": "executor-roundtrip-open-b-baseline",
+      "args": [
+        "pine",
+        "open",
+        "CLI-QA-20261001 Copy"
+      ],
+      "elapsed_ms": 540,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "name": "CLI-QA-20261001 Copy",
+        "lines": 12,
+        "opened": true
+      }
+    },
+    {
+      "label": "executor-roundtrip-b-baseline",
+      "args": [
+        "pine",
+        "get"
+      ],
+      "elapsed_ms": 129,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "line_count": 12,
+        "char_count": 280
+      }
+    },
+    {
+      "label": "executor-unsaved-b-set",
+      "args": [
+        "pine",
+        "set"
+      ],
+      "elapsed_ms": 131,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "lines_set": 13
+      }
+    },
+    {
+      "label": "executor-unsaved-open-a",
+      "args": [
+        "pine",
+        "open",
+        "CLI-QA-20261001 Indicator"
+      ],
+      "elapsed_ms": 617,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "name": "CLI-QA-20261001 Indicator",
+        "lines": 7,
+        "opened": true
+      }
+    },
+    {
+      "label": "executor-unsaved-open-a-get",
+      "args": [
+        "pine",
+        "get"
+      ],
+      "elapsed_ms": 133,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "line_count": 7,
+        "char_count": 266
+      }
+    },
+    {
+      "label": "executor-unsaved-a-set",
+      "args": [
+        "pine",
+        "set"
+      ],
+      "elapsed_ms": 134,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "lines_set": 8
+      }
+    },
+    {
+      "label": "executor-unsaved-new-library",
+      "args": [
+        "pine",
+        "new",
+        "library"
+      ],
+      "elapsed_ms": 193,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "type": "library",
+        "action": "new_script_created",
+        "template": "library"
+      }
+    },
+    {
+      "label": "executor-new-library-get",
+      "args": [
+        "pine",
+        "get"
+      ],
+      "elapsed_ms": 132,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "line_count": 4,
+        "char_count": 85
+      }
+    },
+    {
+      "label": "executor-new-indicator",
+      "args": [
+        "pine",
+        "new",
+        "indicator"
+      ],
+      "elapsed_ms": 179,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "type": "indicator",
+        "action": "new_script_created",
+        "template": "indicator"
+      }
+    },
+    {
+      "label": "executor-new-set",
+      "args": [
+        "pine",
+        "set"
+      ],
+      "elapsed_ms": 132,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "lines_set": 4
+      }
+    },
+    {
+      "label": "executor-new-save",
+      "args": [
+        "pine",
+        "save"
+      ],
+      "elapsed_ms": 1032,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "saved": true,
+        "action": "saved_with_dialog",
+        "version": "1.0"
+      }
+    },
+    {
+      "label": "executor-new-list",
+      "args": [
+        "pine",
+        "list"
+      ],
+      "elapsed_ms": 268,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "count": 20
+      }
+    },
+    {
+      "label": "executor-new-reopen",
+      "args": [
+        "pine",
+        "open",
+        "CLI-QA-20261001 Executor New"
+      ],
+      "elapsed_ms": 553,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "name": "CLI-QA-20261001 Executor New",
+        "lines": 4,
+        "opened": true
+      }
+    },
+    {
+      "label": "executor-new-reopen-get",
+      "args": [
+        "pine",
+        "get"
+      ],
+      "elapsed_ms": 144,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "line_count": 4,
+        "char_count": 70
+      }
+    },
+    {
+      "label": "executor-new-original-open",
+      "args": [
+        "pine",
+        "open",
+        "CLI-QA-20261001 Indicator"
+      ],
+      "elapsed_ms": 538,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "name": "CLI-QA-20261001 Indicator",
+        "lines": 7,
+        "opened": true
+      }
+    },
+    {
+      "label": "executor-new-original-get",
+      "args": [
+        "pine",
+        "get"
+      ],
+      "elapsed_ms": 137,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "line_count": 7,
+        "char_count": 266
+      }
+    },
+    {
+      "label": "executor-open-b-before-a-save",
+      "args": [
+        "pine",
+        "open",
+        "CLI-QA-20261001 Copy"
+      ],
+      "elapsed_ms": 570,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "name": "CLI-QA-20261001 Copy",
+        "lines": 12,
+        "opened": true
+      }
+    },
+    {
+      "label": "executor-open-a-from-b",
+      "args": [
+        "pine",
+        "open",
+        "CLI-QA-20261001 Indicator"
+      ],
+      "elapsed_ms": 550,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "name": "CLI-QA-20261001 Indicator",
+        "lines": 7,
+        "opened": true
+      }
+    },
+    {
+      "label": "executor-open-a-edit",
+      "args": [
+        "pine",
+        "set"
+      ],
+      "elapsed_ms": 144,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "lines_set": 8
+      }
+    },
+    {
+      "label": "executor-open-a-save",
+      "args": [
+        "pine",
+        "save"
+      ],
+      "elapsed_ms": 744,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "saved": true,
+        "action": "saved",
+        "version": "20.0"
+      }
+    },
+    {
+      "label": "executor-open-b-after-a-save",
+      "args": [
+        "pine",
+        "open",
+        "CLI-QA-20261001 Copy"
+      ],
+      "elapsed_ms": 578,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "name": "CLI-QA-20261001 Copy",
+        "lines": 12,
+        "opened": true
+      }
+    },
+    {
+      "label": "executor-b-preserved-get",
+      "args": [
+        "pine",
+        "get"
+      ],
+      "elapsed_ms": 143,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "line_count": 12,
+        "char_count": 280
+      }
+    },
+    {
+      "label": "executor-open-a-confirm",
+      "args": [
+        "pine",
+        "open",
+        "CLI-QA-20261001 Indicator"
+      ],
+      "elapsed_ms": 588,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "name": "CLI-QA-20261001 Indicator",
+        "lines": 8,
+        "opened": true
+      }
+    },
+    {
+      "label": "executor-a-updated-get",
+      "args": [
+        "pine",
+        "get"
+      ],
+      "elapsed_ms": 133,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "line_count": 8,
+        "char_count": 296
+      }
+    },
+    {
+      "label": "executor-a-restore-set",
+      "args": [
+        "pine",
+        "set"
+      ],
+      "elapsed_ms": 148,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "lines_set": 7
+      }
+    },
+    {
+      "label": "executor-a-restore-save",
+      "args": [
+        "pine",
+        "save"
+      ],
+      "elapsed_ms": 830,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "saved": true,
+        "action": "saved",
+        "version": "21.0"
+      }
+    },
+    {
+      "label": "executor-final-open-copy",
+      "args": [
+        "pine",
+        "open",
+        "CLI-QA-20261001 Copy"
+      ],
+      "elapsed_ms": 553,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "name": "CLI-QA-20261001 Copy",
+        "lines": 12,
+        "opened": true
+      }
+    },
+    {
+      "label": "executor-final-get-copy",
+      "args": [
+        "pine",
+        "get"
+      ],
+      "elapsed_ms": 140,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "line_count": 12,
+        "char_count": 280
+      }
+    },
+    {
+      "label": "executor-final-list",
+      "args": [
+        "pine",
+        "list"
+      ],
+      "elapsed_ms": 259,
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "count": 20
+      }
+    }
+  ]
+}

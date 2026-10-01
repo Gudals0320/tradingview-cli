@@ -141,6 +141,47 @@ tv replay stop
 tv stream quote --interval 500
 ```
 
+`pine raw-compile`은 deprecated 호환 별칭이며 `pine compile`과 같은 스마트 검증을 수행합니다.
+검증된 동일 지표·전략은 `unchanged:true, compile_performed:false`로 실행을 생략할 수 있습니다.
+버튼 강제 클릭을 요청하는 명령으로 사용하지 마세요.
+
+저장된 스크립트의 미저장 변경을 컴파일하려면 먼저 `pine save`를 실행하거나 `pine compile --save`를 사용하세요.
+기본 컴파일은 기존 저장 내용을 바꾸지 않으며, 저장이 필요하면 `SAVE_REQUIRED`와 exit 1을 반환합니다.
+`--save`로 저장한 성공 응답에는 `saved:true`와 `script_id`가 포함됩니다. 새 draft 컴파일은 Desktop의 임시 draft 경로를 사용합니다.
+`pine save`는 새 문서의 이름 창에서 Desktop이 제안한 이름을 확인하고 서버 소스를 재조회해 저장을 검증합니다.
+`pine new/open`은 미저장 편집 내용을 요청한 문서로 교체합니다. 필요한 내용은 먼저 저장하세요.
+`pine open`은 정확한 저장 이름을 우선하며, 제목 또는 부분 이름이 여러 문서와 일치하면 열기를 거부합니다.
+경고 marker는 컴파일 응답 이후에 나타날 수 있으므로 `pine errors`로 다시 확인하세요.
+
+컴파일의 저장·적용·계산 결과는 별개입니다. `--save` 응답의 `saved`는 요청한 소스가 현재 서버 저장본과 일치하는지,
+`save_performed`는 이번 호출에서 저장 버전이 새로 생겼는지 뜻합니다. `source_persisted`는 임시 draft까지 포함한 소스 보존,
+`version`은 관측한 현재 버전입니다. `chart_changed`는 대상 study의 ID/compiled input 변화,
+`applied`는 저장 버전과 적용 버전의 일치, `calculation_ready`는 해당 study의 계산 완료 여부입니다.
+컴파일이 실패해도 저장·차트 변경은 이미 발생했을 수 있습니다. 조회가 실패하면 `saved:null`, `persistence_verified:false`로
+불확실성을 표시하며 자동 rollback은 하지 않습니다.
+
+`pine check`의 `validation_scope`는 `local_library_title` 또는 `light_server_translation`입니다.
+`desktop_validated:false`는 Desktop 실행·적용·library 게시/import를 검증하지 않았음을 뜻합니다.
+결정 가능한 library 제목은 [공식 identifier 규칙](https://www.tradingview.com/pine-script-docs/language/declaration-statements/)으로 검사합니다.
+이 CLI의 library chart application은 지원하지 않으며 `compile --save`도 library를 저장하지 않습니다. 저장은 `pine save`를 사용하세요.
+
+| 실패 코드 | 의미 |
+| --- | --- |
+| `PINE_COMPILE_ERROR` | 문법/번역 진단과 위치를 확인하세요. |
+| `PINE_RUNTIME_ERROR` | 적용된 현재 버전의 실행 오류; native context/stack을 포함합니다. |
+| `NATIVE_ACTION_REJECTED` | native 작업 거부; 확인 가능한 진단과 현재 상태를 함께 반환합니다. |
+| `COMPILE_EXCEPTION` | native 거부로 분류할 수 없는 예외입니다. |
+| `SAVE_FAILED` | 저장/검증 실패; 전략의 준비 epoch를 종료합니다. |
+| `REPORT_TIMEOUT` | 제한 시간 내 report를 검증하지 못했습니다. `calculation_pending:true`인 기존 검증된 입력 재계산만 관찰을 유지합니다. |
+| `LIBRARY_NOT_APPLICABLE` / `INVALID_LIBRARY_TITLE` | library 적용 지원 범위 또는 제목 규칙을 확인하세요. |
+| `PINE_VIEWPORT_UNAVAILABLE` | 초기화가 필요한 대상 viewport가 0입니다. 창/탭을 보이게 하고 재시도하세요. |
+| `PINE_EDITOR_NOT_READY` | 보이는 Pine 패널이 제한 시간 내 초기화되지 않았습니다. |
+
+Pine 작업은 usable Monaco와 native controller를 모두 필요로 합니다. Desktop 3.4.1.8194에서 검증한 private API
+(`translateScript`, `_replaceStubByStudy`, pending-request/diagnostic store, study `restart`)에 의존하며,
+지원 capability가 없으면 `CLEAN_UPDATE_UNSUPPORTED` 등으로 거부합니다. clean 저장본을 refresh할 때는 기존 study와
+저장 버전을 유지하고 새 native 계산을 관측합니다. 컴파일 `source_hash`는 물리 CRLF→LF만 정규화하며 get/set 원문을 바꾸지 않습니다.
+
 현재 옵션은 `tv --help`, `tv <명령> --help`, `tv <명령> <하위 명령> --help`로 확인할 수 있습니다.
 
 전용 실험 레이아웃을 선택하고 소스·결과를 확인한 뒤 원래 상태를 복원하는 사용법은 [Pine 배치 예제](examples/README.md)를 참고하세요.

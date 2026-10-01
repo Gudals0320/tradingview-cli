@@ -33,12 +33,14 @@ register('pine', {
       },
     }],
     ['compile', {
-      description: 'Smart compile: detect button, compile, check errors',
-      handler: () => core.smartCompile(),
+      description: 'Smart compile and verify completion; --save permits saving edits to a saved script',
+      options: { save: { type: 'boolean', description: 'Allow saving changes to the current saved script' } },
+      handler: (opts = {}) => core.smartCompile({ save: opts.save || false }),
     }],
     ['raw-compile', {
-      description: 'Click compile/add button without smart detection',
-      handler: () => core.compile(),
+      description: 'Deprecated alias of compile: smart verification; unchanged scripts may skip dispatch',
+      options: { save: { type: 'boolean', description: 'Allow saving changes to the current saved script' } },
+      handler: (opts = {}) => core.smartCompile({ save: opts.save || false }),
     }],
     ['analyze', {
       description: 'Offline static analysis (no TradingView needed)',

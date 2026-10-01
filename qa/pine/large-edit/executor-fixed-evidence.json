@@ -1,0 +1,510 @@
+{
+  "mode": "fixed",
+  "name": "CLI-QA Strategy Reopen 20261001",
+  "records": [
+    {
+      "label": "guard",
+      "args": [
+        "tab",
+        "list"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 173,
+      "output": {
+        "success": true,
+        "tab_count": 3
+      }
+    },
+    {
+      "label": "reuse",
+      "args": [
+        "pine",
+        "open",
+        "CLI-QA Strategy Reopen 20261001"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 386,
+      "output": {
+        "success": true,
+        "name": "CLI-QA Strategy Reopen 20261001",
+        "lines": 10,
+        "opened": true
+      }
+    },
+    {
+      "label": "set-baseline",
+      "args": [
+        "pine",
+        "set"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 128,
+      "output": {
+        "success": true,
+        "lines_set": 10
+      }
+    },
+    {
+      "label": "get-baseline",
+      "args": [
+        "pine",
+        "get"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 129,
+      "output": {
+        "success": true,
+        "line_count": 10,
+        "char_count": 237
+      }
+    },
+    {
+      "label": "save-baseline",
+      "args": [
+        "pine",
+        "save"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 747,
+      "output": {
+        "success": true,
+        "saved": true,
+        "action": "saved",
+        "version": "5.0"
+      }
+    },
+    {
+      "label": "compile-baseline",
+      "args": [
+        "pine",
+        "compile"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 988,
+      "output": {
+        "success": true,
+        "compiled": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": [],
+        "button_clicked": "addToChart",
+        "report_ready": true
+      }
+    },
+    {
+      "label": "normal-set",
+      "args": [
+        "pine",
+        "set"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 129,
+      "output": {
+        "success": true,
+        "lines_set": 10
+      }
+    },
+    {
+      "label": "normal-compile",
+      "args": [
+        "pine",
+        "compile",
+        "--save"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 1328,
+      "output": {
+        "success": true,
+        "compiled": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": [],
+        "saved": true,
+        "button_clicked": "updateOnChart",
+        "report_ready": true
+      }
+    },
+    {
+      "label": "broken-set",
+      "args": [
+        "pine",
+        "set"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 125,
+      "output": {
+        "success": true,
+        "lines_set": 10
+      }
+    },
+    {
+      "label": "get-broken",
+      "args": [
+        "pine",
+        "get"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 126,
+      "output": {
+        "success": true,
+        "line_count": 10,
+        "char_count": 245
+      }
+    },
+    {
+      "label": "broken-check",
+      "args": [
+        "pine",
+        "check"
+      ],
+      "exit_code": 1,
+      "elapsed_ms": 359,
+      "output": {
+        "success": true,
+        "compiled": false,
+        "error_count": 1,
+        "warning_count": 0,
+        "errors": [
+          {
+            "line": 3,
+            "column": 8,
+            "end_line": 3,
+            "end_column": 21,
+            "message": "Could not find function or function reference 'qa_missing_sma'"
+          }
+        ]
+      }
+    },
+    {
+      "label": "broken-compile",
+      "args": [
+        "pine",
+        "compile",
+        "--save"
+      ],
+      "exit_code": 1,
+      "elapsed_ms": 863,
+      "output": {
+        "success": false,
+        "compiled": false,
+        "has_errors": true,
+        "errors": [
+          {
+            "line": 3,
+            "column": 8,
+            "message": "Could not find function or function reference 'qa_missing_sma'",
+            "severity": 8
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "label": "corrected-set",
+      "args": [
+        "pine",
+        "set"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 127,
+      "output": {
+        "success": true,
+        "lines_set": 10
+      }
+    },
+    {
+      "label": "get-corrected",
+      "args": [
+        "pine",
+        "get"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 125,
+      "output": {
+        "success": true,
+        "line_count": 10,
+        "char_count": 237
+      }
+    },
+    {
+      "label": "corrected-compile",
+      "args": [
+        "pine",
+        "compile",
+        "--save"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 1414,
+      "output": {
+        "success": true,
+        "compiled": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": [],
+        "saved": true,
+        "button_clicked": "updateOnChart",
+        "report_ready": true
+      }
+    },
+    {
+      "label": "retry",
+      "args": [
+        "pine",
+        "compile"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 131,
+      "output": {
+        "success": true,
+        "compiled": true,
+        "compile_performed": false,
+        "unchanged": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": [],
+        "report_ready": true
+      }
+    },
+    {
+      "label": "raw-alias",
+      "args": [
+        "pine",
+        "raw-compile"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 133,
+      "output": {
+        "success": true,
+        "compiled": true,
+        "compile_performed": false,
+        "unchanged": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": [],
+        "report_ready": true
+      }
+    },
+    {
+      "label": "save-final",
+      "args": [
+        "pine",
+        "save"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 414,
+      "output": {
+        "success": true,
+        "saved": true,
+        "action": "saved",
+        "version": "8.0"
+      }
+    },
+    {
+      "label": "open-sentinel",
+      "args": [
+        "pine",
+        "open",
+        "CLI-QA Large Edit Sentinel 20261001"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 563,
+      "output": {
+        "success": true,
+        "name": "CLI-QA Large Edit Sentinel 20261001",
+        "lines": 5,
+        "opened": true
+      }
+    },
+    {
+      "label": "sentinel-source",
+      "args": [
+        "pine",
+        "get"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 130,
+      "output": {
+        "success": true,
+        "line_count": 5,
+        "char_count": 171
+      }
+    },
+    {
+      "label": "reopen",
+      "args": [
+        "pine",
+        "open",
+        "CLI-QA Strategy Reopen 20261001"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 541,
+      "output": {
+        "success": true,
+        "name": "CLI-QA Strategy Reopen 20261001",
+        "lines": 10,
+        "opened": true
+      }
+    },
+    {
+      "label": "persisted-source",
+      "args": [
+        "pine",
+        "get"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 128,
+      "output": {
+        "success": true,
+        "line_count": 10,
+        "char_count": 246
+      }
+    },
+    {
+      "label": "list-final",
+      "args": [
+        "pine",
+        "list"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 256,
+      "output": {
+        "success": true,
+        "count": 17
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "label": "get-baseline",
+      "equal": true,
+      "sha256_lf": "f3411fa309b2240e71203b054b5a260296425293f1f5130ccfd7ded587a9dd38",
+      "lines": 10
+    },
+    {
+      "label": "applied-baseline",
+      "handler": "undefined",
+      "ui_is_script_on_chart": true,
+      "modified": false,
+      "draft": false,
+      "version": "5.0",
+      "study_count": 1,
+      "studies": [
+        {
+          "name": "CLI-QA Strategy Reopen 20261001",
+          "status": 2,
+          "version": "5.0",
+          "complete": true
+        }
+      ]
+    },
+    {
+      "label": "normal-applied",
+      "handler": "undefined",
+      "ui_is_script_on_chart": true,
+      "modified": false,
+      "draft": false,
+      "version": "6.0",
+      "study_count": 1,
+      "studies": [
+        {
+          "name": "CLI-QA Strategy Reopen 20261001",
+          "status": 2,
+          "version": "6.0",
+          "complete": true
+        }
+      ]
+    },
+    {
+      "label": "get-broken",
+      "equal": true,
+      "sha256_lf": "7a10cde67aa899050162bc46199d6013b18edfd77f8817a983fa25c7940a6845",
+      "lines": 10
+    },
+    {
+      "label": "after-error",
+      "handler": "undefined",
+      "ui_is_script_on_chart": true,
+      "modified": false,
+      "draft": false,
+      "version": "7.0",
+      "study_count": 1,
+      "studies": [
+        {
+          "name": "CLI-QA Strategy Reopen 20261001",
+          "status": 3,
+          "version": "7.0",
+          "complete": false
+        }
+      ]
+    },
+    {
+      "label": "get-corrected",
+      "equal": true,
+      "sha256_lf": "874dfd70db11fe9c5e9ac26bbc2d7ee67d7c8fa6637b162fe494d14c6d0a5ee4",
+      "lines": 10
+    },
+    {
+      "label": "before-recovery",
+      "handler": "undefined",
+      "ui_is_script_on_chart": true,
+      "modified": true,
+      "draft": false,
+      "version": "7.0",
+      "study_count": 1,
+      "studies": [
+        {
+          "name": "CLI-QA Strategy Reopen 20261001",
+          "status": 3,
+          "version": "7.0",
+          "complete": false
+        }
+      ]
+    },
+    {
+      "label": "after-recovery",
+      "handler": "undefined",
+      "ui_is_script_on_chart": true,
+      "modified": false,
+      "draft": false,
+      "version": "8.0",
+      "study_count": 1,
+      "studies": [
+        {
+          "name": "CLI-QA Strategy Reopen 20261001",
+          "status": 2,
+          "version": "8.0",
+          "complete": true
+        }
+      ]
+    },
+    {
+      "label": "after-retry",
+      "handler": "undefined",
+      "ui_is_script_on_chart": true,
+      "modified": false,
+      "draft": false,
+      "version": "8.0",
+      "study_count": 1,
+      "studies": [
+        {
+          "name": "CLI-QA Strategy Reopen 20261001",
+          "status": 2,
+          "version": "8.0",
+          "complete": true
+        }
+      ]
+    },
+    {
+      "label": "sentinel-source",
+      "equal": true,
+      "sha256_lf": "cd09f6ebf4b89fcd739d33f6af83b0424651793effdfaa7722aed97237b646a6",
+      "lines": 5
+    },
+    {
+      "label": "persisted-source",
+      "equal": true,
+      "sha256_lf": "874dfd70db11fe9c5e9ac26bbc2d7ee67d7c8fa6637b162fe494d14c6d0a5ee4",
+      "lines": 10
+    }
+  ]
+}

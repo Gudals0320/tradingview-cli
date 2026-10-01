@@ -5,6 +5,9 @@ import { beginCompilation, compilationState, readStrategyReport, splitMarkers, r
 import { getStrategyResults, getTrades, getTradeLedger, getEquity } from '../src/core/data.js';
 import { smartCompile } from '../src/core/pine.js';
 import { normalizeTimeframe, symbolMatches } from '../src/chart-context.js';
+import { failCompilation } from '../src/strategy-state.js';
+import { canonicalPineSource } from '../src/pine-source.js';
+import { sourceHash } from '../src/session.js';
 
 function fixture() {
   let report = { performance: { all: { netProfit: 10, netProfitPercent: 0.001, totalTrades: 2, numberOfWiningTrades: 1, numberOfLosingTrades: 0 } },
@@ -36,6 +39,95 @@ function fixture() {
 }
 
 describe('Strategy report identity and metadata', () => {
+  it('confirmed save awaits only its exact target/version and never adopts a pre-save report', () => {
+    for(const matches of [true,false]){
+      const f=fixture(),chart=f.window.TradingViewApi._activeChartWidgetWV.value(),inputs=chart.getStudyById;let version='1.0';
+      chart.getStudyById=id=>({getInputValues:()=>[...inputs(id).getInputValues(),{id:'pineId',value:'P'},{id:'pineVersion',value:version}]});
+      beginCompilation(f.window,'save','newhash',true,null,'P','strategy');
+      Object.assign(f.window.__tvCliCompilation,{persistence_confirmed:true,saved_version:'2.0'});
+      if(matches)version='2.0';
+      const begun=beginCompilation(f.window,'compile','newhash',true,null,'P','strategy');
+      assert.equal(begun.phase,matches?'awaiting':'pending');
+      assert.equal(compilationState(f.window).phase,'pending');
+      if(matches){f.compile();f.status(1);f.status(2);f.update();assert.equal(compilationState(f.window).phase,'ready');}
+    }
+  });
+  it('restores canonical verified identity through beginCompilation itself', () => {
+    const f=fixture(),chart=f.window.TradingViewApi._activeChartWidgetWV.value();const inputs=chart.getStudyById;
+    chart.getStudyById=id=>({getInputValues:()=>[...inputs(id).getInputValues(),{id:'pineId',value:'P'}]});
+    const lf='strategy("Same title")\nplot(close)\n',hash=sourceHash(lf);
+    beginCompilation(f.window,'run',hash,true,'Same title','P','strategy');f.compile();f.update();assert.equal(compilationState(f.window).phase,'ready');
+    beginCompilation(f.window,'other','other-source',false,null,'Q');
+    assert.equal(beginCompilation(f.window,'reopen',sourceHash(canonicalPineSource(lf.replace(/\n/g,'\r\n'))),true,'Same title','P','strategy').phase,'unchanged');
+    beginCompilation(f.window,'other2','other-source',false,null,'Q');
+    assert.notEqual(beginCompilation(f.window,'raw',sourceHash(lf.replace(/\n/g,'\r\n')),true,'Same title','P','strategy').phase,'unchanged');
+  });
+  it('cache restoration rejects changed compiled identity and duplicate/foreign documents', () => {
+    for(const mutation of ['compiled','duplicate','foreign']){
+      const f=fixture(),chart=f.window.TradingViewApi._activeChartWidgetWV.value(),inputs=chart.getStudyById;
+      chart.getStudyById=id=>({getInputValues:()=>[...inputs(id).getInputValues(),{id:'pineId',value:'P'}]});
+      beginCompilation(f.window,'run','hash',true,'Same title','P','strategy');f.compile();f.update();compilationState(f.window);
+      beginCompilation(f.window,'other','other',false,null,'Q');
+      if(mutation==='compiled')f.compile('changed-externally');
+      if(mutation==='duplicate')chart._chartWidget.model().model=()=>({dataSources:()=>[f.source,{...f.source,id:()=> 'duplicate'}]});
+      assert.notEqual(beginCompilation(f.window,'reopen','hash',true,'Same title',mutation==='foreign'?'Q':'P','strategy').phase,'unchanged');
+      if(mutation==='compiled')assert.equal(f.window.__tvCliVerifiedStrategies.has('strategy'),false);
+    }
+  });
+  it('same-version refresh needs a new native calculation rather than a complete old report', () => {
+    const f=fixture();beginCompilation(f.window,'refresh','hash',true,null,null,'strategy',true);
+    assert.equal(compilationState(f.window).phase,'pending');
+    f.status(1);f.status(2);f.tick();
+    assert.equal(compilationState(f.window).phase,'ready');
+  });
+  it('canonicalizes physical CRLF only without changing source contents or trailing newlines', () => {
+    const lf='strategy("\\r\\n")\n// 한글\n';
+    assert.equal(sourceHash(canonicalPineSource(lf.replace(/\n/g,'\r\n'))),sourceHash(lf));
+    assert.notEqual(sourceHash(canonicalPineSource(lf+'\n')),sourceHash(lf));
+    assert.equal(canonicalPineSource('a\rb'),'a\rb');
+  });
+  it('keeps verified per-study monitoring while another document is compiled', () => {
+    const f=fixture();beginCompilation(f.window,'run','hash',true);f.compile();f.update();
+    assert.equal(compilationState(f.window).phase,'ready');
+    const verified=f.window.__tvCliCompilation;
+    beginCompilation(f.window,'indicator','other',false);
+    f.status(1);f.input(70);f.status(2);f.update();
+    f.window.__tvCliCompilation=verified;
+    assert.equal(compilationState(f.window).phase,'ready');
+    assert.equal(f.window.__tvCliCompilation.inputs_fingerprint.includes('70'),true);
+  });
+  it('rejected actions become a terminal code, and a new actual compile can recover', () => {
+    const f=fixture();beginCompilation(f.window,'rejected','hash',true,null,null,'strategy');
+    failCompilation(f.window,'rejected','No changes','NATIVE_ACTION_REJECTED');
+    assert.equal(readStrategyReport(f.window).code,'NATIVE_ACTION_REJECTED');
+    beginCompilation(f.window,'recovery','hash',true);f.compile();f.update();
+    assert.equal(readStrategyReport(f.window).success,true);
+  });
+  it('binds report freshness to the Pine document despite another changed same-title strategy', () => {
+    const f = fixture(), chart = f.window.TradingViewApi._activeChartWidgetWV.value();
+    const inputs = chart.getStudyById;
+    let otherText = 'Q-old';
+    const other = { ...f.source, id: () => 'other' };
+    chart._chartWidget.model().model = () => ({ dataSources: () => [f.source, other] });
+    chart.getStudyById = id => ({ getInputValues: () => id === 'other'
+      ? [{id:'text',value:otherText},{id:'pineId',value:'Q'}]
+      : [...inputs(id).getInputValues(),{id:'pineId',value:'P'}] });
+    beginCompilation(f.window,'run','hash',true,'Same title','P','strategy');
+    f.compile();otherText='Q-new';f.update();
+    const state=compilationState(f.window);
+    assert.equal(state.phase,'ready');assert.equal(state.strategy_id,'strategy');
+  });
+  it('does not reuse a verified source for a different document or duplicated target', () => {
+    const f=fixture(),chart=f.window.TradingViewApi._activeChartWidgetWV.value();
+    const inputs=chart.getStudyById;
+    chart.getStudyById=id=>({getInputValues:()=>[...inputs(id).getInputValues(),{id:'pineId',value:'P'}]});
+    beginCompilation(f.window,'run','hash',true,'Same title','P','strategy');f.compile();f.update();
+    assert.equal(compilationState(f.window).phase,'ready');
+    const duplicate={...f.source,id:()=> 'duplicate'};
+    chart._chartWidget.model().model=()=>({dataSources:()=>[f.source,duplicate]});
+    assert.notEqual(beginCompilation(f.window,'retry','hash',true,'Same title','P').phase,'unchanged');
+    assert.notEqual(beginCompilation(f.window,'different','hash',true,'Same title','Q').phase,'unchanged');
+  });
   it('rejects an unmonitored GUI input edit even when native status is ready', () => {
     const f = fixture(); f.input(60);
     const result = readStrategyReport(f.window);
@@ -212,6 +304,7 @@ describe('Strategy report identity and metadata', () => {
     let clicks = 0, ticks = 0;
     const result = await smartCompile({ _deps: { source,
       evaluate: expression => {
+        if (expression.includes('function pineCompileContext')) return {};
         if (expression.includes('getModelMarkers')) return [];
         if (expression.includes('document')) { clicks++; return 'clicked'; }
         return runInNewContext(expression, { window: f.window });
@@ -232,7 +325,8 @@ describe('Strategy report identity and metadata', () => {
     f.input(60); f.status(1);
     const epoch = f.window.__tvCliCompilation; let ticks = 0;
     const result = await smartCompile({ timeout: 400, _deps: { source,
-      evaluate: expression => expression.includes('getModelMarkers') ? [] : runInNewContext(expression, { window: f.window }),
+      evaluate: expression => expression.includes('function pineCompileContext') ? {} :
+        expression.includes('getModelMarkers') ? [] : runInNewContext(expression, { window: f.window }),
       sleep: async () => { ticks++; }, now: () => ticks * 200,
     } });
     assert.equal(result.success, false); assert.equal(result.compile_performed, false);

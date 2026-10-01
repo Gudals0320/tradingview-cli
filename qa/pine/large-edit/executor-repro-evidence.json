@@ -1,0 +1,140 @@
+{
+  "mode": "repro",
+  "name": "CLI-QA Recovery Executor Repro 20261001",
+  "records": [
+    {
+      "label": "guard",
+      "args": [
+        "tab",
+        "list"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 161,
+      "output": {
+        "success": true,
+        "tab_count": 3
+      }
+    },
+    {
+      "label": "resume",
+      "args": [
+        "pine",
+        "open",
+        "CLI-QA Recovery Executor Repro 20261001"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 576,
+      "output": {
+        "success": true,
+        "name": "CLI-QA Recovery Executor Repro 20261001",
+        "lines": 10,
+        "opened": true
+      }
+    },
+    {
+      "label": "broken-set",
+      "args": [
+        "pine",
+        "set"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 142,
+      "output": {
+        "success": true,
+        "lines_set": 10
+      }
+    },
+    {
+      "label": "get-broken",
+      "args": [
+        "pine",
+        "get"
+      ],
+      "exit_code": 0,
+      "elapsed_ms": 138,
+      "output": {
+        "success": true,
+        "line_count": 10,
+        "char_count": 253
+      }
+    },
+    {
+      "label": "broken-check",
+      "args": [
+        "pine",
+        "check"
+      ],
+      "exit_code": 1,
+      "elapsed_ms": 468,
+      "output": {
+        "success": true,
+        "compiled": false,
+        "error_count": 1,
+        "warning_count": 0,
+        "errors": [
+          {
+            "line": 3,
+            "column": 8,
+            "end_line": 3,
+            "end_column": 21,
+            "message": "Could not find function or function reference 'qa_missing_sma'"
+          }
+        ]
+      }
+    },
+    {
+      "label": "broken-compile",
+      "args": [
+        "pine",
+        "compile",
+        "--save"
+      ],
+      "exit_code": 1,
+      "elapsed_ms": 1011,
+      "output": {
+        "success": false,
+        "compiled": false,
+        "has_errors": true,
+        "errors": [
+          {
+            "line": 3,
+            "column": 8,
+            "message": "Could not find function or function reference 'qa_missing_sma'",
+            "severity": 8
+          }
+        ],
+        "warnings": []
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "label": "get-broken",
+      "equal": true,
+      "sha256_lf": "e35e290dae0906f0ab8ccab347031af3cc56eb5e3cbb80599d16a539e8886930",
+      "lines": 10
+    },
+    {
+      "label": "after-error",
+      "handler": "undefined",
+      "modified": false,
+      "draft": false,
+      "version": "3.0",
+      "study_count": 2,
+      "studies": [
+        {
+          "name": "CLI-QA Recovery Executor Repro 20261001",
+          "status": 3,
+          "version": "3.0",
+          "complete": false
+        },
+        {
+          "name": "CLI-QA Recovery Executor Repro 20261001",
+          "status": 3,
+          "version": "3.0",
+          "complete": false
+        }
+      ]
+    }
+  ]
+}

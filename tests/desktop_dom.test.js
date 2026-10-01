@@ -34,7 +34,8 @@ function editorFixture({ alternate = false, depth = 2, legacy = false, disposed 
   const model = disposed ? null : { uri: 'inmemory://pine/test' };
   const editor = { getValue: () => '//@version=6\nplot(close)', setValue: () => {}, getModel: () => model };
   const env = { editor: { getEditors: () => legacy ? [editor] : [], getModelMarkers: () => [] } };
-  const value = legacy ? { monacoEnv: env } : { _editorRef: { current: { _editor: editor, _monaco: env } } };
+  const value = legacy ? { monacoEnv: env } : { _editorRef: { current: { _editor: editor, _monaco: env } },_editorStore:{},
+    openNewScript:()=>{},openScript:()=>{},setScript:()=>{},getScriptIdVersion:()=>null };
   let fiber = alternate
     ? { memoizedProps: { value: { _editorRef: { current: null } } }, alternate: { memoizedProps: { value } } }
     : { memoizedProps: { value } };
@@ -123,12 +124,32 @@ describe('Pine DOM compatibility', () => {
     const sidebar = button('Pine');
     const document = page({ sidebar });
     let sleeps = 0;
-    assert.equal(await ensurePineEditorOpen({ _deps: {
+    await assert.rejects(ensurePineEditorOpen({ _deps: {
       evaluate: (expression) => runInNewContext(expression, { document, window: {} }),
       sleep: async () => { sleeps++; },
-    } }), false);
+    } }),error=>error.code==='PINE_EDITOR_NOT_READY');
     assert.equal(sleeps, 150);
-    assert.equal(sidebar.clicks, 1);
+    assert.equal(sidebar.clicks, 8);
+  });
+  it('retries after cold controls arrive late without toggling an already mounted panel',async()=>{
+    let ticks=0,requests=0;const document=page();const ready=editorFixture();
+    const sidebar=button('Pine');sidebar.click=()=>{requests++;document.containers=ready.document.containers;};
+    const result=await ensurePineEditorOpen({_deps:{evaluate:expression=>runInNewContext(expression,{document,window:{innerWidth:1280,innerHeight:720}}),
+      sleep:async()=>{if(++ticks===4)document.querySelectorAll=selector=>selector.includes('pine-dialog-button')?[sidebar]:selector==='.monaco-editor.pine-editor-monaco'?document.containers:[];}}});
+    assert.equal(result,true);assert.equal(requests,1);assert.ok(ticks>=5);
+  });
+  it('classifies a zero viewport before sending any panel action',async()=>{
+    const sidebar=button('Pine'),document=page({sidebar});
+    await assert.rejects(ensurePineEditorOpen({_deps:{evaluate:expression=>runInNewContext(expression,{document,window:{innerWidth:0,innerHeight:0}}),sleep:async()=>{}}}),error=>error.code==='PINE_VIEWPORT_UNAVAILABLE');
+    assert.equal(sidebar.clicks,0);
+  });
+  it('never toggles a pane back closed while its mounted container stays zero-sized',async()=>{
+    let ticks=0,visible=false;const sidebar=button('Pine'),document=page({sidebar}),ready=editorFixture();
+    ready.document.containers[0].getBoundingClientRect=()=>({width:visible?900:0,height:visible?600:0});
+    sidebar.click=()=>{sidebar.clicks++;document.containers=ready.document.containers;};
+    assert.equal(await ensurePineEditorOpen({_deps:{evaluate:expression=>runInNewContext(expression,{document,window:{innerWidth:1280,innerHeight:720}}),
+      sleep:async()=>{if(++ticks===12)visible=true;}}}),true);
+    assert.equal(sidebar.clicks,1);assert.equal(ticks,12);
   });
 });
 

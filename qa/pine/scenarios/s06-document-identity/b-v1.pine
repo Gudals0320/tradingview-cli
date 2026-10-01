@@ -1,0 +1,33 @@
+//@version=6
+strategy("CLI-QA-S06-Shared", overlay=true, initial_capital=10000, pyramiding=0)
+// 문서 B: stdin 입력과 전략 저장대상 검증. 실거래 없이 백테스트만 사용.
+// 유지 영역: "전략", C:\QA\S06, 한글 및 여러 줄 함수.
+string note = "전략 \"인용\" C:\\QA\\S06\n다음 줄"
+int length = input.int(12, "평균 기간", minval=2)
+float risk = input.float(1.5, "ATR 위험 배수", minval=0.1)
+string revision = "B-v1"
+
+average(float price, int period) =>
+    ta.ema(price, period)
+
+stopPrice(float price, float volatility, float multiple) =>
+    price - volatility * multiple
+
+float center = average(close, length)
+float volatility = ta.atr(length)
+bool goLong = ta.crossover(close, center)
+bool closeLong = ta.crossunder(close, center)
+if goLong
+    strategy.entry("Long", strategy.long, qty=1, comment=note)
+if closeLong
+    strategy.close("Long", comment="중심선 하향")
+if strategy.position_size > 0
+    strategy.exit("Stop", "Long", stop=stopPrice(strategy.position_avg_price, volatility, risk))
+
+plot(center, title="전략 평균", color=color.aqua)
+var label marker = na
+if barstate.islast
+    label.delete(marker)
+    marker := label.new(bar_index, high, note + " / " + revision,
+         style=label.style_label_down, textcolor=color.white)
+// EOF sentinel B: 끝부분과 줄바꿈을 보존한다.

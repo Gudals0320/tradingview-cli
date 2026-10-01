@@ -1,0 +1,178 @@
+//@version=6
+// CLI-QA-S05 independent verifier. Disposable QA asset, never published.
+// Expectations in this file are written as literals, NOT by calling the library.
+// The function bodies between the COPY markers below are the export-stripped, name-normalized
+// copies of the FINAL library-v2 body record (library-v2.pine), so the harness can assert an
+// exact body match; the expectation literals stay independent of the library.
+indicator("CLIQA S05 Verifier 20261001", overlay=true, max_labels_count=500, max_lines_count=500)
+
+// >>> CLIQAS05-VERIFY-COPY-BEGIN
+clampFn(float value, float lo, float hi) =>
+    float lower = math.min(lo, hi)
+    float upper = math.max(lo, hi)
+    math.max(lower, math.min(upper, value))
+
+normalizeFn(float value, float lo, float hi, float fallback = 0.0) =>
+    float span = hi - lo
+    float result = fallback
+    if span != 0.0
+        result := (value - lo) / span
+    result
+
+weightedScoreFn(array<float> values, array<float> weights, float fallback = 0.0, float scale = 1.0) =>
+    float result = fallback
+    int count = array.size(values)
+    if count > 0 and array.size(weights) == count
+        float weightSum = 0.0
+        float weightedSum = 0.0
+        for i = 0 to count - 1
+            float weight = array.get(weights, i)
+            weightSum += weight
+            weightedSum += array.get(values, i) * weight
+        if weightSum != 0.0
+            result := weightedSum / weightSum * scale
+    result
+
+arrayMeanFn(array<float> values, float fallback = 0.0) =>
+    float result = fallback
+    int count = array.size(values)
+    if count > 0
+        float total = 0.0
+        for i = 0 to count - 1
+            total += array.get(values, i)
+        result := total / count
+    result
+
+arrayVarianceFn(array<float> values, float fallback = 0.0) =>
+    float result = fallback
+    int count = array.size(values)
+    if count > 0
+        float total = 0.0
+        for i = 0 to count - 1
+            total += array.get(values, i)
+        float avg = total / count
+        float acc = 0.0
+        for i = 0 to count - 1
+            float diff = array.get(values, i) - avg
+            acc += diff * diff
+        result := acc / count
+    result
+// <<< CLIQAS05-VERIFY-COPY-END
+
+ids = array.new<string>()
+vars = array.new<string>()
+exps = array.new<float>()
+acts = array.new<float>()
+addProbe(string id, string varsText, float expected, float actual) =>
+    array.push(ids, id)
+    array.push(vars, varsText)
+    array.push(exps, expected)
+    array.push(acts, actual)
+
+passAt(int i) =>
+    float a = array.get(acts, i)
+    float e = array.get(exps, i)
+    na(a) and na(e) ? true : (not na(a) and not na(e) and math.abs(a - e) < 1e-9)
+
+emptyF = array.new<float>()
+
+// clamp: in range, below, above, reversed bounds, and na input.
+addProbe("clamp-in-range", "0.25, 0, 1", 0.25, clampFn(0.25, 0.0, 1.0))
+addProbe("clamp-below-lo", "-5, 0, 1", 0.0, clampFn(-5.0, 0.0, 1.0))
+addProbe("clamp-above-hi", "2, 0, 1", 1.0, clampFn(2.0, 0.0, 1.0))
+addProbe("clamp-reversed-bounds", "-1, 1, 0", 0.0, clampFn(-1.0, 1.0, 0.0))
+addProbe("clamp-na-input", "na, 0, 1", na, clampFn(na, 0.0, 1.0))
+
+// normalize: domain edges, zero-width domain (default and explicit fallback), out-of-range passthrough.
+addProbe("normalize-mid", "3, 1, 5", 0.5, normalizeFn(3.0, 1.0, 5.0))
+addProbe("normalize-lo-edge", "1, 1, 5", 0.0, normalizeFn(1.0, 1.0, 5.0))
+addProbe("normalize-hi-edge", "5, 1, 5", 1.0, normalizeFn(5.0, 1.0, 5.0))
+addProbe("normalize-zero-denom", "3, 2, 2", 0.0, normalizeFn(3.0, 2.0, 2.0))
+addProbe("normalize-zero-denom-fb", "3, 2, 2, -1", -1.0, normalizeFn(3.0, 2.0, 2.0, -1.0))
+addProbe("normalize-oor-low", "-3, 0, 3", -1.0, normalizeFn(-3.0, 0.0, 3.0))
+addProbe("normalize-oor-high", "6, 0, 3", 2.0, normalizeFn(6.0, 0.0, 3.0))
+
+// weighted score: basics, zero weight sum, empty, mismatched lengths, negative weight, and the
+// v2 `scale` argument (default 1, 2, and 0).
+wsValues = array.from(1.0, 2.0, 3.0)
+wsWeights = array.from(1.0, 2.0, 3.0)
+wsEqual = array.from(1.0, 1.0, 1.0)
+wsZero = array.from(0.0, 0.0, 0.0)
+wsShort = array.from(1.0, 2.0)
+negValues = array.from(2.0, 4.0)
+negWeights = array.from(3.0, -1.0)
+addProbe("weighted-basic", "[1,2,3] [1,2,3]", 2.3333333333, weightedScoreFn(wsValues, wsWeights))
+addProbe("weighted-equal-weights", "[1,2,3] [1,1,1]", 2.0, weightedScoreFn(wsValues, wsEqual))
+addProbe("weighted-zero-weight-sum", "[1,2,3] [0,0,0]", 0.0, weightedScoreFn(wsValues, wsZero))
+addProbe("weighted-zero-sum-fallback", "[1,2,3] [0,0,0], -9", -9.0, weightedScoreFn(wsValues, wsZero, -9.0))
+addProbe("weighted-empty", "[] []", 0.0, weightedScoreFn(emptyF, emptyF))
+addProbe("weighted-length-mismatch", "[1,2,3] [1,2]", 0.0, weightedScoreFn(wsValues, wsShort))
+addProbe("weighted-negative-weight", "[2,4] [3,-1]", 1.0, weightedScoreFn(negValues, negWeights))
+addProbe("weighted-scale-one", "[1,2,3] [1,2,3], scale 1", 2.3333333333, weightedScoreFn(wsValues, wsWeights, 0.0, 1.0))
+addProbe("weighted-scale-two", "[1,2,3] [1,2,3], scale 2", 4.6666666667, weightedScoreFn(wsValues, wsWeights, 0.0, 2.0))
+addProbe("weighted-scale-zero", "[1,2,3] [1,2,3], scale 0", 0.0, weightedScoreFn(wsValues, wsWeights, 0.0, 0.0))
+
+// array mean: [1,2,3], empty with default and explicit fallback, single, negative.
+meanValues = array.from(1.0, 2.0, 3.0)
+singleValue = array.from(5.0)
+soloValue = array.from(42.0)
+negValues3 = array.from(-1.0, -2.0, -3.0)
+addProbe("mean-1-2-3", "[1,2,3]", 2.0, arrayMeanFn(meanValues))
+addProbe("mean-empty", "[]", 0.0, arrayMeanFn(emptyF))
+addProbe("mean-empty-fallback", "[], -7", -7.0, arrayMeanFn(emptyF, -7.0))
+addProbe("mean-single", "[5]", 5.0, arrayMeanFn(singleValue))
+addProbe("mean-negative", "[-1,-2,-3]", -2.0, arrayMeanFn(negValues3))
+
+// population variance: [1,2,3] -> 2/3, empty, constant, two points, four points, single.
+// [1,3,5,7]: mean 4, squared deviations 9+1+1+9=20, population variance 20/4=5
+// (a sample variance would be 20/3=6.6667, so the literal 5 discriminates the policy).
+// [1,3]: mean 2, squared deviations 1+1=2, population variance 2/2=1 (sample would be 2).
+varPair = array.from(1.0, 3.0)
+varFour = array.from(1.0, 3.0, 5.0, 7.0)
+constValues = array.from(5.0, 5.0, 5.0)
+addProbe("variance-1-2-3", "[1,2,3]", 0.6666666667, arrayVarianceFn(meanValues))
+addProbe("variance-empty", "[]", 0.0, arrayVarianceFn(emptyF))
+addProbe("variance-single", "[42]", 0.0, arrayVarianceFn(soloValue))
+addProbe("variance-constant", "[5,5,5]", 0.0, arrayVarianceFn(constValues))
+addProbe("variance-two-points", "[1,3]", 1.0, arrayVarianceFn(varPair))
+addProbe("variance-four-points", "[1,3,5,7]", 5.0, arrayVarianceFn(varFour))
+
+count = array.size(ids)
+mismatches = 0
+naMatches = 0
+observed = 0
+for i = 0 to count - 1
+    bool ok = passAt(i)
+    if ok
+        observed += 1
+    else
+        mismatches += 1
+    if na(array.get(acts, i)) == na(array.get(exps, i))
+        naMatches += 1
+
+tableRows = count + 1
+var table t = table.new(position.top_right, 5, tableRows, border_width = 1)
+if barstate.islast
+    table.cell(t, 0, 0, "CLIQA-S05 verifier", bgcolor = color.new(color.gray, 70), text_color = color.white)
+    table.cell(t, 1, 0, "probes=" + str.tostring(count), bgcolor = color.new(color.gray, 70), text_color = color.white)
+    table.cell(t, 2, 0, "mismatch=" + str.tostring(mismatches), bgcolor = color.new(color.gray, 70), text_color = color.white)
+    table.cell(t, 3, 0, "na-class=" + str.tostring(naMatches), bgcolor = color.new(color.gray, 70), text_color = color.white)
+    table.cell(t, 4, 0, "matched=" + str.tostring(observed), bgcolor = color.new(color.gray, 70), text_color = color.white)
+    for i = 0 to count - 1
+        bool ok = passAt(i)
+        color shade = ok ? color.new(color.green, 85) : color.new(color.red, 80)
+        table.cell(t, 0, i + 1, array.get(ids, i), bgcolor = shade, text_color = color.black, text_size = size.tiny)
+        table.cell(t, 1, i + 1, array.get(vars, i), bgcolor = shade, text_color = color.black, text_size = size.tiny)
+        table.cell(t, 2, i + 1, str.tostring(array.get(exps, i), "#.########"), bgcolor = shade, text_color = color.black, text_size = size.tiny)
+        table.cell(t, 3, i + 1, str.tostring(array.get(acts, i), "#.########"), bgcolor = shade, text_color = color.black, text_size = size.tiny)
+        table.cell(t, 4, i + 1, ok ? "PASS" : "MISMATCH", bgcolor = shade, text_color = color.black, text_size = size.tiny)
+
+if barstate.islast
+    label.new(bar_index, 0, "CLIQA-S05 probes=" + str.tostring(count) + " mismatch=" + str.tostring(mismatches) +
+      " na-class=" + str.tostring(naMatches) + " matched=" + str.tostring(observed),
+      style = label.style_label_left, color = mismatches == 0 ? color.new(color.green, 60) : color.new(color.red, 40),
+      textcolor = color.white, size = size.small)
+
+plot(arrayMeanFn(meanValues), title = "mean123")
+plot(arrayVarianceFn(meanValues), title = "var123")
+plot(clampFn(close, 0.0, 1.0), title = "clampCheck", display = display.data_window)
