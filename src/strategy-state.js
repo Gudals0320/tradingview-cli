@@ -97,21 +97,23 @@ export function prepareInputChange(window, strategyId) {
   return true;
 }
 
-export function beginCompilation(window, token, sourceHash, strategyMode, strategyName = null) {
+export function beginCompilation(window, token, sourceHash, strategyMode, strategyName = null, scriptId = null, targetStudyId = null) {
   // The identical-source shortcut must consume native calculation transitions
   // too: matching inputs alone cannot distinguish an unobserved A -> B -> A edit.
   if (window.__tvCliCompilation?.phase === 'ready') compilationState(window);
   const previous = window.__tvCliCompilation;
   const strategies = pageStrategies(window);
   const applied = strategies.find(item => item.id === previous?.strategy_id);
+  const matching = scriptId ? strategies.filter(item => item.inputs.find(input => input.id === 'pineId')?.value === scriptId) : strategies;
+  const sameDocument = !scriptId || (matching.length === 1 && matching[0].id === applied?.id && previous?.script_id === scriptId);
   const context = readChartContext(window);
-  if (strategyMode && previous?.phase === 'pending' && previous.report_verified
+  if (strategyMode && sameDocument && previous?.phase === 'pending' && previous.report_verified
     && previous.requires_compiled_change === false && previous.source_hash === sourceHash
     && previous.compiled_identity && compiledIdentity(applied?.inputs || []) === previous.compiled_identity
     && previous.observer_source === applied?.source && !applied?.runtime_error) {
     return { phase: 'awaiting', token: previous.token, strategy_id: applied.id };
   }
-  if (strategyMode && previous?.phase === 'ready' && previous.report_verified && previous.source_hash === sourceHash
+  if (strategyMode && sameDocument && previous?.phase === 'ready' && previous.report_verified && previous.source_hash === sourceHash
     && previous.compiled_identity && compiledIdentity(applied?.inputs || []) === previous.compiled_identity
     && JSON.stringify(applied?.inputs) === previous.inputs_fingerprint && !applied?.runtime_error
     && reportIsComplete(applied?.report) && (applied.status_type == null || applied.status_type === 2)
@@ -121,6 +123,7 @@ export function beginCompilation(window, token, sourceHash, strategyMode, strate
   }
   previous?.dispose?.();
   window.__tvCliCompilation = { token, source_hash: sourceHash, strategy_mode: strategyMode,
+    script_id:scriptId,target_study_id:targetStudyId,
     strategy_name: strategyName, requires_compiled_change: true,
     phase: 'pending', baselines: strategies.map((item) => {
       let second = item.source.reportData?.(); if (second?.value) second = second.value();
@@ -166,7 +169,9 @@ export function compilationState(window) {
     }
     return { phase: epoch.phase, token: epoch.token, strategy_id: epoch.strategy_id, error: epoch.error };
   }
-  const candidates = pageStrategies(window).filter(item => !epoch.strategy_name || item.name === epoch.strategy_name);
+  const candidates = pageStrategies(window).filter(item => epoch.script_id
+    ? item.inputs.find(input => input.id === 'pineId')?.value === epoch.script_id && (!epoch.target_study_id || item.id === epoch.target_study_id)
+    : !epoch.strategy_name || item.name === epoch.strategy_name);
   const changed = candidates.filter(item => {
     const old = epoch.baselines.find(baseline => baseline.id === item.id);
     const identity = compiledIdentity(item.inputs);

@@ -36,6 +36,31 @@ function fixture() {
 }
 
 describe('Strategy report identity and metadata', () => {
+  it('binds report freshness to the Pine document despite another changed same-title strategy', () => {
+    const f = fixture(), chart = f.window.TradingViewApi._activeChartWidgetWV.value();
+    const inputs = chart.getStudyById;
+    let otherText = 'Q-old';
+    const other = { ...f.source, id: () => 'other' };
+    chart._chartWidget.model().model = () => ({ dataSources: () => [f.source, other] });
+    chart.getStudyById = id => ({ getInputValues: () => id === 'other'
+      ? [{id:'text',value:otherText},{id:'pineId',value:'Q'}]
+      : [...inputs(id).getInputValues(),{id:'pineId',value:'P'}] });
+    beginCompilation(f.window,'run','hash',true,'Same title','P','strategy');
+    f.compile();otherText='Q-new';f.update();
+    const state=compilationState(f.window);
+    assert.equal(state.phase,'ready');assert.equal(state.strategy_id,'strategy');
+  });
+  it('does not reuse a verified source for a different document or duplicated target', () => {
+    const f=fixture(),chart=f.window.TradingViewApi._activeChartWidgetWV.value();
+    const inputs=chart.getStudyById;
+    chart.getStudyById=id=>({getInputValues:()=>[...inputs(id).getInputValues(),{id:'pineId',value:'P'}]});
+    beginCompilation(f.window,'run','hash',true,'Same title','P','strategy');f.compile();f.update();
+    assert.equal(compilationState(f.window).phase,'ready');
+    const duplicate={...f.source,id:()=> 'duplicate'};
+    chart._chartWidget.model().model=()=>({dataSources:()=>[f.source,duplicate]});
+    assert.notEqual(beginCompilation(f.window,'retry','hash',true,'Same title','P').phase,'unchanged');
+    assert.notEqual(beginCompilation(f.window,'different','hash',true,'Same title','Q').phase,'unchanged');
+  });
   it('rejects an unmonitored GUI input edit even when native status is ready', () => {
     const f = fixture(); f.input(60);
     const result = readStrategyReport(f.window);
