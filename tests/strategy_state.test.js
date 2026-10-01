@@ -212,6 +212,7 @@ describe('Strategy report identity and metadata', () => {
     let clicks = 0, ticks = 0;
     const result = await smartCompile({ _deps: { source,
       evaluate: expression => {
+        if (expression.includes('function pineCompileContext')) return {};
         if (expression.includes('getModelMarkers')) return [];
         if (expression.includes('document')) { clicks++; return 'clicked'; }
         return runInNewContext(expression, { window: f.window });
@@ -232,7 +233,8 @@ describe('Strategy report identity and metadata', () => {
     f.input(60); f.status(1);
     const epoch = f.window.__tvCliCompilation; let ticks = 0;
     const result = await smartCompile({ timeout: 400, _deps: { source,
-      evaluate: expression => expression.includes('getModelMarkers') ? [] : runInNewContext(expression, { window: f.window }),
+      evaluate: expression => expression.includes('function pineCompileContext') ? {} :
+        expression.includes('getModelMarkers') ? [] : runInNewContext(expression, { window: f.window }),
       sleep: async () => { ticks++; }, now: () => ticks * 200,
     } });
     assert.equal(result.success, false); assert.equal(result.compile_performed, false);

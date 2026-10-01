@@ -8,7 +8,7 @@ import { findPineEditor, findPineController, readPineConsole, confirmPineSaveDia
 import { STRATEGY_PAGE_CODE, splitMarkers, formatDiagnostic } from '../strategy-state.js';
 import { sourceHash } from '../session.js';
 import { randomUUID } from 'node:crypto';
-import { observePineCompilation, pineCompilationStatus, dispatchPineCompilation } from './pine-state.js';
+import { observePineCompilation, pineCompilationStatus, dispatchPineCompilation, pineCompileContext } from './pine-state.js';
 
 // Shared helpers execute unchanged in the page and in offline DOM regression tests.
 const FIND_MONACO = `(${findPineEditor.toString()})(document)`;
@@ -361,12 +361,27 @@ export async function getConsole({ _deps } = {}) {
   })()`);
   return { success: true, entries: entries || [], entry_count: entries?.length || 0 };
 }
-export async function smartCompile({ timeout = 30000, _deps } = {}) {
+export async function smartCompile({ timeout = 30000, save: saveChanges = false, _deps } = {}) {
   const inspect = _deps?.evaluate || evaluate;
   if (!_deps && !await ensurePineEditorOpen()) throw new Error('Could not open Pine Editor.');
   const source = _deps?.source || (await getSource()).source;
+  const contextExpression = `(() => {const controller = ${FIND_CONTROLLER};
+    return (${pineCompileContext.toString()})(window, controller); })()`;
+  let context = await inspect(contextExpression);
+  if (context.save_required && !saveChanges) return { success:false,compiled:false,code:'SAVE_REQUIRED',
+    error:'This saved script has unsaved changes. Run pine save first or compile with --save.' };
   const token = randomUUID();
   const strategyMode = /^\s*strategy\s*\(/m.test(source);
+  if (!strategyMode && context.pending) {
+    const sleep = _deps?.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
+    const now = _deps?.now || Date.now, started = now();
+    do { await sleep(200); context = await inspect(contextExpression); }
+    while (context.pending && now() - started < timeout);
+    if (context.pending) return {success:false,compiled:false,error:'Applied indicator calculation did not finish before timeout.'};
+    if (!context.unchanged) return {success:false,compiled:false,error:context.runtime_error || 'Applied indicator identity could not be verified.'};
+  }
+  if (!strategyMode && context.unchanged) return {success:true,compiled:true,compile_performed:false,
+    unchanged:true,has_errors:false,errors:[],warnings:[]};
   const literal = source.match(/^\s*strategy\s*\(\s*(?:title\s*=\s*)?("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/m)?.[1];
   const strategyName = literal ? literal.slice(1, -1).replace(/\\([\\"'nrt])/g, (_, ch) => ({ n: '\n', r: '\r', t: '\t' }[ch] || ch)) : null;
   const begun = await inspect(`(() => { ${STRATEGY_PAGE_CODE}; return beginCompilation(window, ${JSON.stringify(token)}, ${JSON.stringify(sourceHash(source))}, ${strategyMode}, ${JSON.stringify(strategyName)}); })()`);
@@ -383,13 +398,13 @@ export async function smartCompile({ timeout = 30000, _deps } = {}) {
   const button = awaiting ? null : await inspect(`(() => { const controller = ${FIND_CONTROLLER};
     return (${dispatchPineCompilation.toString()})(window, controller, ${JSON.stringify(token)}, document); })()`);
   const sleep = _deps?.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
-  const now = _deps?.now || Date.now; const start = now(); let markers = [], state = null;
+  const now = _deps?.now || Date.now; const start = now(); let markers = [], state = null, persistence = {};
   do {
     await sleep(200);
     let completed = awaiting, nativeMarkers = [];
     if (!awaiting) {
       const progress = await inspect(`(() => {
-        (${confirmPineCompileSaveDialog.toString()})(document);
+        if (${saveChanges}) (${confirmPineCompileSaveDialog.toString()})(document);
         return (${pineCompilationStatus.toString()})(window, ${JSON.stringify(token)});
       })()`);
       if (progress.replaced) return { success:false,compiled:false,error:'Pine compilation operation was replaced.' };
@@ -398,6 +413,7 @@ export async function smartCompile({ timeout = 30000, _deps } = {}) {
         return {success:false,compiled:false,error:progress.error};
       }
       completed = progress.completed;
+      if (completed && context.save_required && saveChanges) persistence = {saved:true,script_id:progress.identity?.scriptIdPart};
       nativeMarkers = progress.diagnostics || [];
       if (!completed) continue;
       if (completed) await inspect(`(${pineCompilationStatus.toString()})(window, ${JSON.stringify(token)}, true)`);
@@ -412,10 +428,10 @@ export async function smartCompile({ timeout = 30000, _deps } = {}) {
       return { success: false, compiled: false, has_errors: true, ...diagnostics, compilation_token: activeToken };
     }
     if (!completed) continue;
-    if (!strategyMode) return { success: true, compiled: true, has_errors: false, ...diagnostics, button_clicked: button || 'keyboard_shortcut', compilation_token: token };
+    if (!strategyMode) return { success: true, compiled: true, has_errors: false, ...diagnostics, ...persistence, button_clicked: button || 'keyboard_shortcut', compilation_token: token };
     state = await inspect(`(() => { ${STRATEGY_PAGE_CODE}; return compilationState(window); })()`);
     if (state.phase === 'failed') return { success: false, compiled: true, has_errors: false, ...diagnostics, runtime_error: state.error, error: state.error };
-    if (state.phase === 'ready') return { success: true, compiled: true, has_errors: false, ...diagnostics,
+    if (state.phase === 'ready') return { success: true, compiled: true, has_errors: false, ...diagnostics, ...persistence,
       button_clicked: awaiting ? null : button || 'keyboard_shortcut', ...(awaiting && { compile_performed: false }),
       strategy_id: state.strategy_id, strategy_inputs: state.inputs, compilation_token: activeToken, report_ready: true };
   } while (now() - start < timeout);

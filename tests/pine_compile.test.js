@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { runInNewContext } from 'node:vm';
 import { setImmediate } from 'node:timers';
 import { smartCompile } from '../src/core/pine.js';
-import { observePineCompilation, dispatchPineCompilation, pineCompilationStatus } from '../src/core/pine-state.js';
+import { observePineCompilation, dispatchPineCompilation, pineCompilationStatus, pineCompileContext } from '../src/core/pine-state.js';
 
 function fixture({ error = false, pending = false } = {}) {
   const window = {}; let state = { ui: { pendingRequests: {} }, console: { messages: [] } };
@@ -43,6 +43,7 @@ function dependencies({ delayedError = false, neverComplete = false } = {}) {
   const context = { window: f.window, document: f.document };
   return { source: '//@version=6\nindicator("QA")\nplot(close)',
     evaluate: expression => {
+      if (expression.includes('function pineCompileContext')) return {};
       if (expression.includes('return beginCompilation(')) return { phase: 'pending' };
       if (expression.includes('return (function observePineCompilation')) return observePineCompilation(f.window, f.controller, 'token');
       if (expression.includes('return (function dispatchPineCompilation')) return 'addToChart';
@@ -70,6 +71,44 @@ it('smartCompile waits past the first empty marker poll for an actual indicator 
   const result = await smartCompile({ _deps: dependencies({ delayedError: true }) });
   assert.equal(result.compiled, false); assert.equal(result.has_errors, true);
   assert.equal(result.errors[0].message, 'delayed error');
+});
+it('indicator unchanged requires matching applied script ID/version and clean editor', () => {
+  const source = { id: () => 'study', metaInfo: () => ({ isTVScript: true }), status: () => ({ type: 2 }) };
+  const window = { TradingViewApi: { _activeChartWidgetWV: { value: () => ({
+    _chartWidget: { model: () => ({ model: () => ({ dataSources: () => [source] }) }) },
+    getStudyById: () => ({ getInputValues: () => [{ id: 'pineId', value: 'A' }, { id: 'pineVersion', value: '1.0' }] }),
+  }) } } };
+  const controller = { getScriptIdVersion: () => ({ scriptIdPart: 'A', version: '1.0' }),
+    isModified: () => false, isDraft: () => false };
+  assert.equal(pineCompileContext(window, controller).unchanged, true);
+  source.status = () => ({ type: 1 });
+  assert.equal(pineCompileContext(window, controller).pending, true);
+  source.status = () => ({ type: 2 });
+  controller.getScriptIdVersion = () => ({ scriptIdPart: 'B', version: '1.0' });
+  assert.equal(pineCompileContext(window, controller).unchanged, false);
+  controller.getScriptIdVersion = () => ({ scriptIdPart: 'A', version: '2.0' });
+  assert.equal(pineCompileContext(window, controller).unchanged, false);
+  controller.isModified = () => true;
+  assert.equal(pineCompileContext(window, controller).save_required, true);
+  controller.isDraft = () => true;
+  assert.equal(pineCompileContext(window, controller).save_required, false);
+});
+it('unchanged indicators wait for a pending applied study without dispatching another compile', async () => {
+  let ticks = 0;
+  const result = await smartCompile({ _deps: { source: 'indicator("QA")',
+    evaluate: expression => {
+      assert.match(expression, /function pineCompileContext/);
+      return ticks < 3 ? { pending: true } : { unchanged: true };
+    }, sleep: async () => { ticks++; }, now: () => ticks * 200,
+  } });
+  assert.equal(result.unchanged, true); assert.equal(result.compile_performed, false); assert.equal(ticks, 3);
+});
+it('compile requires explicit permission to persist edits to a saved script', async () => {
+  let inspections = 0;
+  const result = await smartCompile({ _deps: { source: 'indicator("QA")', evaluate: () => {
+    inspections++; return { save_required: true };
+  } } });
+  assert.equal(result.code, 'SAVE_REQUIRED'); assert.equal(inspections, 1);
 });
 it('smartCompile verifies late clean completion and fails closed on timeout', async () => {
   assert.equal((await smartCompile({ _deps: dependencies() })).compiled, true);

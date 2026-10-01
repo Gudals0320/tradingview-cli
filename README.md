@@ -142,8 +142,14 @@ tv stream quote --interval 500
 ```
 
 `pine raw-compile`은 deprecated 호환 별칭이며 `pine compile`과 같은 스마트 검증을 수행합니다.
-검증된 동일 전략은 `unchanged:true, compile_performed:false`로 실행을 생략할 수 있습니다.
+검증된 동일 지표·전략은 `unchanged:true, compile_performed:false`로 실행을 생략할 수 있습니다.
 버튼 강제 클릭을 요청하는 명령으로 사용하지 마세요.
+
+저장된 스크립트의 미저장 변경을 컴파일하려면 먼저 `pine save`를 실행하거나 `pine compile --save`를 사용하세요.
+기본 컴파일은 기존 저장 내용을 바꾸지 않으며, 저장이 필요하면 `SAVE_REQUIRED`와 exit 1을 반환합니다.
+`--save`로 저장한 성공 응답에는 `saved:true`와 `script_id`가 포함됩니다. 새 draft 컴파일은 Desktop의 임시 draft 경로를 사용합니다.
+`pine save`는 새 문서의 이름 창에서 Desktop이 제안한 이름을 확인하고 서버 소스를 재조회해 저장을 검증합니다.
+`pine new/open`은 미저장 편집 내용을 요청한 문서로 교체합니다. 필요한 내용은 먼저 저장하세요.
 
 현재 옵션은 `tv --help`, `tv <명령> --help`, `tv <명령> <하위 명령> --help`로 확인할 수 있습니다.
 

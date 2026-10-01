@@ -75,7 +75,7 @@ describe('CLI — help and routing', () => {
     const { stdout, exitCode } = run(['pine', 'raw-compile', '--help']);
     assert.equal(exitCode, 0);
     assert.match(stdout, /Deprecated alias of compile/);
-    assert.match(stdout, /unchanged strategies may skip dispatch/);
+    assert.match(stdout, /unchanged scripts may skip dispatch/);
   });
   it('both real Pine command adapters use smart compilation and preserve unchanged results', () => {
     const adapter = join(__dirname, '..', 'src', 'cli', 'commands', 'pine.js');

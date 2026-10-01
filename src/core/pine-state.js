@@ -33,7 +33,7 @@ export function pineCompilationStatus(window, token, finish = false) {
   if (finish) operation.dispose?.();
   operation.refresh?.();
   return { started: operation.started, completed: operation.completed, error: operation.error,
-    diagnostics: operation.diagnostics };
+    diagnostics: operation.diagnostics, identity: operation.controller?.getScriptIdVersion?.() };
 }
 
 /** Await the controller's complete action, including saved-version translation. */
@@ -45,13 +45,38 @@ export function dispatchPineCompilation(window, controller, token, document) {
   const button = Array.from(document.querySelectorAll('button[data-qa-id="add-script-to-chart"],button[data-qa-id="update-script-on-chart"]'))
     .find(button => button.offsetParent !== null && !button.disabled);
   const propsKey = button && Object.keys(button).find(key => key.startsWith('__reactProps$'));
-  const update = controller.isModified?.() !== false && /\.updateOnChart\(/.test(String(button?.[propsKey]?.onClick || ''));
+  const update = /\.updateOnChart\(/.test(String(button?.[propsKey]?.onClick || ''));
   const method = update ? 'updateOnChart' : 'addToChart';
   if (typeof controller?.[method] !== 'function') throw new Error('Pine native compilation action unavailable.');
+  operation.controller = controller;
   Promise.resolve().then(() => controller[method]()).then(() => {
     operation.actionDone = true; operation.refresh();
   }, error => {
     operation.error = error?.message || String(error); operation.actionDone = true; operation.refresh();
   });
   return method;
+}
+
+export function pineCompileContext(window, controller) {
+  const identity = controller?.getScriptIdVersion?.();
+  const modified = controller?.isModified?.();
+  const saveRequired = Boolean(identity?.scriptIdPart && modified && !controller.isDraft?.());
+  const chart = window.TradingViewApi?._activeChartWidgetWV?.value();
+  let unchanged = false, pending = false, runtimeError = null;
+  if (identity?.scriptIdPart && modified === false && chart) {
+    for (const source of chart._chartWidget.model().model().dataSources()) {
+      try {
+        const info = source.metaInfo?.();
+        if (!info?.isTVScript || info.isTVScriptStrategy || info.is_strategy) continue;
+        const inputs = chart.getStudyById(source.id()).getInputValues();
+        if (inputs.find(input => input.id === 'pineId')?.value !== identity.scriptIdPart
+          || String(inputs.find(input => input.id === 'pineVersion')?.value) !== String(identity.version)) continue;
+        const status = source.status?.();
+        if (status?.type === 2) unchanged = true;
+        else if (status?.type === 3) runtimeError = status.errorDescription?.error || 'Indicator execution failed.';
+        else pending = true;
+      } catch { /* unavailable source */ }
+    }
+  }
+  return { save_required: saveRequired, unchanged, pending:pending && !unchanged, runtime_error:runtimeError, identity };
 }
