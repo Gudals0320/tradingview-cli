@@ -1,0 +1,35 @@
+//@version=6
+indicator("CLI-QA-S06-Shared", overlay=true, max_labels_count=20)
+// 문서 A: 파일 입력, 저장이름과 표시제목을 독립적으로 확인한다.
+// 유지 영역: 따옴표 "그대로", 역슬래시 C:\QA\S06, 함수와 줄바꿈.
+string note = "한글 \"인용\" C:\\QA\\S06\n두 번째 줄"
+int length = input.int(17, "평균 기간", minval=2)
+float factor = input.float(1.5, "밴드 배수", minval=0.1)
+string revision = "A-v2"
+
+smooth(float value, int period) =>
+    ta.ema(value, period)
+
+formatNote(string prefix, float value) =>
+    prefix + "\n값: " + str.tostring(value, format.mintick)
+
+float center = smooth(close, length)
+float spread = ta.atr(length) * factor
+float top = center + spread
+float bottom = center - spread
+bool rise = ta.crossover(close, center)
+bool fall = ta.crossunder(close, center)
+
+plot(center, title="중심선", color=color.orange)
+upper = plot(top, title="위 밴드", color=color.teal)
+lower = plot(bottom, title="아래 밴드", color=color.purple)
+fill(upper, lower, color=color.new(color.blue, 92))
+plotshape(rise, title="상승", style=shape.triangleup, location=location.belowbar, size=size.tiny)
+plotshape(fall, title="하락", style=shape.triangledown, location=location.abovebar, size=size.tiny)
+
+var label marker = na
+if barstate.islast
+    label.delete(marker)
+    marker := label.new(bar_index, high, formatNote(note + " / " + revision, center),
+         style=label.style_label_down, textcolor=color.white, color=color.new(color.blue, 35))
+// EOF sentinel A: 공백과 마지막 줄바꿈도 전체 SHA에 포함.

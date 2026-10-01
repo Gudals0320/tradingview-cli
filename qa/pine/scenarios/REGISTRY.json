@@ -23,7 +23,9 @@
       "thread_id": "01a0f54c-5d8b-77f2-bbcf-c27b18b5827b",
       "status": "reviewed",
       "commit": "ae5ca9d",
-      "outcome": "Functional PASS; compile --save failure reporting defect; realtime rollover NOT TESTED"
+      "outcome": "Functional PASS; compile --save failure reporting defect; realtime rollover NOT TESTED",
+      "started_at_utc": "2026-10-01T02:30:20.000Z",
+      "accepted_handoff_at_utc": "2026-10-01T02:52:04.000Z"
     },
     {
       "number": 2,
@@ -47,7 +49,9 @@
       "thread_id": "01a0f561-51b7-79d0-bfd2-82cbbabb3500",
       "status": "reviewed",
       "commit": "d7c9684",
-      "outcome": "Table/series and persistence passed; runtime Rejected diagnostic defect; initial empty archive not observed"
+      "outcome": "Table/series and persistence passed; runtime Rejected diagnostic defect; initial empty archive not observed",
+      "started_at_utc": "2026-10-01T02:53:11.000Z",
+      "accepted_handoff_at_utc": "2026-10-01T03:30:17.000Z"
     },
     {
       "number": 3,
@@ -71,7 +75,9 @@
       "thread_id": "01a0f584-b5e2-7332-b406-59e47a2fa9c1",
       "status": "reviewed",
       "outcome": "Functionality PASS after workaround; corrected save/reopen compile FAIL; harness isolation incident restored S02 source with version change5to8",
-      "commit": "2e9a87c"
+      "commit": "2e9a87c",
+      "started_at_utc": "2026-10-01T03:31:50.000Z",
+      "accepted_handoff_at_utc": "2026-10-01T03:57:01.000Z"
     },
     {
       "number": 4,
@@ -95,7 +101,9 @@
       "thread_id": "01a0f59d-535b-7b81-8a76-559c1029fef4",
       "status": "reviewed",
       "outcome": "Functional PASS; coordinate/log observability limits; inherited document fenced before mutation",
-      "commit": "2de84fe"
+      "commit": "2de84fe",
+      "started_at_utc": "2026-10-01T03:58:44.000Z",
+      "accepted_handoff_at_utc": "2026-10-01T04:20:32.000Z"
     },
     {
       "number": 5,
@@ -118,7 +126,10 @@
       ],
       "thread_id": "01a0f5b2-cb41-7800-92e7-ade8e5a2e9ae",
       "status": "reviewed",
-      "outcome": "Final v2 copied-body 33/33; library persistence/type contracts pass; title-check divergence, library apply timeouts, panel/update observations with workarounds"
+      "outcome": "Final v2 copied-body 33/33; library persistence/type contracts pass; title-check divergence, library apply timeouts, panel/update observations with workarounds",
+      "commit": "fb82aeb",
+      "started_at_utc": "2026-10-01T04:22:11.000Z",
+      "accepted_handoff_at_utc": "2026-10-01T05:15:18.000Z"
     },
     {
       "number": 6,
@@ -139,8 +150,13 @@
         "의도한 부분만 diff; CRLF→LF만 정규화한 fullSHA 파일/stdin/save/open 일치.",
         "unsaved open/new가 README 계약과 일치. 각 오류코드/diagnostic 관측, raw alias unchanged 및 반복적용중복 확인."
       ],
-      "thread_id": null,
-      "status": "queued"
+      "thread_id": "01a0f5e7-7a3f-7f10-acaa-bdbaba4ddde1",
+      "status": "reviewed",
+      "started_at_utc": "2026-10-01T05:19:43.000Z",
+      "outcome": "Identity/source/ambiguity/unsaved contracts PASS; unchanged strategy reopen compile/raw Rejected2of2 and REPORT_PENDING",
+      "accepted_handoff_at_utc": "2026-10-01T05:31:43.000Z"
     }
-  ]
+  ],
+  "sequential_dispatch_verified": true,
+  "status": "all_handoffs_reviewed"
 }

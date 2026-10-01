@@ -117,3 +117,28 @@ Product baseline: 57ee8e7. Shared product source stays unchanged during this run
   Lead to S05 ignored results; original raw command path remains historical.
 - Unsupported library study and superseded own verifier study were removed by
   worker; no other scenario source mutated. Final Volume+verifier and no modal.
+
+## S06 — reviewed
+
+- Read full HANDOFF and appended EOL/epoch analysis; 80 CLI calls, ten criteria
+  pass and reopened-strategy compile criterion fails. Source/version/compiled input
+  checks cover A/B/C/D, exact saved names, two ambiguous titles, three partial-name
+  matches, unsaved replacement, invalid type and missing-name refusal.
+- A CRLF file edit and B LF stdin edit each changed only their intended two lines.
+  C/D unchanged; B compile leaves A compiled identity/count unchanged. A and B each
+  remain one study. Failed ambiguous opens also preserve unsaved source.
+- B immediate compile/retry succeeds; after document reopen raw and normal fail
+  Rejected2/2. Lead independently recomputed recorded before/after:1206 LF chars
+  ->1239 CRLF chars, 33 CRLF additions, equal normalized text, different rawSHA.
+- Native B report complete/status2 versus CLI pending/REPORT_PENDING observed.
+  Raw hash comparison and pending-on-rejection code paths support, but do not prove
+  the whole native-rejection cause. Corroborates S03 without source-error injection.
+- No new cross-scenario incident; final A clean, dialogs/replay0. All six workers
+  finished before the following worker started (timestamps in REGISTRY.json).
+
+## Final suite checks
+
+- Product src/tests/package files are byte-for-byte unchanged relative to 57ee8e7.
+- Final TRADINGVIEW_SKIP_NETWORK_TESTS=1 npm test:308 pass,0 fail; lint passes.
+- Only QA fixtures/harnesses/evidence/review docs changed. No merge/PR/push.
+- Existing issues#4–#12 stay untouched; user requested one new aggregate report.

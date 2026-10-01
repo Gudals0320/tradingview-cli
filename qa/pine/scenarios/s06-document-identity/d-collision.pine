@@ -1,0 +1,4 @@
+//@version=6
+indicator("CLI-QA-S06-Collision-D", overlay=true)
+// 부분 저장이름 충돌 전용 문서.
+plot(close, title="D 충돌 검증")
