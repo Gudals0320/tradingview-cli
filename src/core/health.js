@@ -271,7 +271,8 @@ async function _waitForCdp({ cdpPort, attempts, delay, probeCdp }) {
 function _copyMsixPackageLocal(tvPath, { cpSync, rmSync, readdirSync, existsSync }) {
   const srcDir = dirname(tvPath);
   const pkgName = basename(srcDir);
-  const cacheRoot = join(process.env.LOCALAPPDATA || '', 'tradingview-cli');
+  if (!process.env.LOCALAPPDATA || !/^(?:[A-Za-z]:[\\/]|\\\\)/.test(process.env.LOCALAPPDATA)) throw new Error('An absolute LOCALAPPDATA is required for MSIX cache copying.');
+  const cacheRoot = join(process.env.LOCALAPPDATA, 'tradingview-cli');
   const dstDir = join(cacheRoot, pkgName);
   const dstExe = join(dstDir, 'TradingView.exe');
   if (!existsSync(dstExe)) {
@@ -334,7 +335,7 @@ export async function launch({ port, kill_existing, _deps } = {}) {
   if (!tvPath) {
     try {
       const cmd = platform === 'win32' ? 'where TradingView.exe' : 'which tradingview';
-      tvPath = deps.execSync(cmd, { timeout: 3000 }).toString().trim().split('\n')[0];
+      tvPath = deps.execSync(cmd, { timeout: 3000 }).toString().trim().split(/\r?\n/)[0].trim();
       if (tvPath && !deps.existsSync(tvPath)) tvPath = null;
     } catch { /* ignore */ }
   }

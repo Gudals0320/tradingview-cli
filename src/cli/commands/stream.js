@@ -73,10 +73,11 @@ register('stream', {
     ['ohlcv', {
       description: 'Stream multiple SYMBOL@TIMEFRAME feeds as JSONL',
       options: {
+        'allow-reassign-target': { type: 'string', multiple: true, description: 'Explicit target IDs whose existing panes may be reassigned' },
         interval: { type: 'string', short: 'i', description: 'Poll interval in ms (default 250, minimum 100)' },
       },
       handler: async (opts, positionals) => {
-        await streamOhlcvFeeds({ feedSpecs: positionals, interval: opts.interval });
+        await streamOhlcvFeeds({ feedSpecs: positionals, interval: opts.interval, allowReassignTargets: opts['allow-reassign-target'] || [] });
         return;
       },
     }],

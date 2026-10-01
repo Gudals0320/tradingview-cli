@@ -1,7 +1,7 @@
 import CDP from './cdp.js';
 import { CDP_HOST, CDP_PORT } from './config.js';
 import { getDesktopInventory, activeTarget, bindShellTab } from './desktop.js';
-import { assertSessionAccess, isReadOnlySession, currentWorkspaceSession } from './session.js';
+import { assertSessionAccess, isReadOnlySession, currentWorkspaceSession, nativeCheckpoint } from './session.js';
 import { WORKSPACE_PAGE_CODE } from './workspace-page.js';
 
 let client = null;
@@ -157,6 +157,9 @@ export async function getTargetInfo() {
 
 export async function evaluate(expression, opts = {}) {
   const c = await getClient();
+  const { mutation = false, ...protocolOptions } = opts;
+  opts = protocolOptions;
+  if (mutation) nativeCheckpoint(null, configuredTarget());
   const workspace = currentWorkspaceSession()?.workspace;
   if (workspace) {
     const owner = { id: workspace.id, token: workspace.token, nonce: workspace.binding?.nonce };
@@ -182,8 +185,8 @@ export async function evaluate(expression, opts = {}) {
   return result.result?.value;
 }
 
-export async function evaluateAsync(expression) {
-  return evaluate(expression, { awaitPromise: true });
+export async function evaluateAsync(expression, opts = {}) {
+  return evaluate(expression, { ...opts, awaitPromise: true });
 }
 
 export async function disconnect() {

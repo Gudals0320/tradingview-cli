@@ -96,7 +96,7 @@ export async function setLayout({ layout }) {
     throw new Error(`Unknown layout "${layout}". Available layouts:\n${available}`);
   }
 
-  await evaluateAsync(`${CWC}.setLayout(${safeString(resolved)})`);
+  await evaluateAsync(`${CWC}.setLayout(${safeString(resolved)})`, { mutation: true });
   await new Promise(r => setTimeout(r, 500));
 
   const state = await list();
@@ -114,6 +114,7 @@ export async function setLayout({ layout }) {
  */
 export async function focus({ index }) {
   const idx = Number(index);
+  if (!Number.isInteger(idx) || idx < 0) throw new Error('Pane index must be a non-negative integer.');
   const result = await evaluate(`
     (function() {
       var cwc = ${CWC};
@@ -122,9 +123,11 @@ export async function focus({ index }) {
       var chart = all[${idx}];
       // Click the main div to activate it
       if (chart._mainDiv) chart._mainDiv.click();
+      var active = window.TradingViewApi._activeChartWidgetWV.value();
+      if (active?._chartWidget !== chart && active !== chart) return { error: 'Requested pane did not become active; no symbol change was dispatched.' };
       return { focused: ${idx}, total: all.length };
     })()
-  `);
+  `, { mutation: true });
 
   if (result?.error) throw new Error(result.error);
   return { success: true, focused_index: result.focused, total_panes: result.total };
@@ -150,7 +153,7 @@ export async function setSymbol({ index, symbol }) {
         setTimeout(resolve, 500);
       });
     })()
-  `);
+  `, { mutation: true });
 
   return { success: true, index: idx, symbol };
 }

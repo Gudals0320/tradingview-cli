@@ -1,7 +1,8 @@
+import { nativeCheckpoint } from '../session.js';
 /**
  * Core UI automation logic.
  */
-import { evaluate, evaluateAsync, getClient } from '../connection.js';
+import { evaluate, evaluateAsync, getClient, configuredTarget } from '../connection.js';
 
 export async function click({ by, value }) {
   const escaped = JSON.stringify(value);
@@ -23,7 +24,7 @@ export async function click({ by, value }) {
       el.click();
       return { found: true, tag: el.tagName.toLowerCase(), text: (el.textContent || '').trim().substring(0, 80), aria_label: el.getAttribute('aria-label') || null, data_name: el.getAttribute('data-name') || null };
     })()
-  `);
+  `, { mutation: true });
   if (!result || !result.found) throw new Error('No matching element found for ' + by + '="' + value + '"');
   return { success: true, clicked: result };
 }
@@ -91,7 +92,7 @@ export async function openPanel({ panel, action }) {
         else { performed = isOpen ? 'already_open' : 'already_closed'; }
         return { was_open: isOpen, performed: performed };
       })()
-    `);
+    `, { mutation: true });
     if (result && result.error) throw new Error(result.error);
     return { success: true, panel, action, was_open: result?.was_open ?? false, performed: result?.performed ?? 'unknown' };
   }
@@ -105,7 +106,7 @@ export async function fullscreen() {
       btn.click();
       return { found: true };
     })()
-  `);
+  `, { mutation: true });
   if (!result || !result.found) throw new Error('Fullscreen button not found');
   return { success: true, action: 'fullscreen_toggled' };
 }
@@ -126,51 +127,60 @@ export async function layoutList() {
   return { success: true, layout_count: layouts?.layouts?.length || 0, source: layouts?.source, layouts: layouts?.layouts || [], error: layouts?.error };
 }
 
-export async function layoutSwitch({ name }) {
-  const escaped = JSON.stringify(name);
-  const result = await evaluateAsync(`
-    new Promise(function(resolve) {
-      try {
-        var target = ${escaped};
-        if (/^\\d+$/.test(target)) { window.TradingViewApi.loadChartFromServer(target); resolve({success: true, method: 'loadChartFromServer', id: target, source: 'internal_api'}); return; }
-        window.TradingViewApi.getSavedCharts(function(charts) {
-          if (!charts || !Array.isArray(charts)) { resolve({success: false, error: 'getSavedCharts returned no data', source: 'internal_api'}); return; }
-          var match = null;
-          for (var i = 0; i < charts.length; i++) { var cname = charts[i].name || charts[i].title || ''; if (cname === target || cname.toLowerCase() === target.toLowerCase()) { match = charts[i]; break; } }
-          if (!match) { for (var j = 0; j < charts.length; j++) { var cn = (charts[j].name || charts[j].title || '').toLowerCase(); if (cn.indexOf(target.toLowerCase()) !== -1) { match = charts[j]; break; } } }
-          if (!match) { resolve({success: false, error: 'Layout "' + target + '" not found.', source: 'internal_api'}); return; }
-          var chartId = match.id || match.chartId;
-          window.TradingViewApi.loadChartFromServer(chartId);
-          resolve({success: true, method: 'loadChartFromServer', id: chartId, name: match.name || match.title, source: 'internal_api'});
-        });
-        setTimeout(function() { resolve({success: false, error: 'getSavedCharts timed out', source: 'internal_api'}); }, 5000);
-      } catch(e) { resolve({success: false, error: e.message, source: 'internal_api'}); }
-    })
-  `);
-  if (!result?.success) throw new Error(result?.error || 'Unknown error switching layout');
+export function requestLayoutSwitch(window, name, timeout = 5000) {
+  return new Promise(resolve => {
+    let active = true;
+    let timer;
+    const finish = result => { if (!active) return; active = false; clearTimeout(timer); resolve(result); };
+    timer = setTimeout(() => finish({ success: false, code: 'LAYOUT_LOOKUP_TIMEOUT', error: 'getSavedCharts timed out' }), timeout);
+    try {
+      window.TradingViewApi.getSavedCharts(charts => {
+        if (!active) return; // A timed-out lookup cannot start navigation later.
+        try {
+          if (!Array.isArray(charts)) return finish({ success: false, error: 'Saved layouts unavailable.' });
+          const q = String(name).toLowerCase();
+          const exact = charts.filter(chart => String(chart.id || chart.chartId) === String(name)
+            || String(chart.name || chart.title || '').toLowerCase() === q);
+          const matches = exact.length ? exact : charts.filter(chart => String(chart.name || chart.title || '').toLowerCase().includes(q));
+          if (matches.length !== 1) return finish({ success: false,
+            code: matches.length ? 'LAYOUT_AMBIGUOUS' : 'LAYOUT_NOT_FOUND',
+            error: matches.length ? 'Ambiguous layout name; use an exact unique name or ID.' : 'Layout not found.' });
+          const chart = matches[0], id = chart.id || chart.chartId;
+          if (!id) return finish({ success: false, error: 'Saved layout has no stable ID.' });
+          window.TradingViewApi.loadChartFromServer(id);
+          finish({ success: true, id: String(id), name: chart.name || chart.title });
+        } catch (error) { finish({ success: false, error: error.message }); }
+      });
+    } catch (error) { finish({ success: false, error: error.message }); }
+  });
+}
 
-  // Handle "unsaved changes" confirmation dialog
-  await new Promise(r => setTimeout(r, 500));
-  const dismissed = await evaluate(`
-    (function() {
-      var btns = document.querySelectorAll('button');
-      for (var i = 0; i < btns.length; i++) {
-        var text = btns[i].textContent.trim();
-        if (/open anyway|don't save|discard/i.test(text)) {
-          btns[i].click();
-          return true;
-        }
-      }
-      return false;
-    })()
-  `);
-
-  if (dismissed) await new Promise(r => setTimeout(r, 1000));
-  return { success: true, layout: result.name || name, layout_id: result.id, source: result.source, action: 'switched', unsaved_dialog_dismissed: dismissed };
+export async function layoutSwitch({ name, _deps } = {}) {
+  const inspect = _deps?.evaluate || evaluate;
+  const inspectAsync = _deps?.evaluateAsync || evaluateAsync;
+  const sleep = _deps?.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
+  const result = await inspectAsync(`(${requestLayoutSwitch.toString()})(window,${JSON.stringify(name)})`, { mutation: true });
+  if (!result?.success) return { success: false, ...result };
+  let actual;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    await sleep(250);
+    actual = await inspect(`(() => {
+      const meta = window.TradingViewApi?._chartWidgetCollection?.metaInfo;
+      const uid = typeof meta?.uid?.value === 'function' ? meta.uid.value() : meta?.uid;
+      return { id: uid ? String(uid) : null, dialog: Boolean(document.querySelector('[role="dialog"]')) };
+    })()`);
+    if (actual?.id === result.id) return { success: true, layout: result.name || name, layout_id: result.id,
+      action: 'switched', layout_verified: true, unsaved_dialog_dismissed: false };
+    if (actual?.dialog) break;
+  }
+  return { success: false, layout: result.name || name, layout_id: result.id, actual_layout_id: actual?.id || null,
+    action: 'switch_pending', layout_verified: false, confirmation_required: true,
+    error: 'Requested layout was not opened. Resolve the Desktop save/discard confirmation explicitly; no changes were discarded.' };
 }
 
 export async function keyboard({ key, modifiers }) {
   const c = await getClient();
+  nativeCheckpoint(null, configuredTarget());
   let mod = 0;
   if (modifiers) {
     if (modifiers.includes('alt')) mod |= 1;
@@ -195,6 +205,7 @@ export async function keyboard({ key, modifiers }) {
 
 export async function typeText({ text }) {
   const c = await getClient();
+  nativeCheckpoint(null, configuredTarget());
   await c.Input.insertText({ text });
   return { success: true, typed: text.substring(0, 100), length: text.length };
 }
@@ -221,12 +232,14 @@ export async function hover({ by, value }) {
   `);
   if (!coords) throw new Error('Element not found for ' + by + '="' + value + '"');
   const c = await getClient();
+  nativeCheckpoint(null, configuredTarget());
   await c.Input.dispatchMouseEvent({ type: 'mouseMoved', x: coords.x, y: coords.y });
   return { success: true, hovered: { by, value, tag: coords.tag, x: coords.x, y: coords.y } };
 }
 
 export async function scroll({ direction, amount }) {
   const c = await getClient();
+  nativeCheckpoint(null, configuredTarget());
   const px = amount || 300;
   const center = await evaluate(`
     (function() {
@@ -245,6 +258,7 @@ export async function scroll({ direction, amount }) {
 
 export async function mouseClick({ x, y, button, double_click }) {
   const c = await getClient();
+  nativeCheckpoint(null, configuredTarget());
   const btn = button === 'right' ? 'right' : button === 'middle' ? 'middle' : 'left';
   const btnNum = btn === 'right' ? 2 : btn === 'middle' ? 1 : 0;
   await c.Input.dispatchMouseEvent({ type: 'mouseMoved', x, y });

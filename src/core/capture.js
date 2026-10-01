@@ -10,13 +10,19 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCREENSHOT_DIR = join(dirname(dirname(__dirname)), 'screenshots');
 
+export function safeFilename(value) {
+  const name = String(value).replace(/[^\p{L}\p{N}_.-]/gu, '_').replace(/\.\./g, '_').replace(/[. ]+$/g, '');
+  if (!name || /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(name)) throw new Error('Invalid or reserved screenshot filename.');
+  return name;
+}
+
 export async function captureScreenshot({ region, filename, method, waitForRender = false } = {}) {
   mkdirSync(SCREENSHOT_DIR, { recursive: true });
 
   if (waitForRender) await waitForChartRender();
 
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
-  const fname = (filename || `tv_${region || 'full'}_${ts}`).replace(/[\/\\]/g, '_').replace(/\.\./g, '_');
+  const fname = safeFilename(filename || `tv_${region || 'full'}_${ts}`);
   const filePath = join(SCREENSHOT_DIR, `${fname}.png`);
 
   if (method === 'api') {

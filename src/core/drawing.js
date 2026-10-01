@@ -27,21 +27,21 @@ export async function drawShape({ shape, point, point2, overrides: overridesRaw,
         [{ time: ${p1time}, price: ${p1price} }, { time: ${p2time}, price: ${p2price} }],
         { shape: ${safeString(shape)}, overrides: ${overridesStr}, text: ${textStr} }
       )
-    `);
+    `, { mutation: true });
   } else {
     await evaluate(`
       ${apiPath}.createShape(
         { time: ${p1time}, price: ${p1price} },
         { shape: ${safeString(shape)}, overrides: ${overridesStr}, text: ${textStr} }
       )
-    `);
+    `, { mutation: true });
   }
 
   await new Promise(r => setTimeout(r, 200));
   const after = await evaluate(`${apiPath}.getAllShapes().map(function(s) { return s.id; })`);
   const newId = (after || []).find(id => !(before || []).includes(id)) || null;
   const result = { entity_id: newId };
-  return { success: true, shape, entity_id: result?.entity_id };
+  return { success: Boolean(result?.entity_id), changed: Boolean(result?.entity_id), shape, entity_id: result?.entity_id };
 }
 
 export async function listDrawings() {
@@ -101,13 +101,13 @@ export async function removeOne({ entity_id }) {
       for (var j = 0; j < after.length; j++) { if (after[j].id === eid) { stillExists = true; break; } }
       return { removed: !stillExists, entity_id: eid, remaining_shapes: after.length };
     })()
-  `);
+  `, { mutation: true });
   if (result?.error) throw new Error(result.error);
-  return { success: true, entity_id: result?.entity_id, removed: result?.removed, remaining_shapes: result?.remaining_shapes };
+  return { success: result?.removed === true, changed: result?.removed === true, entity_id: result?.entity_id, removed: result?.removed, remaining_shapes: result?.remaining_shapes };
 }
 
 export async function clearAll() {
   const apiPath = await _getChartApi();
-  await _evaluate(`${apiPath}.removeAllShapes()`);
+  await _evaluate(`${apiPath}.removeAllShapes()`, { mutation: true });
   return { success: true, action: 'all_shapes_removed' };
 }

@@ -2,12 +2,12 @@ import CDP from './cdp.js';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { CDP_HOST, CDP_PORT } from './config.js';
-import { acquireWorkspace, reserveWorkspace, releaseWorkspace, workspaceError } from './workspace-store.js';
+import { acquireWorkspace, reserveWorkspace, releaseWorkspace, workspaceError, loadWorkspace } from './workspace-store.js';
 import { withWorkspaceSession, sourceHash, canonicalSessionHost } from './session.js';
 import { configureTarget, getClient } from './connection.js';
 import { WORKSPACE_PAGE_CODE } from './workspace-page.js';
 import { normalizeTimeframe } from './chart-context.js';
-import { WORKSPACE_COMMANDS } from './cli/policy.js';
+import { WORKSPACE_COMMANDS, WORKSPACE_READS, pureRead } from './cli/policy.js';
 export { WORKSPACE_COMMANDS } from './cli/policy.js';
 
 async function raw(client, expression) {
@@ -111,6 +111,28 @@ async function readInput() {
 
 export async function runWorkspace(file, command, values, positionals, handler, { _deps } = {}) {
   if (!WORKSPACE_COMMANDS.has(command)) throw workspaceError('WORKSPACE_COMMAND_UNSUPPORTED', `Command ${command} cannot run independently in a workspace.`);
+  if (command === 'quote' && positionals.length) throw workspaceError('WORKSPACE_COMMAND_UNSUPPORTED', 'Workspace quote reads the owned chart only; a symbol switch is not a pure read.');
+  if (WORKSPACE_READS.has(command) && pureRead(command, values, positionals)) {
+    const workspace = loadWorkspace(file);
+    const observer = { workspace, endpoint_key: workspace.endpoint_key, assertOwner: () => loadWorkspace(file) };
+    return withWorkspaceSession(observer, async () => {
+      await (_deps?.checkLayout || checkLayout)(workspace);
+      if (await (_deps?.browserIdentity || browserIdentity)() !== workspace.binding?.browser) throw workspaceError('WORKSPACE_GENERATION_CHANGED', 'Desktop browser generation changed.');
+      configureTarget(workspace.target);
+      const client = await (_deps?.getClient || getClient)(), inspect = _deps?.raw || raw;
+      const before = await inspect(client, pageCall('guardWorkspacePage', owner(workspace)));
+      if (command === 'indicator get' && positionals[0] !== before.studies[0]?.id) throw workspaceError('WORKSPACE_STUDY_MISMATCH', 'Read only the owned study.');
+      const result = await handler(values, positionals);
+      const after = await inspect(client, pageCall('guardWorkspacePage', owner(workspace)));
+      const stable = sourceHash(before.source) === sourceHash(after.source)
+        && JSON.stringify(before.context) === JSON.stringify(after.context)
+        && JSON.stringify(before.studies.map(study => [study.id, study.inputs])) === JSON.stringify(after.studies.map(study => [study.id, study.inputs]));
+      if (!stable) throw workspaceError('WORKSPACE_OBSERVATION_CHANGED', 'Source, inputs or chart context changed during this observation; retry after the active operation settles.');
+      return { ...result, provenance: { workspace_id: workspace.id, observation: true, target: workspace.target,
+        source_hash: sourceHash(after.source), context: after.context, page_generation: workspace.binding.nonce,
+        changed_during_read: false } };
+    });
+  }
   const permit = await permitFor(command, values, positionals), lease = acquireWorkspace(file), workspace = lease.workspace;
   let started = false;
   let handlerStarted = false, client, finalState;

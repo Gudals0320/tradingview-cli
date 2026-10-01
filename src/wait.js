@@ -12,7 +12,7 @@ export async function waitForChartReady(expectedSymbol = null, expectedTf = null
   while (now() - start < timeout) {
     last = await inspect(`(${readChartContext.toString()})(window)`);
     if (last?.feed_error) throw new Error(`Chart feed failed: ${last.feed_error}`);
-    if (last && !last.loading && last.bar_count === 0 && (!expectedSymbol || last.symbol === expectedSymbol)) {
+    if (last && !last.loading && last.bar_count === 0 && symbolMatches(expectedSymbol, last)) {
       throw new Error(`No chart bars are available for ${expectedSymbol || last.symbol}.`);
     }
     const ready = last && !last.loading && last.bar_count > 0 && symbolMatches(expectedSymbol, last)

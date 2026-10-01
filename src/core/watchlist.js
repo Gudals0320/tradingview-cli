@@ -5,7 +5,8 @@
  * mirroring the proven alerts REST pattern. Add drives the Add-symbol
  * search UI so bare tickers resolve the same way they do for a human.
  */
-import { evaluate, evaluateAsync, getClient } from '../connection.js';
+import { nativeCheckpoint } from '../session.js';
+import { evaluate, evaluateAsync, getClient, configuredTarget } from '../connection.js';
 
 // TV renamed the right-rail button: current builds use data-name="base" with
 // aria-label "Watchlist, details, and news"; older builds used
@@ -27,7 +28,7 @@ async function ensureWatchlistOpen(maxWaitMs = 5000) {
       if (!pressed || !widgetReady) { if (!pressed) btn.click(); return { opened: !pressed }; }
       return { opened: false, ready: true };
     })()
-  `);
+  `, { mutation: true });
   if (state?.error) throw new Error(state.error);
   if (state?.ready) return { opened: false };
 
@@ -71,7 +72,8 @@ async function getActiveListInfo() {
 }
 
 export async function get() {
-  await ensureWatchlistOpen();
+  const ready = await evaluate(`Boolean(document.querySelector('[data-name=add-symbol-button], [class*=layout__area--right] [data-symbol-full]'))`);
+  if (!ready) throw new Error('WATCHLIST_PANEL_REQUIRED: Open the watchlist panel explicitly before reading.');
 
   // Positional cell mapping (name, last, change, change%, volume) with
   // Unicode-minus normalization. The old regex classifier dropped every
@@ -118,6 +120,7 @@ export async function get() {
 export async function add({ symbol }) {
   const c = await getClient();
   await ensureWatchlistOpen();
+  const before = await evaluate(`Array.from(document.querySelectorAll('[class*=layout__area--right] [data-symbol-full]')).map(row => row.getAttribute('data-symbol-full'))`);
 
   const addClicked = await evaluate(`
     (function() {
@@ -128,12 +131,25 @@ export async function add({ symbol }) {
       btn.click();
       return { found: true };
     })()
-  `);
+  `, { mutation: true });
   if (!addClicked?.found) throw new Error('Add symbol button not found in watchlist panel');
   await new Promise(r => setTimeout(r, 400));
 
+  const focused = await evaluate(`(() => {
+    const dialog = document.querySelector('[data-name="symbol-search-dialog"], [role="dialog"]');
+    const input = dialog?.querySelector('input');
+    if (!input || input.offsetParent === null) return false;
+    input.focus();
+    if (document.activeElement !== input) return false;
+    window.__tvCliWatchlistInput = input;
+    return true;
+  })()`);
+  if (!focused) throw new Error('WATCHLIST_INPUT_NOT_READY: Owned symbol dialog input is not focused; nothing was typed.');
+  nativeCheckpoint('watchlist add', configuredTarget());
   await c.Input.insertText({ text: symbol });
   await new Promise(r => setTimeout(r, 700));
+  const stillFocused = await evaluate(`document.activeElement === window.__tvCliWatchlistInput && window.__tvCliWatchlistInput?.isConnected`);
+  if (!stillFocused) throw new Error('Watchlist input focus changed; Enter was not dispatched.');
   await c.Input.dispatchKeyEvent({ type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
   await c.Input.dispatchKeyEvent({ type: 'keyUp', key: 'Enter', code: 'Enter' });
   await new Promise(r => setTimeout(r, 400));
@@ -142,19 +158,20 @@ export async function add({ symbol }) {
   await new Promise(r => setTimeout(r, 400));
 
   // Verify the row actually appeared instead of reporting blind success.
-  const bare = symbol.split(':').pop().toUpperCase();
+  const bare = symbol.includes(':') ? null : symbol.toUpperCase();
   const verified = await evaluate(`
     (function() {
       var rows = document.querySelectorAll('[class*="layout__area--right"] [data-symbol-full]');
       for (var i = 0; i < rows.length; i++) {
         var s = rows[i].getAttribute('data-symbol-full') || '';
-        if (s.toUpperCase() === ${JSON.stringify(symbol.toUpperCase())} || s.split(':').pop().toUpperCase() === ${JSON.stringify(bare)}) return s;
+        if (s.toUpperCase() === ${JSON.stringify(symbol.toUpperCase())} || (${JSON.stringify(bare)} && s.split(':').pop().toUpperCase() === ${JSON.stringify(bare)})) return s;
       }
       return null;
     })()
   `);
 
-  return { success: !!verified, symbol, added_as: verified, action: verified ? 'added' : 'not_verified' };
+  const changed = Boolean(verified && !before?.includes(verified));
+  return { success: Boolean(verified), changed, symbol, added_as: verified, action: changed ? 'added' : verified ? 'already_present' : 'not_verified' };
 }
 
 export async function addBulk({ symbols }) {
@@ -203,7 +220,7 @@ export async function remove({ symbols }) {
     })
       .then(function(r) { return r.text().then(function(t) { return { status: r.status, ok: r.ok, body: t.substring(0, 300) }; }); })
       .catch(function(e) { return { status: 0, ok: false, body: String(e) }; })
-  `);
+  `, { mutation: true });
 
   if (!resp?.ok) {
     throw new Error(`Watchlist remove REST call failed (HTTP ${resp?.status}): ${resp?.body}`);
@@ -211,9 +228,9 @@ export async function remove({ symbols }) {
 
   // The desktop widget doesn't live-sync API removals — remount it by
   // toggling the panel, then verify the rows are actually gone.
-  await evaluate(`(function() { var btn = ${WL_BUTTON_JS}; if (btn) btn.click(); })()`);
+  await evaluate(`(function() { var btn = ${WL_BUTTON_JS}; if (btn) btn.click(); })()`, { mutation: true });
   await new Promise(r => setTimeout(r, 400));
-  await evaluate(`(function() { var btn = ${WL_BUTTON_JS}; if (btn) btn.click(); })()`);
+  await evaluate(`(function() { var btn = ${WL_BUTTON_JS}; if (btn) btn.click(); })()`, { mutation: true });
 
   let stillPresent = toRemove;
   const deadline = Date.now() + 5000;

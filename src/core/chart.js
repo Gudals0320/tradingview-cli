@@ -48,7 +48,7 @@ export async function setSymbol({ symbol, _deps }) {
         setTimeout(resolve, 500);
       });
     })()
-  `);
+  `, { mutation: true });
   const ready = await waitForChartReady(symbol);
   return { success: ready, symbol, chart_ready: ready, ...(!ready && { error: `Chart did not become ready for ${symbol}.` }) };
 }
@@ -61,7 +61,7 @@ export async function setTimeframe({ timeframe, _deps }) {
       var chart = ${CHART_API};
       chart.setResolution(${safeString(timeframe)}, {});
     })()
-  `);
+  `, { mutation: true });
   const ready = await waitForChartReady(null, timeframe);
   return { success: ready, timeframe, chart_ready: ready, ...(!ready && { error: `Chart did not reach timeframe ${timeframe}.` }) };
 }
@@ -82,7 +82,7 @@ export async function setType({ chart_type, _deps }) {
       var chart = ${CHART_API};
       chart.setChartType(${typeNum});
     })()
-  `);
+  `, { mutation: true });
   return { success: true, chart_type, type_num: typeNum };
 }
 
@@ -97,7 +97,7 @@ export async function manageIndicator({ action, indicator, entity_id, inputs: in
         var chart = ${CHART_API};
         chart.createStudy(${safeString(indicator)}, false, false, []);
       })()
-    `);
+    `, { mutation: true });
     await new Promise(r => setTimeout(r, 1500));
     const after = await evaluate(`${CHART_API}.getAllStudies().map(function(s) { return s.id; })`);
     const newIds = (after || []).filter(id => !(before || []).includes(id));
@@ -129,7 +129,7 @@ export async function manageIndicator({ action, indicator, entity_id, inputs: in
           for (var m = 0; m < after.length; m++) { if (applied.hasOwnProperty(after[m].id)) confirmed[after[m].id] = after[m].value; }
           return { confirmed: confirmed, unknown: unknown };
         })()
-      `);
+      `, { mutation: true });
       if (result?.error) appliedInputs = { error: result.error };
       else appliedInputs = { applied: result?.confirmed || {}, ...(result?.unknown?.length && { unknown_inputs: result.unknown }) };
     }
@@ -149,7 +149,7 @@ export async function manageIndicator({ action, indicator, entity_id, inputs: in
         var chart = ${CHART_API};
         chart.removeEntity(${safeString(entity_id)});
       })()
-    `);
+    `, { mutation: true });
     return { success: true, action: 'remove', entity_id };
   } else {
     throw new Error('action must be "add" or "remove"');
@@ -188,7 +188,7 @@ export async function setVisibleRange({ from, to, _deps }) {
     await new Promise(r => setTimeout(r, 1800));
   }
 
-  await evaluate(`
+  const applied = await evaluate(`
     (function() {
       var chart = ${CHART_API};
       var m = chart._chartWidget.model();
@@ -196,15 +196,18 @@ export async function setVisibleRange({ from, to, _deps }) {
       var bars = m.mainSeries().bars();
       var startIdx = bars.firstIndex();
       var endIdx = bars.lastIndex();
-      var fromIdx = startIdx, toIdx = endIdx;
+      var fromIdx = -1, toIdx = -1;
       for (var i = startIdx; i <= endIdx; i++) {
         var v = bars.valueAt(i);
-        if (v && v[0] >= ${f} && fromIdx === startIdx) fromIdx = i;
+        if (v && v[0] >= ${f} && fromIdx === -1) fromIdx = i;
         if (v && v[0] <= ${t}) toIdx = i;
       }
+      if (fromIdx === -1 || toIdx === -1 || fromIdx > toIdx) throw new Error('RANGE_OUTSIDE_DATA: Requested window does not overlap loaded data.');
       ts.zoomToBarsRange(fromIdx, toIdx);
+      return { from_index: fromIdx, to_index: toIdx, from: bars.valueAt(fromIdx)[0], to: bars.valueAt(toIdx)[0],
+        clamped: bars.valueAt(startIdx)[0] > ${f} || bars.valueAt(endIdx)[0] < ${t} };
     })()
-  `);
+  `, { mutation: true });
   await new Promise(r => setTimeout(r, 500));
   const actual = await evaluate(`
     (function() {
@@ -213,7 +216,7 @@ export async function setVisibleRange({ from, to, _deps }) {
       catch(e) { return { from: 0, to: 0, error: e.message }; }
     })()
   `);
-  return { success: true, requested: { from, to }, actual: actual || { from: 0, to: 0 } };
+  return { success: true, applied, requested: { from, to }, actual: actual || { from: 0, to: 0 } };
 }
 
 export async function scrollToDate({ date, _deps } = {}) {
@@ -235,7 +238,7 @@ export async function scrollToDate({ date, _deps } = {}) {
   const from = timestamp - halfWindow;
   const to = timestamp + halfWindow;
 
-  await evaluate(`
+  const applied = await evaluate(`
     (function() {
       var chart = ${CHART_API};
       var m = chart._chartWidget.model();
@@ -243,17 +246,20 @@ export async function scrollToDate({ date, _deps } = {}) {
       var bars = m.mainSeries().bars();
       var startIdx = bars.firstIndex();
       var endIdx = bars.lastIndex();
-      var fromIdx = startIdx, toIdx = endIdx;
+      var fromIdx = -1, toIdx = -1;
       for (var i = startIdx; i <= endIdx; i++) {
         var v = bars.valueAt(i);
-        if (v && v[0] >= ${from} && fromIdx === startIdx) fromIdx = i;
+        if (v && v[0] >= ${from} && fromIdx === -1) fromIdx = i;
         if (v && v[0] <= ${to}) toIdx = i;
       }
+      if (fromIdx === -1 || toIdx === -1 || fromIdx > toIdx) throw new Error('RANGE_OUTSIDE_DATA: Requested window does not overlap loaded data.');
       ts.zoomToBarsRange(fromIdx, toIdx);
+      return { from_index: fromIdx, to_index: toIdx, from: bars.valueAt(fromIdx)[0], to: bars.valueAt(toIdx)[0],
+        clamped: bars.valueAt(startIdx)[0] > ${from} || bars.valueAt(endIdx)[0] < ${to} };
     })()
-  `);
+  `, { mutation: true });
   await new Promise(r => setTimeout(r, 500));
-  return { success: true, date, centered_on: timestamp, resolution, window: { from, to } };
+  return { success: true, applied, date, centered_on: timestamp, resolution, window: { from, to } };
 }
 
 export async function symbolInfo({ _deps } = {}) {

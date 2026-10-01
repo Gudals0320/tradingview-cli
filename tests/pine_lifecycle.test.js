@@ -1,7 +1,8 @@
 import { it } from 'node:test';
 import assert from 'node:assert/strict';
 import { runInNewContext } from 'node:vm';
-import { newScript, openScript, save } from '../src/core/pine.js';
+import { setImmediate } from 'node:timers';
+import { newScript, openScript, save, listScripts, smartCompile } from '../src/core/pine.js';
 import { confirmPineSaveDialog } from '../src/core/desktop-dom.js';
 
 it('rejects invalid new types before connecting to or changing an editor', async () => {
@@ -69,6 +70,27 @@ function saveFixture() {
 it('save verifies already saved source without dispatching another save', async () => {
   const f = saveFixture(); f.controller.saveScript = () => { throw new Error('must not dispatch'); };
   assert.equal((await save({ _deps: f })).saved, true);
+});
+it('expected document mismatch rejects native save and compile before dispatch', async () => {
+  const f = saveFixture(); let calls = 0;
+  f.controller.saveScript = () => { calls++; };
+  const result = await save({ expect_script_id: 'other', _deps: f });
+  assert.equal(result.code, 'PINE_DOCUMENT_MISMATCH'); assert.equal(calls, 0);
+  const compiled = await smartCompile({ expect_script_id: 'other', _deps: {
+    source: 'indicator("QA")', readOutcome: async () => ({ markers: [], targets: [] }),
+    evaluate: expression => {
+      if (expression.includes('function pineCompileContext')) return { identity: { scriptIdPart: 'current' } };
+      if (expression.includes('return failCompilation(')) return true;
+      calls++; throw new Error('Unexpected native dispatch');
+    },
+  } });
+  assert.equal(compiled.code, 'PINE_DOCUMENT_MISMATCH'); assert.equal(calls, 0);
+});
+it('Pine list failure is distinct from a successful empty list', async () => {
+  const f = fixture(); f.context.fetch = async () => { throw new Error('injected network failure'); };
+  const failed = await listScripts({ _deps: f }); assert.equal(failed.success, false); assert.match(failed.error, /network failure/);
+  f.context.fetch = async () => ({ json: async () => [] });
+  assert.equal((await listScripts({ _deps: f })).success, true);
 });
 it('save waits for completion and verifies persisted source', async () => {
   const f = saveFixture(); let modified = true;

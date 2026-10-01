@@ -115,6 +115,13 @@ describe('CLI — help and routing', () => {
 });
 
 describe('CLI — pine analyze (offline)', () => {
+  it('analysis errors preserve default execution exit and opt in to CI failure', () => {
+    const source = 'a = array.from(1, 2)\narray.get(a, 2)';
+    const ordinary = run(['pine', 'analyze'], { input: source });
+    assert.equal(ordinary.exitCode, 0); assert.equal(JSON.parse(ordinary.stdout).error_count, 1);
+    const strict = run(['pine', 'analyze', '--fail-on-error'], { input: source });
+    assert.equal(strict.exitCode, 1); assert.equal(JSON.parse(strict.stdout).has_errors, true);
+  });
   it('analyzes clean v6 script', () => {
     const source = '//@version=6\nindicator("test")\nplot(close)';
     const { stdout, exitCode } = run(['pine', 'analyze'], { input: source });

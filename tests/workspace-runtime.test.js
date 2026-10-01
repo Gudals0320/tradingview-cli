@@ -17,7 +17,7 @@ function fixture() {
   const lease=acquireWorkspace(workspace.file);lease.saveBinding({nonce:'generation',browser:'browser',snapshot});lease.finish({success:true});
   const calculation={phase:'ready',source_hash:sourceHash(snapshot.source),report_verified:true,inputs_fingerprint:JSON.stringify(snapshot.studies[0].inputs)};
   const deps={checkLayout:async()=>{},browserIdentity:async()=>'browser',getClient:async()=>({}),raw:async(_,expression)=>{
-    if(expression.startsWith('startWorkspacePage'))return snapshot;
+    if(expression.startsWith('startWorkspacePage') || expression.startsWith('guardWorkspacePage'))return snapshot;
     if(expression.startsWith('finishWorkspacePage'))return {snapshot,calculation};
     if(expression==='window.__tvCliWorkspace?.nonce')return 'generation';
     throw new Error('Unexpected page operation '+expression);
@@ -38,6 +38,15 @@ it('a handler exception is clean when final resource state can be verified', asy
   const f=fixture();try {
     await assert.rejects(()=>runWorkspace(f.workspace.file,'state',{},[],async()=>{throw new Error('read failed');},{_deps:f.deps}),/read failed/);
     assert.equal(workspaceStatus(f.workspace.file).interrupted,null);
+  }finally{f.cleanup();}
+});
+it('pure workspace observation can run during an active operation without consuming its lease', async()=>{
+  const f=fixture();try {
+    const active=acquireWorkspace(f.workspace.file);
+    const result=await runWorkspace(f.workspace.file,'ohlcv',{},[],async()=>({success:true,bars:[],context:f.snapshot.context}),{_deps:f.deps});
+    assert.equal(result.provenance.observation,true);
+    assert.equal(workspaceStatus(f.workspace.file).operation.id,active.operation);
+    active.finish({success:true});
   }finally{f.cleanup();}
 });
 it('rejects rebind on the same page generation without adopting external state', async()=>{

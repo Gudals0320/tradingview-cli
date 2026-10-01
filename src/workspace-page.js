@@ -128,6 +128,7 @@ export function finishWorkspacePage(window, document, owner, operation) {
   const snapshot = guardWorkspacePage(window, document, owner), bound = window.__tvCliWorkspace;
   if (bound.operation !== operation) throw new Error('WORKSPACE_OWNERSHIP_LOST: Page operation changed.');
   if (snapshot.pending_action) throw new Error('WORKSPACE_NATIVE_BUSY: Native actions remain pending.');
+  if (bound.permit.compile && snapshot.studies.length !== 1) throw new Error('WORKSPACE_STUDY_MISSING: Compilation cannot complete without its single owned study.');
   bound.operation = null; bound.permit = {}; bound.baseline = snapshot;
   bound.dispose?.();
   const epoch = window.__tvCliCompilation;

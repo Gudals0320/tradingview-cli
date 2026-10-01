@@ -1,7 +1,9 @@
 /**
  * Core data access logic.
  */
-import { evaluate, evaluateAsync, KNOWN_PATHS, safeString, requireInteger } from '../connection.js';
+import { evaluate, evaluateAsync, KNOWN_PATHS, safeString, requireInteger, configuredTarget } from '../connection.js';
+import { readChartContext, symbolMatches, normalizeTimeframe } from '../chart-context.js';
+import { nativeCheckpoint, nativeQuiescent } from '../session.js';
 import { waitForChartReady } from '../wait.js';
 import { reportExpression, STRATEGY_PAGE_CODE } from '../strategy-state.js';
 
@@ -21,68 +23,26 @@ const BARS_PATH = KNOWN_PATHS.mainSeriesBars;
 // read whichever symbol the chart happened to be on at evaluate() time.
 let _quoteLock = Promise.resolve();
 
-// Shared page-context JS: locate the strategy data source. Strategies are
-// identified by metaInfo().isTVScriptStrategy / is_strategy — NOT by
-// is_price_study===false (that was the #48/#173/#181 bug: strategies actually
-// have is_price_study===true, so the old check excluded every one). Falls
-// back to any source exposing reportData/ordersData.
-const FIND_STRATEGY_JS = `
-  function _reportOf(s) {
-    try { var rd = s.reportData(); if (rd && typeof rd.value === 'function') rd = rd.value(); return rd; } catch (e) { return null; }
+async function readData(expression, _deps = {}) {
+  const inspect = _deps.evaluate || evaluate;
+  const result = await inspect(`(() => {
+    const readContext = ${readChartContext.toString()};
+    const context = readContext(window), data = (${expression}), after = readContext(window);
+    if (!context || !after || context.symbol !== after.symbol || context.resolution !== after.resolution
+      || context.chart_type !== after.chart_type) throw new Error('DATA_CONTEXT_CHANGED: Chart changed during extraction.');
+    return { data, context };
+  })()`);
+  if (!result || !result.context) throw new Error('Chart context unavailable.');
+  return { ...result, context: { ...result.context, target_id: _deps.targetId || configuredTarget() } };
+}
+
+async function graphics(collection, map, filter, _deps) {
+  const result = await readData(buildGraphicsJS(collection, map, filter), _deps);
+  if (filter && result.data.matched_studies === 0) {
+    throw Object.assign(new Error('No study matches filter: ' + filter), { code: 'STUDY_NOT_FOUND' });
   }
-  function findStrategies() {
-    var chart = ${CHART_API}._chartWidget;
-    var sources = chart.model().model().dataSources();
-    var strategies = [];
-    for (var i = 0; i < sources.length; i++) {
-      var s = sources[i], mi = null;
-      try { mi = s.metaInfo ? s.metaInfo() : null; } catch (e) {}
-      var isStrat = mi && (mi.isTVScriptStrategy || mi.is_strategy);
-      if ((isStrat || typeof s.reportData === 'function') && typeof s.reportData === 'function') {
-        strategies.push({ s: s, name: mi ? mi.description : null });
-      }
-    }
-    return strategies;
-  }
-  // Returns { strat, report } — prefers a strategy whose report is actually
-  // computed (the one selected in the Strategy Tester panel). With multiple
-  // strategies on the chart, only the selected one has non-null reportData,
-  // so returning the first strategy blindly reads the wrong (empty) one.
-  function findStrategy() {
-    var strategies = findStrategies();
-    // Prefer one with a computed report (has .performance).
-    for (var j = 0; j < strategies.length; j++) {
-      var rd = _reportOf(strategies[j].s);
-      if (rd && rd.performance) return { strat: strategies[j].s, report: rd, name: strategies[j].name, strategy_count: strategies.length };
-    }
-    // None computed — return the first so callers can hint "open the panel".
-    if (strategies.length) return { strat: strategies[0].s, report: null, name: strategies[0].name, strategy_count: strategies.length };
-    return null;
-  }
-  // TradingView never computes a report for a hidden strategy (crossed-out eye
-  // in the legend), so a hidden one looks identical to "panel not opened yet".
-  // Unhide any hidden strategies and report their names so callers can tell
-  // the user what changed.
-  function unhideStrategies() {
-    var unhidden = [];
-    var strategies = findStrategies();
-    for (var i = 0; i < strategies.length; i++) {
-      var s = strategies[i].s;
-      try {
-        var vis = null;
-        try { vis = s.properties().visible.value(); } catch (e) {}
-        if (vis !== false) continue;
-        var done = false;
-        try { s.properties().visible.setValue(true); done = true; } catch (e) {}
-        if (!done) {
-          try { var st = ${CHART_API}.getStudyById(s.id()); if (st) { st.setVisible(true); done = true; } } catch (e) {}
-        }
-        if (done) unhidden.push(strategies[i].name || 'strategy');
-      } catch (e) {}
-    }
-    return unhidden;
-  }
-`;
+  return { raw: result.data.studies, context: result.context };
+}
 
 function buildGraphicsJS(collectionName, mapKey, filter) {
   return `
@@ -92,6 +52,7 @@ function buildGraphicsJS(collectionName, mapKey, filter) {
       var sources = model.model().dataSources();
       var results = [];
       var filter = ${safeString(filter || '')};
+      var matched = 0;
       for (var si = 0; si < sources.length; si++) {
         var s = sources[si];
         if (!s.metaInfo) continue;
@@ -100,6 +61,7 @@ function buildGraphicsJS(collectionName, mapKey, filter) {
           var name = meta.description || meta.shortDescription || '';
           if (!name) continue;
           if (filter && name.indexOf(filter) === -1) continue;
+          matched++;
           var g = s._graphics;
           if (!g || !g._primitivesCollection) continue;
           var pc = g._primitivesCollection;
@@ -130,16 +92,14 @@ function buildGraphicsJS(collectionName, mapKey, filter) {
           if (items.length > 0) results.push({name: name, count: items.length, items: items});
         } catch(e) {}
       }
-      return results;
+      return { studies: results, matched_studies: matched };
     })()
   `;
 }
 
-export async function getOhlcv({ count, summary } = {}) {
+export async function getOhlcv({ count, summary, _deps } = {}) {
   const limit = requireInteger(count === undefined ? 100 : count, 'count', 1, MAX_OHLCV_BARS);
-  let data;
-  try {
-    data = await evaluate(`
+  const extracted = await readData(`
       (function() {
         var bars = ${BARS_PATH};
         if (!bars || typeof bars.lastIndex !== 'function') return null;
@@ -152,8 +112,8 @@ export async function getOhlcv({ count, summary } = {}) {
         }
         return {bars: result, total_bars: bars.size(), source: 'direct_bars'};
       })()
-    `);
-  } catch { data = null; }
+    `, _deps);
+  const { data, context } = extracted;
 
   if (!data || !data.bars || data.bars.length === 0) {
     throw new Error('Could not extract OHLCV data. The chart may still be loading.');
@@ -167,7 +127,7 @@ export async function getOhlcv({ count, summary } = {}) {
     const first = bars[0];
     const last = bars[bars.length - 1];
     return {
-      success: true, bar_count: bars.length,
+      success: true, context, requested: limit, applied: bars.length, truncated: bars.length < limit, bar_count: bars.length,
       period: { from: first.time, to: last.time },
       open: first.open, close: last.close,
       high: Math.max(...highs), low: Math.min(...lows),
@@ -179,7 +139,7 @@ export async function getOhlcv({ count, summary } = {}) {
     };
   }
 
-  return { success: true, bar_count: data.bars.length, total_available: data.total_bars, source: data.source, bars: data.bars };
+  return { success: true, context, requested: limit, applied: data.bars.length, truncated: data.bars.length < limit, bar_count: data.bars.length, total_available: data.total_bars, source: data.source, bars: data.bars };
 }
 
 export async function getIndicator({ entity_id }) {
@@ -208,43 +168,8 @@ export async function getIndicator({ entity_id }) {
   return { success: true, entity_id, visible: data?.visible, inputs };
 }
 
-// #173: TradingView doesn't compute strategy report/orders until the Strategy
-// Tester panel is opened — and never computes one for a hidden strategy.
-// Ensure the panel is open (via bottomWidgetBar), unhide any hidden
-// strategies, and wait for reportData to populate, so the strategy read tools
-// work even when the panel started closed or the strategy was hidden.
-// Returns { status, unhidden } — unhidden lists strategies made visible.
-async function ensureStrategyTesterReady(maxWaitMs = 6000) {
-  const unhidden = await evaluate(`
-    (function() {
-      ${FIND_STRATEGY_JS}
-      try {
-        var bwb = window.TradingView && window.TradingView.bottomWidgetBar;
-        if (bwb && typeof bwb.showWidget === 'function') bwb.showWidget('backtesting');
-      } catch (e) {}
-      return unhideStrategies();
-    })()
-  `);
-  const deadline = Date.now() + maxWaitMs;
-  let status = 'timeout';
-  while (Date.now() < deadline) {
-    const ready = await evaluate(`
-      (function() {
-        ${FIND_STRATEGY_JS}
-        var f = findStrategy();
-        if (!f) return 'no-strategy';
-        return f.report && f.report.performance ? 'ready' : 'pending';
-      })()
-    `);
-    if (ready === 'ready' || ready === 'no-strategy') { status = ready; break; }
-    await new Promise(r => setTimeout(r, 500));
-  }
-  return { status, unhidden: unhidden || [] };
-}
-
 export async function getStrategyResults(options = {}) {
   const inspect = options._deps?.evaluate || evaluate;
-  if (!options._deps) await ensureStrategyTesterReady();
   return inspect(reportExpression({ strategy_id: options.strategy_id, strategy: options.strategy }));
 }
 
@@ -252,7 +177,6 @@ export async function getTrades({ max_trades = 20, strategy_id, _deps } = {}) {
   if (!Number.isInteger(max_trades) || max_trades < 1) throw new Error('max_trades must be a positive integer.');
   const limit = Math.min(max_trades, MAX_TRADES);
   const inspect = _deps?.evaluate || evaluate;
-  if (!_deps) await ensureStrategyTesterReady();
   return inspect(`(() => { ${STRATEGY_PAGE_CODE};
     const summary = readStrategyReport(window, ${JSON.stringify({ strategy_id })});
     if (!summary.success) return summary;
@@ -263,7 +187,8 @@ export async function getTrades({ max_trades = 20, strategy_id, _deps } = {}) {
       side:order.b?'buy':'sell',entry:order.e,price:order.p,qty:order.q,
       order_seq:order.tm,time_index:order.tm }));
     return {success:true,strategy_id:summary.strategy_id,compilation_token:summary.compilation_token,
-      trade_count:trades.length,total_orders:orders.length,source:'internal_api',trades,
+      trade_count:trades.length,total_orders:orders.length,source:'internal_api',trades,orders:trades,
+      record_kind:'orders',context:summary.context,requested:${max_trades},applied:trades.length,limit:${limit},truncated:orders.length>trades.length,
       units:{order_seq:'ordinal',time_index:'deprecated ordinal alias'}};
   })()`);
 }
@@ -272,7 +197,6 @@ export async function getTrades({ max_trades = 20, strategy_id, _deps } = {}) {
 export async function getTradeLedger({ offset = 0, limit = 100, strategy_id, _deps } = {}) {
   if (!Number.isInteger(offset) || offset < 0 || !Number.isInteger(limit) || limit < 1 || limit > 500) throw new Error('Require offset >= 0 and limit 1..500.');
   const inspect = _deps?.evaluate || evaluate;
-  if (!_deps) await ensureStrategyTesterReady();
   return inspect(`(() => { ${STRATEGY_PAGE_CODE};
     const summary = readStrategyReport(window, ${JSON.stringify({ strategy_id })});
     if (!summary.success) return summary;
@@ -290,7 +214,6 @@ export async function getTradeLedger({ offset = 0, limit = 100, strategy_id, _de
 
 export async function getEquity({ strategy_id, _deps } = {}) {
   const inspect = _deps?.evaluate || evaluate;
-  if (!_deps) await ensureStrategyTesterReady();
   return inspect(`(() => { ${STRATEGY_PAGE_CODE};
     const summary = readStrategyReport(window, ${JSON.stringify({ strategy_id })});
     if (!summary.success) return summary;
@@ -303,39 +226,33 @@ export async function getEquity({ strategy_id, _deps } = {}) {
   })()`);
 }
 
-export async function getQuote({ symbol } = {}) {
+export async function getQuote({ symbol, _deps } = {}) {
   // Serialize: chained on _quoteLock so parallel callers run one after another.
   // Catch on the lock chain prevents a single failure from poisoning the chain.
-  const run = _quoteLock.then(() => _getQuoteInternal({ symbol }));
+  const run = _quoteLock.then(() => _getQuoteInternal({ symbol, _deps }));
   _quoteLock = run.then(() => {}, () => {});
   return run;
 }
 
-async function _getQuoteInternal({ symbol } = {}) {
-  const requested = (symbol || '').toString().trim();
-  let originalSymbol = null;
-  let needsRestore = false;
-
-  if (requested) {
-    try { originalSymbol = await evaluate(`${CHART_API}.symbol()`); } catch {}
-    const bare = (s) => (s || '').toString().split(':').pop().toUpperCase();
-    if (bare(originalSymbol) !== bare(requested)) {
-      needsRestore = true;
-      await evaluateAsync(`
-        (function() {
-          var chart = ${CHART_API};
-          return new Promise(function(resolve) {
-            chart.setSymbol(${safeString(requested)}, {});
-            setTimeout(resolve, 500);
-          });
-        })()
-      `);
-      await waitForChartReady(requested);
-    }
-  }
-
+async function _getQuoteInternal({ symbol, _deps = {} } = {}) {
+  const inspect = _deps.evaluate || evaluate;
+  const inspectAsync = _deps.evaluateAsync || evaluateAsync;
+  const wait = _deps.waitForChartReady || waitForChartReady;
+  const requested = String(symbol || '').trim();
+  const original = await inspect(`(${readChartContext.toString()})(window)`);
+  if (!original) throw new Error('Original chart context is unavailable; no quote switch was dispatched.');
+  const needsRestore = Boolean(requested && !symbolMatches(requested, original));
+  let result, primaryError, restoreError;
+  const changeSymbol = async value => {
+    await inspectAsync(`${CHART_API}.setSymbol(${safeString(value)}, {})`, { mutation: true });
+    if (!await wait(value)) throw new Error('Chart readiness was not verified for ' + value);
+  };
   try {
-    const data = await evaluate(`
+    if (needsRestore) {
+      nativeCheckpoint('quote', configuredTarget(), { original_context: original });
+      await changeSymbol(requested);
+    }
+    const { data, context } = await readData(`
       (function() {
         var api = ${CHART_API};
         var sym = '';
@@ -364,25 +281,27 @@ async function _getQuoteInternal({ symbol } = {}) {
         if (ext.type) quote.type = ext.type;
         return quote;
       })()
-    `);
-    if (!data || (!data.last && !data.close)) throw new Error('Could not retrieve quote. The chart may still be loading.');
-    return { success: true, ...data };
-  } finally {
-    if (needsRestore && originalSymbol) {
-      try {
-        await evaluateAsync(`
-          (function() {
-            var chart = ${CHART_API};
-            return new Promise(function(resolve) {
-              chart.setSymbol(${safeString(originalSymbol)}, {});
-              setTimeout(resolve, 500);
-            });
-          })()
-        `);
-        await waitForChartReady(originalSymbol);
-      } catch {}
+    `, _deps);
+    if (requested && !symbolMatches(requested, context)) throw new Error('Quote context does not match requested symbol.');
+    if (!data || (data.last == null && data.close == null)) throw new Error('No quote is available for this chart.');
+    result = { success: true, ...data, requested_symbol: requested || null, context };
+  } catch (error) { primaryError = error; }
+  finally {
+    if (needsRestore) {
+      try { await changeSymbol(original.symbol); }
+      catch (error) { restoreError = error; }
     }
   }
+  let finalContext;
+  try { finalContext = await inspect(`(${readChartContext.toString()})(window)`); }
+  catch (error) { restoreError ||= error; }
+  const restored = !restoreError && Boolean(finalContext && symbolMatches(original.symbol, finalContext)
+    && normalizeTimeframe(finalContext.resolution) === normalizeTimeframe(original.resolution));
+  if (primaryError || !restored) return { ...result, success: false, requested_symbol: requested || null,
+    restored, actual_context: finalContext || null, error: primaryError?.message || 'Original chart could not be restored.',
+    restore_error: restoreError?.message, recovery_required: !restored || [primaryError, restoreError].some(error => error?.code === 'CDP_TIMEOUT') };
+  if (needsRestore) nativeQuiescent();
+  return { ...result, restored: true, actual_context: finalContext };
 }
 
 export async function getDepth() {
@@ -429,8 +348,8 @@ export async function getDepth() {
   return { success: true, bid_levels: data.bids?.length || 0, ask_levels: data.asks?.length || 0, spread: data.spread, bids: data.bids || [], asks: data.asks || [], raw_values: data.raw_values, note: data.note };
 }
 
-export async function getStudyValues() {
-  const data = await evaluate(`
+export async function getStudyValues({ _deps } = {}) {
+  const { data, context } = await readData(`
     (function() {
       var chart = window.TradingViewApi._activeChartWidgetWV.value()._chartWidget;
       var model = chart.model();
@@ -461,20 +380,20 @@ export async function getStudyValues() {
           var id = null;
           try { id = s.id ? s.id() : null; } catch(e) {}
           var inputs = null;
-          try { var ip = s.inputs ? s.inputs() : null; if (ip && Object.keys(ip).length) inputs = ip; } catch(e) {}
+          try { var ip = s.inputs ? s.inputs() : null; if (ip && Object.keys(ip).length) inputs = Object.fromEntries(Object.entries(ip).filter(([key,value]) => key !== 'text' && !(typeof value === 'string' && value.length > 500))); } catch(e) {}
           if (Object.keys(values).length > 0) results.push({ id: id, name: name, inputs: inputs, values: values });
         } catch(e) {}
       }
       return results;
     })()
-  `);
-  return { success: true, study_count: data?.length || 0, studies: data || [] };
+  `, _deps);
+  return { success: true, context, study_count: data?.length || 0, studies: data || [] };
 }
 
-export async function getPineLines({ study_filter, verbose } = {}) {
+export async function getPineLines({ study_filter, verbose, _deps } = {}) {
   const filter = study_filter || '';
-  const raw = await evaluate(buildGraphicsJS('dwglines', 'lines', filter));
-  if (!raw || raw.length === 0) return { success: true, study_count: 0, studies: [] };
+  const { raw, context } = await graphics('dwglines', 'lines', filter, _deps);
+  if (!raw || raw.length === 0) return { success: true, context, study_count: 0, studies: [] };
 
   const studies = raw.map(s => {
     const hLevels = [];
@@ -492,33 +411,33 @@ export async function getPineLines({ study_filter, verbose } = {}) {
     if (verbose) result.all_lines = allLines;
     return result;
   });
-  return { success: true, study_count: studies.length, studies };
+  return { success: true, context, study_count: studies.length, studies };
 }
 
-export async function getPineLabels({ study_filter, max_labels, verbose } = {}) {
+export async function getPineLabels({ study_filter, max_labels, verbose, _deps } = {}) {
+  const limit = requireInteger(max_labels === undefined ? 50 : max_labels, 'max_labels');
   const filter = study_filter || '';
-  const raw = await evaluate(buildGraphicsJS('dwglabels', 'labels', filter));
-  if (!raw || raw.length === 0) return { success: true, study_count: 0, studies: [] };
+  const { raw, context } = await graphics('dwglabels', 'labels', filter, _deps);
+  if (!raw || raw.length === 0) return { success: true, context, study_count: 0, studies: [] };
 
-  const limit = max_labels || 50;
   const studies = raw.map(s => {
-    let labels = s.items.map(item => {
+    let labels = [...s.items].sort((a,b) => (b.raw.x ?? -Infinity) - (a.raw.x ?? -Infinity)).map(item => {
       const v = item.raw;
       const text = v.t || '';
       const price = roundPrice(v.y);
       if (verbose) return { id: item.id, text, price, x: v.x, yloc: v.yl, size: v.sz, textColor: v.tci, color: v.ci };
-      return { text, price };
+      return { text, price, x: v.x };
     }).filter(l => l.text || l.price != null);
-    if (labels.length > limit) labels = labels.slice(-limit);
-    return { name: s.name, total_labels: s.count, showing: labels.length, labels };
+    if (labels.length > limit) labels = labels.slice(0,limit);
+    return { name: s.name, total_labels: s.count, showing: labels.length, requested: limit, truncated: s.count > labels.length, sort: 'x_descending_stable', labels };
   });
-  return { success: true, study_count: studies.length, studies };
+  return { success: true, context, study_count: studies.length, studies };
 }
 
-export async function getPineTables({ study_filter } = {}) {
+export async function getPineTables({ study_filter, _deps } = {}) {
   const filter = study_filter || '';
-  const raw = await evaluate(buildGraphicsJS('dwgtablecells', 'tableCells', filter));
-  if (!raw || raw.length === 0) return { success: true, study_count: 0, studies: [] };
+  const { raw, context } = await graphics('dwgtablecells', 'tableCells', filter, _deps);
+  if (!raw || raw.length === 0) return { success: true, context, study_count: 0, studies: [] };
 
   const studies = raw.map(s => {
     const tables = {};
@@ -530,23 +449,20 @@ export async function getPineTables({ study_filter } = {}) {
       tables[tid][v.row][v.col] = v.t || '';
     }
     const tableList = Object.entries(tables).map(([tid, rows]) => {
-      const rowNums = Object.keys(rows).map(Number).sort((a, b) => a - b);
-      const formatted = rowNums.map(rn => {
-        const cols = rows[rn];
-        const colNums = Object.keys(cols).map(Number).sort((a, b) => a - b);
-        return colNums.map(cn => cols[cn]).filter(Boolean).join(' | ');
-      }).filter(Boolean);
-      return { rows: formatted };
+      const height = Math.max(...Object.keys(rows).map(Number)) + 1;
+      const width = Math.max(...Object.values(rows).flatMap(row => Object.keys(row).map(Number))) + 1;
+      const cells = Array.from({ length: height }, (_, row) => Array.from({ length: width }, (_, col) => rows[row]?.[col] ?? ''));
+      return { cells, rows: cells.map(row => row.join(' | ')), row_count: height, column_count: width };
     });
     return { name: s.name, tables: tableList };
   });
-  return { success: true, study_count: studies.length, studies };
+  return { success: true, context, study_count: studies.length, studies };
 }
 
-export async function getPineBoxes({ study_filter, verbose } = {}) {
+export async function getPineBoxes({ study_filter, verbose, _deps } = {}) {
   const filter = study_filter || '';
-  const raw = await evaluate(buildGraphicsJS('dwgboxes', 'boxes', filter));
-  if (!raw || raw.length === 0) return { success: true, study_count: 0, studies: [] };
+  const { raw, context } = await graphics('dwgboxes', 'boxes', filter, _deps);
+  if (!raw || raw.length === 0) return { success: true, context, study_count: 0, studies: [] };
 
   const studies = raw.map(s => {
     const zones = [];
@@ -564,5 +480,5 @@ export async function getPineBoxes({ study_filter, verbose } = {}) {
     if (verbose) result.all_boxes = allBoxes;
     return result;
   });
-  return { success: true, study_count: studies.length, studies };
+  return { success: true, context, study_count: studies.length, studies };
 }

@@ -331,6 +331,62 @@ tv update
 
 `origin`이 `Gudals0320/tradingview-cli`를 가리키는 경우에만 원격 `main`을 가져와 fast-forward로 업데이트합니다. GitHub 인증을 미리 준비해야 합니다. `tv status`의 업데이트 확인도 인증된 Git을 사용합니다. `package-lock.json`이 바뀌면 `npm ci`를 실행하며, 업데이트 뒤에는 `tv` 명령을 다시 실행합니다.
 
+
+### Stream 소유권과 timeout 복구
+
+Legacy stream은 실행하는 동안 endpoint lease를 독점합니다. 같은 endpoint의
+다른 CLI 명령이나 workspace 예약은 stream을 종료한 뒤 실행하세요. 충돌 오류는
+명령·PID·run ID·시작 시간을 표시합니다. 협력하는 CLI 잠금의 지원 범위는 동일한
+OS 사용자와 TEMP/session 디렉터리입니다. 다른 사용자·별도 TEMP는 지원 범위 밖이며,
+살아 있거나 확인할 수 없는 PID는 시간이나 PID 재사용 추정만으로 회수하지 않습니다.
+
+기존 pane은 요청과 정확히 일치하면 읽기만 하여 재사용합니다. 다른 feed의 배정과
+레이아웃 확장은 CLI가 생성한 target에만 적용합니다. 기존 target을 재배정하려면
+`stream ohlcv --allow-reassign-target EXACT_TARGET`을 명시하세요. 복구 client는 교체 뒤
+즉시 닫고, 탭 생성·복구 재시도는 유한하게 제한합니다.
+
+CDP 요청은 기본 15초로 제한되며 `TV_CDP_TIMEOUT_MS`는 100..120000 범위입니다.
+timeout은 native 작업 취소가 아닙니다. journal은 실제 변경 요청 직전에 정확한 target을
+기록합니다. 순수 조회·stream polling 강제 종료는 복구 journal을 만들지 않습니다.
+quote의 임시 종목 변경과 feed provisioning은 복원·준비 상태가 검증된 뒤에만 fence를
+해제합니다. 저장 timeout은 `saved:null,persistence_verified:false`이며 실행이 계속될 수 있습니다.
+
+`tv session status`의 native run ID로 `tv session recover --run-id ID`를 실행하면
+기록된 target의 native 요청·계산 종료를 검증합니다. 진행 중이면 차단이 유지되고,
+종료 뒤에는 reload 없이 복구할 수 있습니다. `incomplete:true`는 이전 명령의 결과를
+확정할 수 없다는 뜻이므로 상태를 읽고 재시도하세요. batch journal은 기존
+`pine-batch --recover` 또는 명시적인 `session discard --run-id ID`를 사용합니다.
+자동 복구는 도입하지 않았습니다. native 종료 확인과 이전 결과 채택은 별도 판단입니다.
+
+run ID 없는 손상 journal은 status에 노출된 hash와
+`session discard --journal-hash HASH`로 원본 bytes를 보존하여 보관할 수 있습니다.
+`workspace gate-status`는 repair 소유권도 표시하며,
+`workspace gate-clear --repair-token TOKEN`은 확인된 죽은 repair만 제거합니다.
+
+Legacy `pine compile`/`pine save`는 `--expect-script-id ID`를 지원하며 source_hash를
+반환합니다. draft와 사용자 저장 문서를 구분합니다. GUI의 reserved study 입력 변경은
+native schema 변경과 완전히 구별할 수 없으므로 실행 중 GUI 편집은 지원하지 않습니다.
+
+데이터 응답에는 context와 target이 포함됩니다. `count`는 1..500 정수이고,
+orders 응답은 요청·적용·전체·잘림 정보를 노출합니다. 기존 `data trades`의 trades는
+주문 기록의 호환 필드이며 orders/record_kind를 함께 제공합니다. tables의 cells는
+빈 셀·행을 보존한 2차원 배열이고 rows는 표시용 호환 필드입니다. labels는 x 내림차순,
+동일/없는 좌표는 native 삽입 순서로 안정 정렬합니다. 일치 study가 없으면 STUDY_NOT_FOUND,
+일치 study에 도형이 없으면 정상 빈 결과입니다.
+
+`pine analyze`는 분석 실행 성공과 진단을 구분합니다. 기본 exit 0은 분석 완료를 뜻하며,
+CI에서 확정 error 진단으로 실패하려면 `--fail-on-error`를 사용합니다. 배열의 동적 크기,
+재할당·별칭·스코프는 입증되지 않은 bounds error로 처리하지 않습니다.
+
+`tv update`의 dependency 설치는 기본 `--ignore-scripts`입니다. 현재 lockfile에는 필요한
+lifecycle script가 없습니다. 신뢰한 변경의 script가 필요하면 `--allow-install-scripts`로
+명시적으로 허용하거나 설치를 직접 수행하세요.
+
+`npm run smoke:desktop`은 정확히 하나의 저장된 CLI-QA-I22-A 전용 탭이 필요합니다.
+자원 identity와 개인 탭 상태를 확인하고 raw 결과는 ignored results/issue-overhaul에 남깁니다.
+공개 증거에는 요약만 포함합니다. Windows signal 검증은 자식의 SIGINT handler를 호출하며
+물리 키보드 Ctrl+C 검증을 뜻하지 않습니다.
+
 ## 개발과 검증
 
 ```bash
@@ -376,41 +432,3 @@ tv 명령 → 명령 어댑터 → 핵심 동작 → localhost:9222의 CDP → T
 개인 이슈와 PR은 이 저장소에서 관리합니다. 개발 절차는 [CONTRIBUTING.md](CONTRIBUTING.md)를 참고하세요. 제안하는 기능은 위의 정보 수집·연구·백테스트·알림 범위에 맞아야 합니다.
 
 TradingView는 TradingView Inc.의 상표입니다. 이 프로젝트는 해당 회사와 제휴·승인·후원 관계가 없으며 TradingView 소프트웨어를 포함하거나 수정하지 않습니다. 원본 코드와 출처는 [NOTICE.md](NOTICE.md), MIT 라이선스와 상표 고지는 [LICENSE](LICENSE)에 보존되어 있습니다.
-
-
-### Stream ownership and timeout recovery
-
-Legacy streams own an exclusive endpoint lease for their full lifetime. Stop a
-stream before another legacy command or workspace registration. Collection in a
-registered workspace uses its supported read commands. A conflict identifies the
-command, PID, run ID and start time. Endpoint locks cooperate only within the same
-OS user and TEMP/session directory; cross-user or independently configured TEMP
-processes are outside the support contract. PID reuse remains conservative: a
-live or unverifiable PID is never reclaimed solely because a timestamp differs.
-
-CDP requests are bounded (15 seconds by default, TV_CDP_TIMEOUT_MS 100..120000).
-Timeout does not cancel native work. Interrupted mutation results retain a journal;
-`tv session status` gives its run ID. Use `tv session recover --run-id ID` to check
-native requests and compilation/calculation quiescence without reload. If dispatch
-could not record a target, also pass `--target-id EXACT_QA_TARGET`. Recovery reports
-`incomplete:true`: inspect the resulting state before retrying. A still-pending
-native action keeps the fence. Workspace recovery uses its existing exact
-operation ID and the same page quiescence checks.
-
-For a corrupt journal with no run ID, `session status` exposes only its hash;
-`session discard --journal-hash HASH` archives the unchanged bytes for manual
-recovery. Valid journals require their exact run ID. Native mutation journals use
-`session recover`, not discard. `workspace gate-status` also reports repair
-ownership; `workspace gate-clear --repair-token TOKEN` removes only a verified dead
-repair. No live PID is cleared.
-
-Legacy Pine mutations expose `source_hash`; `pine compile` and `pine save` accept
-`--expect-script-id ID` to reject the wrong open document before native dispatch.
-GUI edits during compilation cannot be distinguished from all native schema
-changes; reserved resources must not be edited in the GUI during execution.
-
-Run `npm run smoke:desktop` with exactly one open saved `CLI-QA-I22-A` QA tab.
-The smoke checks resource identity first and protects other chart tabs. Raw
-results remain in ignored `results/issue-overhaul/`; publish only sanitized
-summaries. The stream signal check emits the child's SIGINT handler on Windows;
-it does not claim physical keyboard Ctrl+C coverage.

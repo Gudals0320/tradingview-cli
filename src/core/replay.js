@@ -32,9 +32,9 @@ export async function start({ date, _deps } = {}) {
   if (date) {
     const ts = new Date(date).getTime();
     if (isNaN(ts)) throw new Error(`Invalid date: "${date}". Use YYYY-MM-DD format.`);
-    await evaluate(`${rp}.selectDate(${ts}).then(function() { return 'ok'; })`);
+    await evaluate(`${rp}.selectDate(${ts}).then(function() { return 'ok'; })`, { mutation: true });
   } else {
-    await evaluate(`${rp}.selectFirstAvailableDate()`);
+    await evaluate(`${rp}.selectFirstAvailableDate()`, { mutation: true });
   }
 
   // Poll until replay is fully initialized: isReplayStarted AND currentDate is set.
@@ -50,7 +50,7 @@ export async function start({ date, _deps } = {}) {
   }
 
   if (!started) {
-    try { await evaluate(`${rp}.stopReplay()`); } catch {}
+    try { await evaluate(`${rp}.stopReplay()`, { mutation: true }); } catch {}
     throw new Error('Replay failed to start. The selected date may not have data for this timeframe. Try a more recent date or a higher timeframe (e.g., Daily).');
   }
 
@@ -63,7 +63,7 @@ export async function step({ _deps } = {}) {
   const started = await evaluate(wv(`${rp}.isReplayStarted()`));
   if (!started) throw new Error('Replay is not started. Use replay_start first.');
   const before = await evaluate(wv(`${rp}.currentDate()`));
-  await evaluate(`${rp}.doStep()`);
+  await evaluate(`${rp}.doStep()`, { mutation: true });
   // doStep() is async internally — currentDate takes ~500ms to update.
   // Poll until it changes or timeout after 3s.
   let currentDate = before;
@@ -72,7 +72,8 @@ export async function step({ _deps } = {}) {
     currentDate = await evaluate(wv(`${rp}.currentDate()`));
     if (currentDate !== before) break;
   }
-  return { success: true, action: 'step', current_date: currentDate };
+  return { success: true, changed: currentDate !== before, action: 'step', current_date: currentDate,
+    ...(currentDate === before && { reason: 'No new replay bar was observed; the available data may have ended.' }) };
 }
 
 export async function autoplay({ speed, _deps } = {}) {
@@ -100,7 +101,7 @@ export async function stop({ _deps } = {}) {
   if (!started) {
     return { success: true, action: 'already_stopped' };
   }
-  await evaluate(`${rp}.stopReplay()`);
+  await evaluate(`${rp}.stopReplay()`, { mutation: true });
   for (let attempt = 0; attempt < 20; attempt++) {
     await sleep(250);
     const stillStarted = await evaluate(wv(`${rp}.isReplayStarted()`));

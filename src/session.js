@@ -12,6 +12,16 @@ export function withReadOnlySession(action) { return access.run({ readOnly: true
 export function isReadOnlySession() { return access.getStore()?.readOnly === true; }
 export function withWorkspaceSession(lease, action) { return access.run({ workspace: lease }, action); }
 export function currentWorkspaceSession() { return access.getStore()?.workspace || null; }
+export function withLegacySession(lease, action) { return access.run({ ...access.getStore(), legacy: lease }, action); }
+export function nativeCheckpoint(command, targetId, details = {}) {
+  const lease = access.getStore()?.legacy;
+  if (!lease) return;
+  const previous = lease.pending();
+  lease.checkpoint({ ...previous, ...details, phase: 'running', command: command || lease.command,
+    target_id: targetId, targets: [...new Set([...(previous?.targets || []), previous?.target_id, targetId].filter(Boolean))],
+    native_quiescence_required: true });
+}
+export function nativeQuiescent() { access.getStore()?.legacy?.clearCheckpoint?.(); }
 export function canonicalSessionHost(host) {
   const value = String(host).trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
   if (['localhost', '::1', '0:0:0:0:0:0:0:1', '0.0.0.0'].includes(value)
@@ -33,6 +43,12 @@ function read(path) { return JSON.parse(readFileSync(path, 'utf8')); }
 
 function busyOwner(lock) {
   return failure('SESSION_BUSY', `TradingView CLI command ${lock.command || '<unknown>'} owns this Desktop session (pid ${lock.pid}, run_id ${lock.run_id || '<unknown>'}, started_at ${lock.created_at || '<unknown>'}).`);
+}
+
+function recoveryHint(state, paths) {
+  if (state.native_quiescence_required) return `Recover the interrupted native command with tv session recover --run-id ${state.recovery_run_id}. The recorded target is used; no Desktop reload is required after quiescence. Journal: ${paths.journal}`;
+  if (!state.recovery_run_id) return `Recovery journal is malformed or missing a run ID. Inspect tv session status and explicitly archive its exact hash with tv session discard --journal-hash HASH. Journal: ${paths.journal}`;
+  return `Recover the interrupted batch with pine-batch --recover, or explicitly archive its restoration journal with tv session discard --run-id ${state.recovery_run_id}. Journal: ${paths.journal}`;
 }
 
 function removeOwnedFile(path) {
@@ -93,6 +109,7 @@ export function assertNoWorkspaceAnywhere(options = {}) {
 
 /** Metadata transaction only. Never hold this gate during Desktop operations. */
 export function withAdmissionGate(options, action) {
+  if (action.constructor.name === 'AsyncFunction') throw failure('ADMISSION_ASYNC', 'Admission actions must be synchronous metadata transactions.');
   const paths = sessionPaths(options);
   mkdirSync(paths.directory, { recursive: true });
   let gate;
@@ -110,7 +127,9 @@ export function withAdmissionGate(options, action) {
     writeFileSync(gate, JSON.stringify({ pid: process.pid, token: randomUUID(), process_started_at: new Date(Date.now() - process.uptime() * 1000).toISOString(), created_at: new Date().toISOString() }));
     closeSync(gate); gate = null;
     admissionDepth++;
-    return action(paths);
+    const result = action(paths);
+    if (result?.then) throw failure('ADMISSION_ASYNC', 'Admission actions must not return a Promise.');
+    return result;
   } catch (error) { primaryError = error; throw error; }
   finally {
     admissionDepth = Math.max(0, admissionDepth - 1);
@@ -177,6 +196,7 @@ export function sessionStatus(options = {}) {
     owner_command: lock?.command || null, process_started_at: lock?.process_started_at || null,
     owner_alive: lock ? alive(lock.pid) : false, recovery_required: existsSync(paths.journal), journal_path: paths.journal,
     recovery_run_id: pending?.run_id || pending?.snapshot?.run_id || null,
+    native_quiescence_required: pending?.native_quiescence_required === true,
     recovery_journal_hash: existsSync(paths.journal) ? sourceHash(readFileSync(paths.journal, 'utf8')) : null,
     recovery_target: pending?.snapshot ? { target_id: pending.snapshot.target_id, chart_id: pending.snapshot.chart_id } : null,
     acquisition_in_progress: existsSync(paths.gate) };
@@ -195,7 +215,7 @@ export function assertSessionAccess(options = {}) {
   const state = sessionStatus(options);
   if (state.locked && state.owner_alive) throw failure('SESSION_BUSY', 'Another TradingView CLI process owns this Desktop session.');
   if (state.recovery_required && !(options.readOnly || isReadOnlySession())) throw failure('RECOVERY_REQUIRED',
-    `An interrupted batch needs recovery. Inspect with tv session status, tv tab list or tv state. Recover with pine-batch --recover, or explicitly abandon restoration with tv session discard --run-id ${state.recovery_run_id || '<recorded-run-id>'}. Journal: ${paths.journal}`);
+    recoveryHint(state, paths));
 }
 
 export function acquireSession(options = {}) {
@@ -206,10 +226,10 @@ export function acquireSession(options = {}) {
   const status = sessionStatus(options);
   if (status.locked) {
     if (status.owner_alive) throw busyOwner(read(paths.lock));
-    if (status.recovery_required && !options.recover && !options.readOnly) throw failure('RECOVERY_REQUIRED', `Recover the interrupted batch before running another: ${paths.journal}`);
+    if (status.recovery_required && !options.recover && !options.readOnly) throw failure('RECOVERY_REQUIRED', recoveryHint(status, paths));
     unlinkSync(paths.lock);
   } else if (status.recovery_required && !options.recover && !options.readOnly) {
-    throw failure('RECOVERY_REQUIRED', `Recover the interrupted batch before running another: ${paths.journal}`);
+    throw failure('RECOVERY_REQUIRED', recoveryHint(status, paths));
   }
   const run_id = randomUUID();
   let handle;
@@ -222,7 +242,13 @@ export function acquireSession(options = {}) {
   owned.set(paths.key, run_id);
   let released = false;
   return {
-    run_id, paths,
+    run_id, paths, command: options.command || null,
+    clearCheckpoint: () => {
+      if (existsSync(paths.journal)) {
+        const value = read(paths.journal);
+        if (value.run_id === run_id && value.native_quiescence_required) removeOwnedFile(paths.journal);
+      }
+    },
     pending: () => existsSync(paths.journal) ? read(paths.journal) : null,
     checkpoint: (value) => {
       const temporary = `${paths.journal}.${run_id}.tmp`;

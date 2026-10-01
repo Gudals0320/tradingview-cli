@@ -67,7 +67,7 @@ export async function create({ condition, price, message, _deps = {} }) {
         return { success: false, source: 'internal_api', error: e.message };
       }
     })()
-  `);
+  `, { mutation: true });
 }
 
 export async function list() {
@@ -128,7 +128,7 @@ export async function deleteAlerts({ delete_all, alert_ids, alert_id } = {}) {
         return { ok: data.s === 'ok', status: x.status, response: (x.responseText || '').slice(0, 200) };
       } catch (e) { return { ok: false, error: e.message }; }
     })()
-  `);
+  `, { mutation: true });
   if (result && result.ok) {
     return { success: true, source: 'internal_api', deleted_count: ids.length, alert_ids: ids };
   }

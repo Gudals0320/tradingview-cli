@@ -4,7 +4,7 @@
  */
 import { parseArgs } from 'node:util';
 import { disconnect, configureTarget, configuredTarget } from '../connection.js';
-import { acquireSession, withReadOnlySession, assertNoWorkspaceAnywhere } from '../session.js';
+import { acquireSession, withReadOnlySession, withLegacySession, assertNoWorkspaceAnywhere } from '../session.js';
 import { runWorkspace } from '../workspace.js';
 import { commandScope } from './policy.js';
 import { validateArguments } from './arguments.js';
@@ -161,9 +161,9 @@ async function execute(handler, values, positionals, offline = false, readOnly =
       if (command === 'launch') assertNoWorkspaceAnywhere();
       if (['workspace', 'legacy'].includes(commandScope(command))) {
         lease = acquireSession({ readOnly, command, desktopWide: command === 'launch' });
-        if (!readOnly) lease.checkpoint({ phase: 'running', command, native_quiescence_required: true });
       }
-      return handler(values, positionals);
+      if (!lease) return handler(values, positionals);
+      return withLegacySession(lease, () => handler(values, positionals));
     };
     result = await (readOnly ? withReadOnlySession(action) : action());
     retainRecovery = result?.recovery_required === true;
@@ -171,7 +171,7 @@ async function execute(handler, values, positionals, offline = false, readOnly =
     primaryError = err;
     retainRecovery = err.code === 'CDP_TIMEOUT' || err.recovery_required === true;
   } finally {
-    if (lease && retainRecovery) {
+    if (lease && retainRecovery && lease.pending()?.native_quiescence_required) {
       try { lease.checkpoint({ phase: 'recovery_required', command, target_id: configuredTarget(), native_quiescence_required: true }); }
       catch (error) { cleanupWarnings.push(error.message); }
     }

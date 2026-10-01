@@ -27,7 +27,7 @@ export async function ensurePineEditorOpen({ _deps } = {}) {
       lastState=await evaluatePage(`(${pinePanelState.toString()})(document,window)`);
       if(lastState.viewport_width===0||lastState.viewport_height===0){const error=new Error('Pine target viewport is zero. Restore the TradingView window and make this tab visible, then retry.');error.code='PINE_VIEWPORT_UNAVAILABLE';error.details=lastState;throw error;}
       if(lastClickSignature!==null&&lastState.panel_signature!==lastClickSignature)openingObserved=true;
-      const requested=await evaluatePage(`(${requestPineEditor.toString()})(document, window.TradingView,{suppressToggle:${openingObserved}})`);requests++;
+      const requested=await evaluatePage(`(${requestPineEditor.toString()})(document, window.TradingView,{suppressToggle:${openingObserved}})`, { mutation: true });requests++;
       if(requested==='sidebar')lastClickSignature=lastState.panel_signature;
     }
     await sleep(200);
@@ -39,7 +39,7 @@ export async function ensurePineEditorOpen({ _deps } = {}) {
 
 // ── Pure / offline functions ──
 
-export function analyze({ source }) {
+export function analyze({ source, fail_on_error = false }) {
   const lines = source.split('\n');
   // Keep offsets while hiding comments and string contents from code rules.
   const codeLines = source.replace(/("(?:\\[^\r\n]|[^"\\\r\n])*"|'(?:\\[^\r\n]|[^'\\\r\n])*')|\/\/[^\r\n]*/g,
@@ -58,20 +58,30 @@ export function analyze({ source }) {
   const arrays = new Map();
   for (let i = 0; i < lines.length; i++) {
     const line = codeLines[i];
-    const fromMatch = line.match(/(\w+)\s*=\s*array\.from\(([^)]*)\)/);
+    const fromMatch = line.match(/(\w+)\s*=\s*array\.from\(/);
     if (fromMatch) {
-      const name = fromMatch[1].trim();
-      const args = fromMatch[2].trim();
-      const size = args === '' ? 0 : args.split(',').length;
-      arrays.set(name, { name, size, line: i + 1 });
+      const name = fromMatch[1];
+      let depth = 1, size = 0, content = false;
+      for (let index = fromMatch.index + fromMatch[0].length; index < line.length; index++) {
+        const ch = line[index];
+        if (ch === '(' || ch === '[' || ch === '{') depth++;
+        if (ch === ')' || ch === ']' || ch === '}') depth--;
+        if (!depth) { if (content) size++; break; }
+        if (depth === 1 && ch === ',') size++;
+        else if (ch.trim()) content = true;
+      }
+      arrays.set(name, { name, size: depth === 0 ? size : null, line: i + 1 });
       continue;
     }
-    const newMatch = line.match(/(\w+)\s*=\s*array\.new(?:<\w+>|_\w+)\((\d+)?/);
-    if (newMatch) {
-      const name = newMatch[1].trim();
-      const size = newMatch[2] !== undefined ? parseInt(newMatch[2], 10) : null;
-      arrays.set(name, { name, size, line: i + 1 });
-    }
+    const newMatch = line.match(/(\w+)\s*=\s*array\.new(?:<\w+>|_\w+)\(\s*(\d+)\s*[,)]/);
+    if (newMatch) arrays.set(newMatch[1], { name: newMatch[1], size: Number(newMatch[2]), line: i + 1 });
+  }
+  const code = codeLines.join('\n');
+  for (const [name, info] of arrays) {
+    const mutator = new RegExp('array\\.(?:push|pop|insert|remove|clear|shift|unshift|concat|fill)\\(\\s*' + name + '\\b|\\b' + name + '\\.(?:push|pop|insert|remove|clear|shift|unshift|concat)\\(');
+    const assignments = [...code.matchAll(new RegExp('\\b' + name + '\\s*(?::=|=(?!=))', 'g'))].length;
+    // Scope, aliasing and interprocedural mutations are deliberately not inferred.
+    if (mutator.test(code) || assignments > 1 || new RegExp('\\b(?:var|varip)\\s+[^\\n]*\\b' + name + '\\b').test(code)) info.size = null;
   }
 
   for (let i = 0; i < lines.length; i++) {
@@ -143,7 +153,9 @@ export function analyze({ source }) {
   }
 
   return {
-    success: true,
+    success: true, analysis_complete: true,
+    ...(fail_on_error && { has_errors: diagnostics.some(diagnostic => diagnostic.severity === 'error') }),
+    error_count: diagnostics.filter(diagnostic => diagnostic.severity === 'error').length,
     issue_count: diagnostics.length,
     diagnostics,
     note: diagnostics.length === 0 ? 'No static analysis issues found. Use `tv pine compile` against the open editor or `tv pine check` for a server-side compilation check.' : undefined,
@@ -236,8 +248,7 @@ export async function closePanel() {
 }
 
 export async function getSource() {
-  const editorReady = await ensurePineEditorOpen();
-  if (!editorReady) throw new Error('Could not open Pine Editor or Monaco not found in React fiber tree.');
+  if (!(await getPanelState()).open) throw new Error('PINE_EDITOR_REQUIRED: Open the owned Pine editor explicitly before reading.');
 
   const source = await evaluate(`
     (function() {
@@ -266,7 +277,7 @@ export async function setSource({ source }) {
       m.editor.setValue(${escaped});
       return true;
     })()
-  `);
+  `, { mutation: true });
 
   if (!set) throw new Error('Monaco found but setValue() failed.');
   return { success: true, lines_set: source.split('\n').length };
@@ -275,8 +286,7 @@ export async function setSource({ source }) {
 export async function compile() { return smartCompile(); }
 
 export async function getErrors({ _deps } = {}) {
-  const editorReady = _deps ? true : await ensurePineEditorOpen();
-  if (!editorReady) throw new Error('Could not open Pine Editor.');
+  if (!_deps && !(await getPanelState()).open) throw new Error('PINE_EDITOR_REQUIRED: Open the owned Pine editor explicitly before reading.');
 
   const markers = await (_deps?.evaluate || evaluate)(`
     (function() {
@@ -310,6 +320,10 @@ export async function save({ timeout = 15000, expect_script_id, _deps } = {}) {
   const now = _deps?.now || Date.now;
   const token = randomUUID();
   const savedSource=!_deps?(await getSource()).source:_deps.source;
+  if (expect_script_id) {
+    const actual = await inspect(`(${FIND_CONTROLLER})?.getScriptIdVersion?.()?.scriptIdPart`);
+    if (actual !== expect_script_id) return { success: false, saved: false, code: 'PINE_DOCUMENT_MISMATCH', error: 'Expected Pine document is not open; no save was dispatched.' };
+  }
   const prepareStrategy=typeof savedSource==='string'&&/^\s*strategy\s*\(/m.test(savedSource);
   const finishSave=async result=>{if(!result.success&&prepareStrategy)await inspect(`(() => {${STRATEGY_PAGE_CODE};return failCompilation(window,${JSON.stringify(token+'-save')},${JSON.stringify(result.error||'Save failed.')},'SAVE_FAILED');})()`);return result;};
   try {
@@ -336,7 +350,7 @@ export async function save({ timeout = 15000, expect_script_id, _deps } = {}) {
     Promise.resolve().then(() => controller.saveScript()).then(() => { operation.pending=false; },
       error => {operation.pending=false; operation.error=error?.message || String(error);});
     return true;
-  })()`);
+  })()`, { mutation: true });
   const start = now(); let dialogHandled = false;
   do {
     await sleep(100);
@@ -383,7 +397,7 @@ export async function save({ timeout = 15000, expect_script_id, _deps } = {}) {
   } catch(error){return finishSave({success:false,saved:null,persistence_verified:false,recovery_required:error.code==='CDP_TIMEOUT'||/already pending/.test(error.message),code:error.code||'SAVE_FAILED',error:error.message});}
 }
 export async function getConsole({ _deps } = {}) {
-  if (!_deps && !await ensurePineEditorOpen()) throw new Error('Could not open Pine Editor.');
+  if (!_deps && !(await getPanelState()).open) throw new Error('PINE_EDITOR_REQUIRED: Open the owned Pine editor explicitly before reading.');
   const entries = await (_deps?.evaluate || evaluate)(`(() => {
     const controller = ${FIND_CONTROLLER};
     return (${readPineConsole.toString()})(document, controller);
@@ -484,7 +498,7 @@ export async function smartCompile({ timeout = 30000, save: saveChanges = false,
     if (!observed) throw new Error('Pine compile completion signals unavailable; cannot verify compilation.');
   }
   const button = awaiting ? null : await inspect(`(() => { ${PINE_TARGET_PAGE_CODE}; const controller = ${FIND_CONTROLLER};
-    return (${dispatchPineCompilation.toString()})(window, controller, ${JSON.stringify(token)}, document); })()`);
+    return (${dispatchPineCompilation.toString()})(window, controller, ${JSON.stringify(token)}, document); })()`, { mutation: true });
   const sleep = _deps?.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
   const now = _deps?.now || Date.now; const start = now(); let markers = [], state = null, persistence = {};
   do {
@@ -574,7 +588,7 @@ export async function newScript({ type, _deps }) {
       var m = ${FIND_MONACO};
       return !controller.getScriptIdVersion()?.scriptIdPart && m?.editor.getValue() === ${escaped};
     })()
-  `);
+  `, { mutation: true });
 
   if (!set) throw new Error('New Pine script identity/template verification failed.');
 
@@ -628,7 +642,7 @@ export async function openScript({ name, _deps }) {
         })
         .catch(function(e) { return {error: e.message}; });
     })()
-  `);
+  `, { mutation: true });
 
   if (result?.error) {
     throw new Error(result.error);
@@ -637,8 +651,8 @@ export async function openScript({ name, _deps }) {
   return { success: true, name: result.name, script_id: result.id, lines: result.lines, source: 'internal_api', opened: true };
 }
 
-export async function listScripts() {
-  const scripts = await evaluateAsync(`
+export async function listScripts({ _deps } = {}) {
+  const scripts = await (_deps?.evaluateAsync || evaluateAsync)(`
     fetch('https://pine-facade.tradingview.com/pine-facade/list/?filter=saved', { credentials: 'include' })
       .then(function(r) { return r.json(); })
       .then(function(data) {

@@ -46,7 +46,7 @@ async function openDialog() {
       btn.click();
       return 'clicked';
     })()
-  `);
+  `, { mutation: true });
   if (opened === 'no-button') throw new Error('Indicators toolbar button not found.');
   for (let i = 0; i < 20; i++) {
     await delay(200);
@@ -79,7 +79,7 @@ async function closeDialog() {
       var close = dlg.querySelector('[data-name="close"], [class*="close"] button, button[class*="close"]');
       if (close) { close.click(); return; }
     })()
-  `);
+  `, { mutation: true });
   await delay(300);
 }
 
@@ -140,7 +140,7 @@ export async function addStudyFromSearch({ query, match, section } = {}) {
       pick.row.click();
       return { clicked: pick.title, section: pick.section };
     })()
-  `);
+  `, { mutation: true });
 
   if (clicked && clicked.error) { await closeDialog(); throw new Error(clicked.error); }
 
@@ -192,7 +192,7 @@ export async function setInputs({ entity_id, inputs: inputsRaw, timeout = 30000,
       if (changed) study.setInputValues(nextInputs);
       return { updated_inputs: updatedKeys, strategy, changed };
     })()
-  `);
+  `, { mutation: true });
 
   if (result && result.error) throw Object.assign(new Error(result.error), { code: result.code });
   if (result.strategy && result.changed) {
@@ -224,7 +224,7 @@ export async function toggleVisibility({ entity_id, visible }) {
       var actualVisible = study.isVisible();
       return { visible: actualVisible };
     })()
-  `);
+  `, { mutation: true });
 
   if (result && result.error) throw new Error(result.error);
   return { success: true, entity_id, visible: result.visible };

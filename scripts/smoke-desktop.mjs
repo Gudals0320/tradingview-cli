@@ -3,10 +3,11 @@ import { CDP_HOST, CDP_PORT } from '../src/config.js';
 import { getDesktopInventory, inspectTarget } from '../src/desktop.js';
 import { withReadOnlySession, sessionStatus, sourceHash } from '../src/session.js';
 import { reserveWorkspace, acquireWorkspace, releaseWorkspace } from '../src/workspace-store.js';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import assert from 'node:assert/strict';
+import { findPineController, findPineEditor } from '../src/core/desktop-dom.js';
 
 const root = resolve('results/issue-overhaul');
 mkdirSync(root, { recursive: true });
@@ -37,7 +38,11 @@ const protectedTabs = inventory.tabs.filter(tab => tab.is_chart && !names.get(ta
 async function protectedState() {
   return withReadOnlySession(() => Promise.all(protectedTabs.map(async tab => sourceHash(JSON.stringify(
     await inspectTarget(tab, `(() => {const c=window.TradingViewApi._activeChartWidgetWV.value();
-      return {symbol:c.symbol(),resolution:c.resolution(),type:c.chartType(),studies:c.getAllStudies().map(s=>s.id)};})()`)
+      const controller=(${findPineController.toString()})(document),editor=(${findPineEditor.toString()})(document);
+      return {symbol:c.symbol(),resolution:c.resolution(),type:c.chartType(),studies:c.getAllStudies().map(s=>s.id),
+        pane_count:window.TradingViewApi._chartWidgetCollection.getAll().length,
+        layout_name:document.querySelector('[data-qa-id="save-load-button"]')?.innerText,
+        modified:controller?.isModified?.() ?? null,source:editor?.editor.getValue() || null};})()`)
   )))));
 }
 const before = await protectedState();
@@ -72,6 +77,63 @@ try {
   const resource = reserveWorkspace({ file: join(isolated, 'qa.tvws.json'), target: qa.id, layout: identity.layout, pine: 'isolated-admission-fixture' }, options);
   check('workspace admission succeeds after stream exit', 'real filesystem admission', () => assert.ok(resource.id));
   releaseWorkspace(acquireWorkspace(resource.file, options), options);
+  const killedRoot = mkdtempSync(join(root, 'killed-read-'));
+  const child = spawn(process.execPath, ['src/cli/index.js', '--target', qa.id, 'stream', 'quote', '--interval', '200'], {
+    env: { ...process.env, TEMP: killedRoot, TMP: killedRoot }, stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  await new Promise((resolve, reject) => {
+    child.stdout.once('data', resolve);
+    child.once('error', reject);
+    child.once('exit', code => { if (code) reject(new Error('Read stream exited before hard-kill fixture.')); });
+  });
+  child.kill('SIGKILL');
+  await new Promise(resolve => child.once('exit', resolve));
+  const killedOptions = { directory: join(killedRoot, 'tradingview-cli-sessions') };
+  check('hard-killed pure stream leaves no recovery journal', 'live OS hard kill during pure polling', () => {
+    assert.equal(sessionStatus(killedOptions).recovery_required, false);
+    assert.equal(sessionStatus(killedOptions).owner_alive, false);
+  });
+  const killedResource = reserveWorkspace({ file: join(killedRoot, 'qa.tvws.json'), target: qa.id, layout: identity.layout, pine: 'killed-read-fixture' }, killedOptions);
+  releaseWorkspace(acquireWorkspace(killedResource.file, killedOptions), killedOptions);
+  check('workspace admission reclaims hard-killed pure stream lease', 'real filesystem admission', () => assert.equal(sessionStatus(killedOptions).locked, false));
+  const nativeRoot = mkdtempSync(join(root, 'killed-native-'));
+  const nativeCode = `import {acquireSession,withLegacySession} from './src/session.js';
+    import {configureTarget,evaluateAsync} from './src/connection.js';
+    const lease=acquireSession({command:'smoke injected native'});configureTarget(${JSON.stringify(qa.id)});
+    await withLegacySession(lease,()=>evaluateAsync('(()=>{window.__qaPreviousSave=window.__tvCliSave;window.__tvCliSave={pending:true,token:"smoke-injected"};return window.__qaRetainedNative=new Promise(resolve=>{window.__qaResolveNative=resolve;});})()', {mutation:true}));`;
+  const nativeChild = spawn(process.execPath, ['--input-type=module', '-e', nativeCode], {
+    env: { ...process.env, TEMP: nativeRoot, TMP: nativeRoot }, stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const nativeClient = await CDP({ host: CDP_HOST, port: CDP_PORT, target: qa.id });
+  try {
+    let pending = false;
+    for (let i = 0; i < 50; i++) {
+      const state = await nativeClient.Runtime.evaluate({ expression: 'Boolean(window.__qaRetainedNative)', returnByValue: true });
+      if (state.result?.value) { pending = true; break; }
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    assert.equal(pending, true, 'Injected native dispatch did not start.');
+    nativeChild.kill('SIGKILL'); await new Promise(resolve => nativeChild.once('exit', resolve));
+    const nativeOptions = { directory: join(nativeRoot, 'tradingview-cli-sessions') };
+    const state = sessionStatus(nativeOptions);
+    const env = { ...process.env, TEMP: nativeRoot, TMP: nativeRoot };
+    check('hard-killed pending native mutation retains exact-target fence', 'live injected retained page promise + OS hard kill', () => {
+      assert.equal(state.recovery_required, true);
+      assert.equal(cli(['session', 'recover', '--run-id', state.recovery_run_id], env).exit, 1);
+      assert.equal(sessionStatus(nativeOptions).recovery_required, true);
+    });
+    await nativeClient.Runtime.evaluate({ expression: 'window.__tvCliSave.pending=false;window.__qaResolveNative();', returnByValue: true });
+    const recovered = cli(['session', 'recover', '--run-id', state.recovery_run_id], env);
+    check('quiescent native recovery succeeds without reload', 'live injected recovery', () => {
+      assert.equal(recovered.exit, 0, recovered.stderr);
+      assert.equal(recovered.value.incomplete, true);
+      assert.equal(sessionStatus(nativeOptions).recovery_required, false);
+    });
+  } finally {
+    if (nativeChild.exitCode === null) nativeChild.kill('SIGKILL');
+    await nativeClient.Runtime.evaluate({ expression: 'window.__qaResolveNative?.();window.__tvCliSave=window.__qaPreviousSave;delete window.__qaPreviousSave;delete window.__qaRetainedNative;delete window.__qaResolveNative;', returnByValue: true });
+    await nativeClient.close();
+  }
 } finally {
   const after = await protectedState();
   output.protected_tabs = { count: before.length, unchanged: JSON.stringify(before) === JSON.stringify(after) };

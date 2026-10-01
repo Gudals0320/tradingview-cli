@@ -1,3 +1,4 @@
+import { safeFilename } from '../src/core/capture.js';
 /**
  * Tests for CDP input sanitization utilities and their integration across modules.
  * Covers safeString(), requireFinite(), source audit, and per-module validation.
@@ -319,9 +320,9 @@ describe('source audit — no unsafe interpolation patterns', () => {
 // ── Path traversal prevention ────────────────────────────────────────────
 
 describe('path traversal prevention', () => {
-  it('capture.js strips path separators from filename', () => {
-    const source = readFileSync(new URL('../src/core/capture.js', import.meta.url), 'utf8');
-    assert.ok(source.includes(".replace(/[\\/\\\\]/g, '_')"));
+  it('capture filenames cannot escape or use Windows alternate streams/reserved names', () => {
+    for (const value of ['../../x', '..\\..\\x', 'a:b', 'bad<>*?"name']) assert.doesNotMatch(safeFilename(value), /[/\\:*?"<>]|\.\./);
+    for (const value of ['CON', 'nul.png', 'COM1', 'LPT9', '.', '']) assert.throws(() => safeFilename(value));
   });
 
 });

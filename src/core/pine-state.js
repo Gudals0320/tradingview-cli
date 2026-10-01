@@ -133,14 +133,14 @@ export function verifyPineCompilation(window, operation) {
 export function dispatchPineCompilation(window, controller, token) {
   const operation = window.__tvCliPineCompile;
   if (operation?.token !== token) throw new Error('Pine compile observer was replaced.');
-  let plan;
+  let plan, refresh, saveRefresh, method;
   try {
   plan = planPineCompilation(window, controller);
   if (plan.error) throw new Error(plan.code + ': ' + plan.error);
-  const refresh=plan.method==='updateOnChart'&&controller.isModified?.()===false;
-  const saveRefresh=plan.method==='updateOnChart'&&controller.isModified?.()===true&&controller.isDraft?.()===false
+  refresh=plan.method==='updateOnChart'&&controller.isModified?.()===false;
+  saveRefresh=plan.method==='updateOnChart'&&controller.isModified?.()===true&&controller.isDraft?.()===false
     && String(controller.getScriptIdVersion()?.version)!==String(plan.target_version);
-  const method = refresh?'refreshSavedOnChart':saveRefresh?'saveThenRefreshOnChart':plan.method;
+  method = refresh?'refreshSavedOnChart':saveRefresh?'saveThenRefreshOnChart':plan.method;
   if (saveRefresh && (typeof controller.saveScript!=='function'||typeof controller._replaceStubByStudy!=='function')) throw new Error('Pine saved-version reconciliation action unavailable.');
   if (!refresh && !saveRefresh && typeof controller?.[method] !== 'function') throw new Error('Pine native compilation action unavailable.');
   operation.controller = controller;
@@ -152,10 +152,6 @@ export function dispatchPineCompilation(window, controller, token) {
     operation.dispose?.();
     throw error;
   }
-  const refresh=plan.method==='updateOnChart'&&controller.isModified?.()===false;
-  const saveRefresh=plan.method==='updateOnChart'&&controller.isModified?.()===true&&controller.isDraft?.()===false
-    && String(controller.getScriptIdVersion()?.version)!==String(plan.target_version);
-  const method = refresh?'refreshSavedOnChart':saveRefresh?'saveThenRefreshOnChart':plan.method;
   Promise.resolve().then(async () => {
     if(saveRefresh){
       // A reloaded layout can retain an older study than the saved editor.

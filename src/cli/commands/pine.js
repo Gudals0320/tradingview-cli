@@ -47,6 +47,7 @@ register('pine', {
     ['analyze', {
       description: 'Offline static analysis (no TradingView needed)',
       options: {
+        'fail-on-error': { type: 'boolean', description: 'Exit 1 when definite error diagnostics are found (CI)' },
         file: { type: 'string', short: 'f', description: 'Read source from file' },
       },
       handler: async (opts) => {
@@ -57,7 +58,7 @@ register('pine', {
           source = await readStdin();
         }
         if (!source) throw new Error('No source provided. Pipe source via stdin or use --file.');
-        return core.analyze({ source });
+        return core.analyze({ source, fail_on_error: opts['fail-on-error'] });
       },
     }],
     ['check', {

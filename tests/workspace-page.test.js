@@ -23,6 +23,13 @@ function fixture() {
   return { resource, window, chart, inputs, editor, controller, call, owner: { ...resource, nonce: 'nonce' } };
 }
 describe('atomic workspace page guards', () => {
+  it('permits transient compile absence but rejects an absent owned study at final completion', () => {
+    const f = fixture(); f.call('startWorkspacePage', f.owner, 'op', { compile: true });
+    f.chart._chartWidget.model = () => ({ mainSeries: () => ({ bars: () => ({ firstIndex: () => 0, lastIndex: () => 0, valueAt: () => [1] }) }), model: () => ({ dataSources: () => [] }) });
+    assert.equal(f.call('guardWorkspacePage', f.owner).studies.length, 0);
+    assert.throws(() => f.call('finishWorkspacePage', f.owner, 'op'), /WORKSPACE_STUDY_MISSING/);
+    assert.equal(f.window.__tvCliWorkspace.operation, 'op');
+  });
   it('detects source, layout and nonce changes before any action', () => {
     for (const change of [f => f.editor.setValue('external'), f => { f.window.__tvCliWorkspace.nonce = 'other'; },
       f => { f.window.TradingViewApi._chartWidgetCollection.metaInfo.uid.value = () => 'other'; }]) {
