@@ -1,0 +1,55 @@
+{
+  "mode": "split-view",
+  "source_equal": true,
+  "sha256_lf": "772756f1a7dadc024312e8ed6890d0b4bc87814f80d7147d990736662bbae440",
+  "error_count": 0,
+  "warning_count": 0,
+  "metrics": {
+    "moves": 945,
+    "breakEven": 296,
+    "cooldownBlocks": 191,
+    "timeExits": 0,
+    "violations": 0
+  },
+  "logs": [
+    {
+      "timestamp": "2026-10-01T10:47:00.000+09:00",
+      "type": "info",
+      "message": "[2026-10-01T10:47:00.000+09:00]: QA-LARGE-EDITED revision=trailing-v2; trades=515; samples=64; window=true"
+    },
+    {
+      "timestamp": "2026-10-01T10:47:00.000+09:00",
+      "type": "info",
+      "message": "[2026-10-01T10:47:00.000+09:00]: QA-LARGE-METRICS win=31.25; duration=8.547; excursion=18.19"
+    },
+    {
+      "timestamp": "2026-10-01T10:47:00.000+09:00",
+      "type": "info",
+      "message": "[2026-10-01T10:47:00.000+09:00]: QA-LARGE-EXITS moves=945; breakEven=296; cooldownBlocks=191; timeExits=0; violations=0"
+    }
+  ],
+  "table_rows": [
+    "CLI-QA revision | trailing-v2",
+    "Long / short score | 2 / 2",
+    "Window / filters | yes / yes",
+    "ATR percent | 0.04",
+    "Volume ratio | 2.38",
+    "Position | flat",
+    "Stop / target | n/a / n/a",
+    "Bars held | 0",
+    "Recent samples | 64",
+    "Recent win percent | 31.25",
+    "Mean profit | -16.65",
+    "Mean duration | 8.55",
+    "Mean excursion | 18.19",
+    "Long / short signals | 259 / 256",
+    "Rejected setups | 202",
+    "Closed trades | 515",
+    "Cooldown remaining | 0",
+    "Cooldown blocks | 191",
+    "Stop / break-even moves | 945 / 296",
+    "Time exits | 0",
+    "Ratchet violations | 0"
+  ],
+  "limitation": "Counter instrumentation confirms exercised branches in this run; it is not a bar-by-bar independent oracle. Time-exit counter stayed zero."
+}

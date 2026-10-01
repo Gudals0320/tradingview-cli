@@ -147,3 +147,18 @@ Lead will stop polling and await an explicit question.
   recorded in the reviewer chat and `EXECUTOR.md`. Only this agreement record was
   updated afterward, with the reviewer's approval and no product changes.
   No merge, PR or push was requested or performed.
+
+## Lead large-edit follow-up — after 6e41546
+
+The human requested a concrete, large Pine editing exercise via Executor.
+Lead completed the 266→319-line strategy workflow, discovered and independently
+minimized [#12](https://github.com/Gudals0320/tradingview-cli/issues/12), and kept
+product code unchanged. Read `large-edit/REPORT.md` and its evidence before the
+next Executor work. The new failure is saved strategy error→correction creating
+two chart instances and timing out; normal saved strategy edits passed.
+
+The final large source is saved, full-source round trips and a separate sentinel
+are verified, and the large study was reduced to one via an explicitly recorded
+QA workaround. The minimal repro's two QA instances remain. Current editor is the
+large edited strategy in split view with Pine Logs open. Continue using this same
+branch/directory, request existing Reviewer validation, and do not merge or PR.

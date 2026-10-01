@@ -41,6 +41,15 @@ No product source or existing tests were modified by Lead. This is a workflow
 validation attempt of every requested command, not exhaustive certification of
 all OS/language/error/latency combinations. Issue links are in `issues/index.json`.
 
+## Large-edit follow-up after Executor completion
+
+| ID | Task | Result |
+| --- | --- | --- |
+| P16 | One substantial strategy edit, 266→319 editor lines | Complete; fixtures and exact transformations in large-edit/ |
+| P17 | Error injection, correction, runtime and full-source persistence | Complete with documented duplicate-removal workaround; 21 dashboard rows and 3 QA runtime logs verified |
+| P18 | Isolate and file any new defect | #12 filed and read back; tiny strategy reproduces same error-recovery failure |
+| P19 | Commit QA evidence and hand back to existing Executor | See large-edit/REPORT.md; clean-state handoff required before messaging |
+
 ## Executor regression
 
 All eight defects have focused fixes and tests. `npm test` now runs the new
