@@ -65,7 +65,7 @@ export function findPineController(document) {
       for (const props of [fiber.memoizedProps, fiber.alternate?.memoizedProps]) {
         const value = props?.value;
         if (typeof value?.openNewScript === 'function' && typeof value?.openScript === 'function'
-          && typeof value?.getScriptIdVersion === 'function' && value?._editorStore) return value;
+          && typeof value?.setScript === 'function' && typeof value?.getScriptIdVersion === 'function' && value?._editorStore) return value;
       }
     }
   }

@@ -444,7 +444,7 @@ export async function newScript({ type, _deps }) {
     })()
   `);
 
-  if (!set) throw new Error('Monaco editor not found. Ensure Pine Editor is open.');
+  if (!set) throw new Error('New Pine script identity/template verification failed.');
 
   return { success: true, type, action: 'new_script_created', template: typeMap[type] };
 }

@@ -35,6 +35,15 @@ it('new detaches the saved identity and waits for the async template before sett
   assert.equal(f.read().id, null);
   assert.match(f.read().source, /strategy\("My strategy"/);
 });
+it('new rejects an incomplete controller before changing the document', async () => {
+  const f = fixture(); delete f.controller.setScript;
+  await assert.rejects(newScript({ type: 'indicator', _deps: f }), /controller unavailable/);
+  assert.equal(f.read().id, 'B'); assert.equal(f.read().source, 'original B');
+});
+it('new reports a failed identity/template verification accurately', async () => {
+  const f = fixture(); f.controller.openNewScript = async () => {};
+  await assert.rejects(newScript({ type: 'indicator', _deps: f }), /identity\/template verification failed/);
+});
 
 it('save confirms the Korean dialog using stable attributes', () => {
   let clicked = 0;
