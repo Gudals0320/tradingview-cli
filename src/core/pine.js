@@ -3,15 +3,15 @@
  * All functions accept plain options objects and return plain JS objects.
  * They throw on error (callers catch and format).
  */
-import { evaluate, evaluateAsync, getClient } from '../connection.js';
-import { findPineEditor, findPineController, readPineConsole, confirmPineSaveDialog, requestPineEditor, clickPineCompileButton } from './desktop-dom.js';
+import { evaluate, evaluateAsync } from '../connection.js';
+import { findPineEditor, findPineController, readPineConsole, confirmPineSaveDialog, confirmPineCompileSaveDialog, requestPineEditor } from './desktop-dom.js';
 import { STRATEGY_PAGE_CODE, splitMarkers, formatDiagnostic } from '../strategy-state.js';
 import { sourceHash } from '../session.js';
 import { randomUUID } from 'node:crypto';
+import { observePineCompilation, pineCompilationStatus, dispatchPineCompilation } from './pine-state.js';
 
 // Shared helpers execute unchanged in the page and in offline DOM regression tests.
 const FIND_MONACO = `(${findPineEditor.toString()})(document)`;
-const CLICK_COMPILE = `(${clickPineCompileButton.toString()})(document)`;
 const FIND_CONTROLLER = `(${findPineController.toString()})(document)`;
 
 /** Open the Pine panel once, then wait for its editor to mount. */
@@ -365,20 +365,43 @@ export async function smartCompile({ timeout = 30000, _deps } = {}) {
     compilation_token: begun.token, report_ready: true };
   const awaiting = begun?.phase === 'awaiting';
   const activeToken = awaiting ? begun.token : token;
-  const button = awaiting ? null : await inspect(CLICK_COMPILE);
-  if (!awaiting && !button && !_deps) {
-    const client = await getClient();
-    await client.Input.dispatchKeyEvent({ type: 'keyDown', modifiers: 2, key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
-    await client.Input.dispatchKeyEvent({ type: 'keyUp', key: 'Enter', code: 'Enter' });
+  if (!awaiting) {
+    const observed = await inspect(`(() => {const controller = ${FIND_CONTROLLER};
+      return (${observePineCompilation.toString()})(window, controller, ${JSON.stringify(token)}); })()`);
+    if (!observed) throw new Error('Pine compile completion signals unavailable; cannot verify compilation.');
   }
+  const button = awaiting ? null : await inspect(`(() => { const controller = ${FIND_CONTROLLER};
+    return (${dispatchPineCompilation.toString()})(window, controller, ${JSON.stringify(token)}, document); })()`);
   const sleep = _deps?.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
   const now = _deps?.now || Date.now; const start = now(); let markers = [], state = null;
   do {
     await sleep(200);
+    let completed = awaiting, nativeMarkers = [];
+    if (!awaiting) {
+      const progress = await inspect(`(() => {
+        (${confirmPineCompileSaveDialog.toString()})(document);
+        return (${pineCompilationStatus.toString()})(window, ${JSON.stringify(token)});
+      })()`);
+      if (progress.replaced) return { success:false,compiled:false,error:'Pine compilation operation was replaced.' };
+      if (progress.error) {
+        await inspect(`(${pineCompilationStatus.toString()})(window, ${JSON.stringify(token)}, true)`);
+        return {success:false,compiled:false,error:progress.error};
+      }
+      completed = progress.completed;
+      nativeMarkers = progress.diagnostics || [];
+      if (!completed) continue;
+      if (completed) await inspect(`(${pineCompilationStatus.toString()})(window, ${JSON.stringify(token)}, true)`);
+    }
     markers = await inspect(`(() => { const m = ${FIND_MONACO}; const model = m?.editor.getModel();
       return model ? m.env.editor.getModelMarkers({resource:model.uri}).map(marker => ({line:marker.startLineNumber,column:marker.startColumn,message:marker.message,severity:marker.severity})) : []; })()`);
-    const diagnostics = splitMarkers(markers || []);
-    if (diagnostics.errors.length) return { success: false, compiled: false, has_errors: true, ...diagnostics, compilation_token: activeToken };
+    const uniqueMarkers = [...new Map([...nativeMarkers, ...(markers || [])].map(marker =>
+      [JSON.stringify([marker.line,marker.column,marker.message,marker.severity]),marker])).values()];
+    const diagnostics = splitMarkers(uniqueMarkers);
+    if (diagnostics.errors.length) {
+      if (!awaiting) await inspect(`(${pineCompilationStatus.toString()})(window, ${JSON.stringify(token)}, true)`);
+      return { success: false, compiled: false, has_errors: true, ...diagnostics, compilation_token: activeToken };
+    }
+    if (!completed) continue;
     if (!strategyMode) return { success: true, compiled: true, has_errors: false, ...diagnostics, button_clicked: button || 'keyboard_shortcut', compilation_token: token };
     state = await inspect(`(() => { ${STRATEGY_PAGE_CODE}; return compilationState(window); })()`);
     if (state.phase === 'failed') return { success: false, compiled: true, has_errors: false, ...diagnostics, runtime_error: state.error, error: state.error };
@@ -386,6 +409,7 @@ export async function smartCompile({ timeout = 30000, _deps } = {}) {
       button_clicked: awaiting ? null : button || 'keyboard_shortcut', ...(awaiting && { compile_performed: false }),
       strategy_id: state.strategy_id, strategy_inputs: state.inputs, compilation_token: activeToken, report_ready: true };
   } while (now() - start < timeout);
+  if (!awaiting) await inspect(`(${pineCompilationStatus.toString()})(window, ${JSON.stringify(token)}, true)`);
   return { success: false, compiled: false, has_errors: false, ...splitMarkers(markers || []),
     error: awaiting ? 'Strategy recalculation did not produce a verified report before timeout.' : 'Compilation did not produce a provably fresh report before timeout.',
     compilation_token: activeToken, report_ready: false, ...(awaiting && { compile_performed: false }) };

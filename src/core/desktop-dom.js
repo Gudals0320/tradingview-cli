@@ -98,6 +98,14 @@ export function confirmPineSaveDialog(document) {
   return true;
 }
 
+export function confirmPineCompileSaveDialog(document) {
+  const button = Array.from(document.querySelectorAll('button[data-qa-id="yes-btn"][name="yes"]'))
+    .find(item => item.offsetParent !== null && !item.disabled
+      && /추가하기 전에 이 스크립트를 저장|save (?:this |the )?script before adding/i.test(item.parentElement?.parentElement?.textContent || ''));
+  if (!button) return false;
+  button.click(); return true;
+}
+
 export function clickPineCompileButton(document) {
   const buttons = Array.from(document.querySelectorAll('button')).filter((button) =>
     button.offsetParent !== null && !button.disabled && button.getAttribute('aria-disabled') !== 'true');
