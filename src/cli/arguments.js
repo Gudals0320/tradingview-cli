@@ -21,6 +21,11 @@ export function validateArguments(command, values, positionals) {
   if (positionals.length < min || positionals.length > max) {
     throw new Error(`${command} accepts ${min === max ? min : `${min} to ${max}`} positional arguments; received ${positionals.length}.`);
   }
+  if (positionals.some(value => !value.trim())) throw new Error(`${command} positional arguments must not be empty.`);
+  for (const name of ['expect-script-id', 'file', 'target', 'layout', 'pine', 'name']) {
+    if (values[name] !== undefined && !values[name].trim()) throw new Error(`--${name} must not be empty.`);
+  }
+  if (command === 'indicator toggle' && values.visible && values.hidden) throw new Error('Choose --visible or --hidden, not both.');
   for (const name of ['count', 'max', 'limit', 'offset', 'interval', 'timeout', 'port', 'speed']) {
     if (values[name] === undefined) continue;
     const low = name === 'offset' ? 0 : name === 'interval' ? 100 : 1;

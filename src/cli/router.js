@@ -172,7 +172,8 @@ async function execute(handler, values, positionals, offline = false, readOnly =
     retainRecovery = err.code === 'CDP_TIMEOUT' || err.recovery_required === true;
   } finally {
     if (lease && retainRecovery && lease.pending()?.native_quiescence_required) {
-      try { lease.checkpoint({ phase: 'recovery_required', command, target_id: configuredTarget(), native_quiescence_required: true }); }
+      try { lease.checkpoint({ ...lease.pending(), phase: 'recovery_required', command,
+        target_id: configuredTarget() || lease.pending()?.target_id, native_quiescence_required: true }); }
       catch (error) { cleanupWarnings.push(error.message); }
     }
     // Close CDP explicitly and let pending stdout/HTTP handles drain. Forcing

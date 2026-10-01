@@ -187,7 +187,7 @@ describe('multi-feed pane assignment', () => {
       async openTab() { throw new Error('should not open a tab'); },
     };
 
-    const prepared = await prepareFeedBindings(feeds, adapter, { allowReassignTargets: ['tab-a', 'tab-b'] });
+    const prepared = await prepareFeedBindings(feeds, adapter, { allowReassignTargets: ['tab-a'] });
     assert.deepEqual(prepared.bindings.map((x) => [x.feed.key, x.targetId, x.paneIndex]), [
       ['CME_MINI:ES1!@1', 'tab-a', 0],
       ['CME_MINI:NQ1!@5', 'tab-a', 1],

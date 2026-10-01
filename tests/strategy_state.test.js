@@ -39,6 +39,21 @@ function fixture() {
 }
 
 describe('Strategy report identity and metadata', () => {
+  it('rejects overlapping input changes and rebases a completed A-B-A sequence before the next setter', () => {
+    const f=fixture();prepareInputChange(f.window,'strategy');f.input(21);f.status(1);
+    assert.throws(()=>prepareInputChange(f.window,'strategy'),{code:'STRATEGY_CALCULATION_PENDING'});
+    f.status(2);f.update();prepareInputChange(f.window,'strategy');
+    assert.equal(JSON.parse(f.window.__tvCliCompilation.inputs_fingerprint).find(input=>input.id==='in_0').value,21);
+    f.input(10);assert.equal(compilationState(f.window).phase,'pending');
+    f.status(1);f.status(2);f.update();assert.equal(compilationState(f.window).phase,'ready');
+  });
+  it('ended failed calculations do not permanently block a repair input setter', () => {
+    const f=fixture();prepareInputChange(f.window,'strategy');f.input(21);f.status(1);f.status(3);
+    f.window.__tvCliCompilation.phase='failed';
+    assert.equal(prepareInputChange(f.window,'strategy'),true);
+    f.input(10);f.status(1);f.status(2);f.update();
+    assert.equal(compilationState(f.window).phase,'ready');
+  });
   it('a fresh input-only workspace cannot publish its old report before a new native cycle', () => {
     const f=fixture();
     assert.equal(f.window.__tvCliCompilation, undefined);

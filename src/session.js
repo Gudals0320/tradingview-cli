@@ -197,7 +197,7 @@ export function sessionStatus(options = {}) {
     owner_alive: lock ? alive(lock.pid) : false, recovery_required: existsSync(paths.journal), journal_path: paths.journal,
     recovery_run_id: pending?.run_id || pending?.snapshot?.run_id || null,
     native_quiescence_required: pending?.native_quiescence_required === true,
-    recovery_journal_hash: existsSync(paths.journal) ? sourceHash(readFileSync(paths.journal, 'utf8')) : null,
+    recovery_journal_hash: existsSync(paths.journal) ? sourceHash(readFileSync(paths.journal)) : null,
     recovery_target: pending?.snapshot ? { target_id: pending.snapshot.target_id, chart_id: pending.snapshot.chart_id } : null,
     acquisition_in_progress: existsSync(paths.gate) };
 }
@@ -275,7 +275,7 @@ export function discardSession({ runId, journalHash, ...options } = {}) {
     try { pending = lease.pending(); }
     catch (error) { if (!journalHash) throw error; }
     if (journalHash) {
-      const text = readFileSync(lease.paths.journal, 'utf8');
+      const text = readFileSync(lease.paths.journal);
       if (sourceHash(text) !== journalHash) throw failure('JOURNAL_HASH_MISMATCH', 'Journal changed; nothing archived.');
       if (pending?.run_id || pending?.snapshot?.run_id) throw failure('RUN_ID_REQUIRED', 'A valid journal must use its exact run ID.');
       const backup = `${lease.paths.journal}.${randomUUID()}.discarded`;

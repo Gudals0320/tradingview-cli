@@ -24,9 +24,9 @@ export function alertCondition(condition) {
 export async function create({ condition, price, message, _deps = {} }) {
   const p = requireFinite(price, 'price');
   const condType = alertCondition(condition);
-  const evaluate = _deps.evaluate || (await import('../connection.js')).evaluate;
+  const inspect = _deps.evaluate || evaluate;
 
-  return evaluate(`
+  return inspect(`
     (function() {
       try {
         var ms = window.TradingViewApi._activeChartWidgetWV.value()._chartWidget.model().mainSeries();

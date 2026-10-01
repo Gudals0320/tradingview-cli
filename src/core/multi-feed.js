@@ -1,7 +1,7 @@
 import { symbolMatches, normalizeTimeframe } from '../chart-context.js';
 import { nativeCheckpoint, nativeQuiescent } from '../session.js';
 import CDP from '../cdp.js';
-import { CDP_HOST, CDP_PORT, safeString } from '../connection.js';
+import { CDP_HOST, CDP_PORT, safeString, requireFinite } from '../connection.js';
 import { newTab } from './tab.js';
 
 export function feedMatches(feed, pane) {
@@ -32,7 +32,7 @@ export function parseFeedSpecs(specs) {
 
 export function validateInterval(value) {
   if (value === undefined) return 250;
-  const interval = Number(value);
+  const interval = requireFinite(value, 'Interval');
   if (!Number.isFinite(interval)) throw new Error(`Interval must be finite, got: ${value}`);
   if (!Number.isInteger(interval)) throw new Error(`Interval must be an integer, got: ${value}`);
   if (interval < 100) throw new Error('Interval must be at least 100 ms.');
@@ -145,6 +145,7 @@ export async function prepareFeedBindings(feeds, adapter, { allowReassignTargets
 
   try {
     await refresh();
+    if (allowReassignTargets.some(target => !clients.has(target))) throw new Error('Explicit reassignment target was not found; no panes were changed.');
     const initial = planFeedAssignments(feeds, inventories);
     initial.bindings.forEach(reserve);
     let missing = await assignInto(initial.missing, initial.unused.filter(pane => mutable(pane.targetId)));
@@ -209,6 +210,11 @@ export async function prepareFeedBindings(feeds, adapter, { allowReassignTargets
 
     const order = new Map(feeds.map((feed, index) => [feed.key, index]));
     bindings.sort((a, b) => order.get(a.feed.key) - order.get(b.feed.key));
+    const usedTargets = new Set(bindings.map(binding => binding.targetId));
+    await Promise.allSettled([...clients].filter(([id]) => !usedTargets.has(id)).map(async ([id, client]) => {
+      if (adapter.close) await adapter.close(client);
+      clients.delete(id);
+    }));
     nativeQuiescent();
     return { bindings, clients, inventories, ownedTargets: [...ownedTargets] };
   } catch (error) {
@@ -394,7 +400,7 @@ export function selectChangedEvents(samples, previous, observedAt) {
         throw new Error(`${field} must be finite for ${sample.key}.`);
       }
     }
-    const hash = JSON.stringify(BAR_FIELDS.map((field) => sample[field]));
+    const hash = JSON.stringify([sample.symbol,normalizeTimeframe(sample.timeframe),...BAR_FIELDS.map((field) => sample[field])]);
     if (previous.get(sample.key) === hash) continue;
     previous.set(sample.key, hash);
     const { key: _key, ...event } = sample;

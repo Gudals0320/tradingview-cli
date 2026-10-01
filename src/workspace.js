@@ -72,6 +72,12 @@ export async function initWorkspace(resources) {
       lease.finish({ success: true, result: { registered: true } });
       return { success: true, workspace_id: workspace.id, file: workspace.file, target: workspace.target, layout: workspace.layout, pine: workspace.pine };
     } catch (error) {
+      if (error.code === 'CDP_TIMEOUT') {
+        try { lease.finish({ success: false, interrupted: true, error: error.message }); } catch (cleanup) { error.details = { cleanup_error: cleanup.message }; }
+        error.details = { ...error.details, workspace_id: workspace.id,
+          next_command: `tv workspace recover --file '${workspace.file.replace(/'/g, "''")}' --operation ${lease.operation} --rebind` };
+        throw error;
+      }
       // Binding only writes a page nonce, never chart/document state. Roll back admission.
       try { lease.finish({ success: false, interrupted: false, error: error.message }); const rollback = acquireWorkspace(workspace.file); releaseWorkspace(rollback); }
       catch (cleanup) { error.details = { cleanup_error: cleanup.message }; }
@@ -114,22 +120,28 @@ export async function runWorkspace(file, command, values, positionals, handler, 
   if (command === 'quote' && positionals.length) throw workspaceError('WORKSPACE_COMMAND_UNSUPPORTED', 'Workspace quote reads the owned chart only; a symbol switch is not a pure read.');
   if (WORKSPACE_READS.has(command) && pureRead(command, values, positionals)) {
     const workspace = loadWorkspace(file);
-    const observer = { workspace, endpoint_key: workspace.endpoint_key, assertOwner: () => loadWorkspace(file) };
+    const observer = { workspace, observe: true, endpoint_key: workspace.endpoint_key, assertOwner: () => loadWorkspace(file) };
     return withWorkspaceSession(observer, async () => {
       await (_deps?.checkLayout || checkLayout)(workspace);
       if (await (_deps?.browserIdentity || browserIdentity)() !== workspace.binding?.browser) throw workspaceError('WORKSPACE_GENERATION_CHANGED', 'Desktop browser generation changed.');
       configureTarget(workspace.target);
       const client = await (_deps?.getClient || getClient)(), inspect = _deps?.raw || raw;
-      const before = await inspect(client, pageCall('guardWorkspacePage', owner(workspace)));
+      const before = await inspect(client, pageCall('guardWorkspacePage', owner(workspace), { observe: true }));
       if (command === 'indicator get' && positionals[0] !== before.studies[0]?.id) throw workspaceError('WORKSPACE_STUDY_MISMATCH', 'Read only the owned study.');
       const result = await handler(values, positionals);
-      const after = await inspect(client, pageCall('guardWorkspacePage', owner(workspace)));
+      const after = await inspect(client, pageCall('guardWorkspacePage', owner(workspace), { observe: true }));
       const stable = sourceHash(before.source) === sourceHash(after.source)
         && JSON.stringify(before.context) === JSON.stringify(after.context)
         && JSON.stringify(before.studies.map(study => [study.id, study.inputs])) === JSON.stringify(after.studies.map(study => [study.id, study.inputs]));
       if (!stable) throw workspaceError('WORKSPACE_OBSERVATION_CHANGED', 'Source, inputs or chart context changed during this observation; retry after the active operation settles.');
+      const study = after.studies[0], proof = workspace.binding.source_proof;
+      const persistedApplied = Boolean(proof?.hash === sourceHash(after.source) && after.modified === false
+        && proof.version === String(after.version)
+        && (proof.applied_version || proof.version) === String(study?.inputs.find(input => input.id === 'pineVersion')?.value));
       return { ...result, provenance: { workspace_id: workspace.id, observation: true, target: workspace.target,
-        source_hash: sourceHash(after.source), context: after.context, page_generation: workspace.binding.nonce,
+        source_hash: sourceHash(after.source), source_scope: 'editor', persisted_applied_source_verified: persistedApplied,
+        study: study ? { id: study.id, status: study.status, compiled_hash: sourceHash(JSON.stringify(study.inputs)) } : null,
+        context: after.context, page_generation: workspace.binding.nonce,
         changed_during_read: false } };
     });
   }
@@ -178,7 +190,7 @@ export async function runWorkspace(file, command, values, positionals, handler, 
       lease.checkpoint({ phase: success ? 'complete' : 'failed', command, before, after: after.snapshot, provenance });
       lease.finish({ success, result: output, interrupted: false }); return output;
     } catch (error) {
-      let interrupted = error.code === 'WORKSPACE_EXTERNAL_CHANGE' || (handlerStarted && !finalState);
+      let interrupted = ['WORKSPACE_EXTERNAL_CHANGE', 'WORKSPACE_PAGE_BUSY', 'CDP_TIMEOUT'].includes(error.code) || (handlerStarted && !finalState);
       if (started && !finalState) {
         try { const after = await inspect(client, pageCall('finishWorkspacePage', owner(workspace), lease.operation)); finalState = after.snapshot; interrupted = false; }
         catch { interrupted = true; }
@@ -222,7 +234,7 @@ export async function recoverWorkspace(file, { operationId, rebind = false, rest
 }
 
 export async function rebindWorkspace(file, workspaceId, { _deps, restoreDocument = false } = {}) {
-  const lease = acquireWorkspace(file), workspace = lease.workspace;
+  const lease = acquireWorkspace(file, _deps?.options || {}), workspace = lease.workspace;
   return withWorkspaceSession(lease, async () => {
     try {
       if (workspace.id !== workspaceId) throw workspaceError('WORKSPACE_OWNERSHIP_LOST', 'Pass the exact workspace ID to acknowledge a changed generation.');
@@ -232,8 +244,8 @@ export async function rebindWorkspace(file, workspaceId, { _deps, restoreDocumen
       if (workspace.binding?.browser === browser && workspace.binding?.nonce === nonce) {
         throw workspaceError('WORKSPACE_GENERATION_UNCHANGED', 'The bound page generation still exists. Inspect unexpected changes instead of rebinding it.');
       }
-      if (restoreDocument) await raw(client, pageCall('restoreWorkspaceDocument', workspace));
-      const binding = await raw(client, pageCall('bindWorkspacePage', workspace, randomUUID()));
+      if (restoreDocument) await (_deps?.raw || raw)(client, pageCall('restoreWorkspaceDocument', workspace));
+      const binding = await (_deps?.raw || raw)(client, pageCall('bindWorkspacePage', workspace, randomUUID()));
       const source_proof = await sourceProof(client, binding.snapshot), previous = workspace.binding?.snapshot;
       const adopted_changes = { source: previous?.source !== binding.snapshot.source,
         context: JSON.stringify(previous?.context) !== JSON.stringify(binding.snapshot.context),

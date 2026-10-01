@@ -4,6 +4,7 @@ import { runInNewContext } from 'node:vm';
 import { getOhlcv, getPineTables, getPineLabels, getPineLines, getStudyValues, getQuote } from '../src/core/data.js';
 import { analyze } from '../src/core/pine.js';
 import { requestLayoutSwitch, layoutSwitch } from '../src/core/ui.js';
+import { layoutOperationPending } from '../src/layout-state.js';
 import { prepareFeedBindings, parseFeedSpecs, planFeedAssignments } from '../src/core/multi-feed.js';
 
 function fixture() {
@@ -60,6 +61,16 @@ it('layout lookup rejects ambiguity and late callback cannot navigate after time
     evaluate: async () => ({ id: 'B', dialog: true }), sleep: async () => {} } });
   assert.equal(result.success, false); assert.equal(result.confirmation_required, true);
 });
+it('layout quiescence accepts only verified requested identity or cancellation back to original identity', () => {
+  let uid='B', dialog=true;
+  const window={__tvCliLayoutSwitch:{pending:true,expected_id:'A',original_id:'B',confirmation_seen:true},
+    TradingViewApi:{_chartWidgetCollection:{metaInfo:{uid:{value:()=>uid}}}}};
+  const document={querySelectorAll:()=>dialog?[{offsetParent:{},parentElement:{parentElement:{querySelector:()=>({})}}}]:[]};
+  assert.equal(layoutOperationPending(window,document),true);
+  uid='A';assert.equal(layoutOperationPending(window,document),false);
+  uid='B';dialog=false;assert.equal(layoutOperationPending(window,document),false);
+  uid='unrelated';assert.equal(layoutOperationPending(window,document),true);
+});
 
 it('default feed preparation never mutates existing user panes and bounded empty tabs fail', async () => {
   const feeds = parseFeedSpecs(['AAPL@D']);
@@ -78,6 +89,8 @@ it('default feed preparation never mutates existing user panes and bounded empty
 it('analysis excludes dynamic size mutations and parses nested array.from arguments', () => {
   const dynamic = analyze({ source: 'a = array.new<float>(0)\narray.push(a,close)\nplot(array.get(a,0))' });
   assert.equal(dynamic.error_count, 0);
+  assert.equal(analyze({ source: 'a = array.new<float>(0)\nb = a\narray.push(b,close)\narray.get(a,0)' }).error_count, 0);
+  assert.equal(analyze({ source: 'a = array.new<float>(0)\nuserFunction(a)\narray.get(a,0)' }).error_count, 0);
   const nested = analyze({ source: 'a = array.from(f(1,2),3)\narray.get(a,2)', fail_on_error: true });
   assert.equal(nested.error_count, 1); assert.equal(nested.has_errors, true);
   assert.match(nested.diagnostics[0].message, /size is 2/);

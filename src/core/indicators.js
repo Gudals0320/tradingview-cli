@@ -1,10 +1,10 @@
 /**
  * Core indicator settings logic.
  */
-import { evaluate, safeString } from '../connection.js';
+import { evaluate, safeString, KNOWN_PATHS } from '../connection.js';
 import { STRATEGY_PAGE_CODE } from '../strategy-state.js';
 
-const CHART_API = 'window.TradingViewApi._activeChartWidgetWV.value()';
+const CHART_API = KNOWN_PATHS.chartApi;
 const DIALOG = '[data-name="indicators-dialog"]';
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -161,7 +161,7 @@ export async function addStudyFromSearch({ query, match, section } = {}) {
 }
 
 export async function setInputs({ entity_id, inputs: inputsRaw, timeout = 30000, _deps = {} }) {
-  const evaluate = _deps.evaluate || (await import('../connection.js')).evaluate;
+  const inspect = _deps.evaluate || evaluate;
   const inputs = inputsRaw ? (typeof inputsRaw === 'string' ? JSON.parse(inputsRaw) : inputsRaw) : undefined;
   if (!entity_id) throw new Error('entity_id is required. Use chart_get_state to find study IDs.');
   if (!inputs || Array.isArray(inputs) || typeof inputs !== 'object' || Object.keys(inputs).length === 0) {
@@ -170,7 +170,7 @@ export async function setInputs({ entity_id, inputs: inputsRaw, timeout = 30000,
 
   const inputsJson = JSON.stringify(inputs);
 
-  const result = await evaluate(`
+  const result = await inspect(`
     (function() {
       ${STRATEGY_PAGE_CODE};
       var chart = ${CHART_API};
@@ -183,7 +183,9 @@ export async function setInputs({ entity_id, inputs: inputsRaw, timeout = 30000,
       if (unknown.length) return { error: 'Unknown input ids: ' + unknown.join(', '), code: 'UNKNOWN_INPUT' };
       var updatedKeys = {};
       var changed = currentInputs.some(input => Object.hasOwn(overrides, input.id) && input.value !== overrides[input.id]);
-      var strategy = changed ? prepareInputChange(window, ${safeString(entity_id)}) : false;
+      var strategy = false;
+      try { strategy = changed ? prepareInputChange(window, ${safeString(entity_id)}) : false; }
+      catch (error) { if (error.code === 'STRATEGY_CALCULATION_PENDING') return { error: error.message, code: error.code, details: error.details }; throw error; }
       var nextInputs = currentInputs.map(input => {
         if (!Object.hasOwn(overrides, input.id)) return { ...input };
         updatedKeys[input.id] = overrides[input.id];
@@ -194,11 +196,11 @@ export async function setInputs({ entity_id, inputs: inputsRaw, timeout = 30000,
     })()
   `, { mutation: true });
 
-  if (result && result.error) throw Object.assign(new Error(result.error), { code: result.code });
+  if (result && result.error) throw Object.assign(new Error(result.error), { code: result.code, details: result.details });
   if (result.strategy && result.changed) {
     const start = Date.now();
     do {
-      const state = await evaluate(`(() => { ${STRATEGY_PAGE_CODE}; return compilationState(window); })()`);
+      const state = await inspect(`(() => { ${STRATEGY_PAGE_CODE}; return compilationState(window); })()`);
       if (state.phase === 'ready' && Object.entries(result.updated_inputs).every(([id, value]) => state.inputs?.some(input => input.id === id && input.value === value))) {
         return { success: true, entity_id, changed: true, updated_inputs: result.updated_inputs, report_ready: true };
       }

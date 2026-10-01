@@ -7,7 +7,7 @@
  * not drive it (Electron accelerators don't fire from CDP input), so tab
  * switching/creation/closing click the shell window's DOM directly:
  * `.tabs-container .tab`, its close button, and `create-new-tab-button`.
- * (Approach from issue #155 and PR #163, verified on Desktop 3.1.0.)
+ * (Approach from issue upstream#155 and PR upstream#163, verified on Desktop 3.1.0.)
  */
 import CDP from '../cdp.js';
 import { getDesktopInventory, inspectTarget, bindShellTab, readShellState } from '../desktop.js';
@@ -46,7 +46,7 @@ async function withShell(fn) {
       if (result.exceptionDetails) throw new Error(result.exceptionDetails.text || 'Shell operation failed');
       return result.result?.value;
     });
-  } finally { await client.close(); }
+  } finally { try { await client.close(); } catch { /* Preserve the primary shell result/error. */ } }
 }
 
 /** Find an open new-tab landing page target (shows the layout picker). */
@@ -288,7 +288,7 @@ export async function switchTab({ index, target_id, _deps } = {}) {
       const tab = document.getElementById(${JSON.stringify(target.shell_tab_id)});
       if (!tab || !tab.classList.contains('tab')) return false;
       tab.click(); return true;
-    })()`);
+    })()`, { mutation: true, mutationTarget: target.id });
     if (!clicked) throw new Error('The selected shell tab disappeared.');
     let shell;
     for (let attempt = 0; attempt < 20; attempt++) {

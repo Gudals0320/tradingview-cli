@@ -264,7 +264,7 @@ async function _waitForCdp({ cdpPort, attempts, delay, probeCdp }) {
 /**
  * Some Windows builds block CDP for MSIX-packaged apps: direct spawn from
  * WindowsApps gets EACCES, and even COM activation passes the flag but the
- * debug port never binds (issues #42, #75, #128). Running the same files from
+ * debug port never binds (issues upstream#42, upstream#75, upstream#128). Running the same files from
  * a plain directory outside WindowsApps works and keeps the user's session,
  * so copy the package into LOCALAPPDATA once per version and launch that.
  */

@@ -41,6 +41,16 @@ export function pineCompilationStatus(window, token, finish = false) {
     validation: operation.actionDone ? operation.check?.() : null };
 }
 
+export function abortPineObservation(window, token, error) {
+  const operation = window.__tvCliPineCompile;
+  if (operation?.token !== token || operation.dispatched) return false;
+  operation.cancelled = true;
+  operation.actionDone = true;
+  operation.error = error;
+  operation.dispose?.();
+  return true;
+}
+
 export function pineStudySnapshot(window) {
   const chart = window.TradingViewApi?._activeChartWidgetWV?.value();
   if (!chart) throw new Error('Pine chart targets are unavailable.');
@@ -133,6 +143,7 @@ export function verifyPineCompilation(window, operation) {
 export function dispatchPineCompilation(window, controller, token) {
   const operation = window.__tvCliPineCompile;
   if (operation?.token !== token) throw new Error('Pine compile observer was replaced.');
+  if (operation.cancelled) throw new Error('PINE_DISPATCH_CANCELLED: This undispatched observer was cancelled; native action was not started.');
   let plan, refresh, saveRefresh, method;
   try {
   plan = planPineCompilation(window, controller);
@@ -152,7 +163,8 @@ export function dispatchPineCompilation(window, controller, token) {
     operation.dispose?.();
     throw error;
   }
-  Promise.resolve().then(async () => {
+  operation.dispatched = true;
+  operation.promise = Promise.resolve().then(async () => {
     if(saveRefresh){
       // A reloaded layout can retain an older study than the saved editor.
       // Save the requested edits once, then target the actual applied version.

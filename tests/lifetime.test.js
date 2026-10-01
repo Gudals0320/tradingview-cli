@@ -5,11 +5,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { deadline, boundClient } from '../src/cdp.js';
 import { acquireSession, sessionPaths, sessionStatus, reclaimDeadSession, clearAdmissionGate } from '../src/session.js';
-import { reserveWorkspace, acquireWorkspace, workspaceStatus } from '../src/workspace-store.js';
+import { reserveWorkspace, acquireWorkspace, workspaceStatus, workspaceArtifactDirectory } from '../src/workspace-store.js';
 import { recoverSession } from '../src/session-recovery.js';
-import { observePineCompilation, dispatchPineCompilation } from '../src/core/pine-state.js';
+import { observePineCompilation, dispatchPineCompilation, abortPineObservation } from '../src/core/pine-state.js';
 import { setInputs } from '../src/core/indicators.js';
 import { runInNewContext } from 'node:vm';
+import { trackNativeOperation } from '../src/connection.js';
 
 function options() { return { host: 'lifetime-test', port: 1, directory: mkdtempSync(join(tmpdir(), 'tv-lifetime-')) }; }
 
@@ -22,6 +23,16 @@ it('CDP deadlines explicitly fail while the underlying action can still complete
   const client = boundClient({ Runtime: { evaluate: async () => ({ value: 1 }) }, Input: { insertText: async () => true } });
   assert.deepEqual(await client.Runtime.evaluate(), { value: 1 });
   assert.equal(await client.Input.insertText(), true);
+});
+it('generic native operations retain busy across await and retire only their own token', async () => {
+  const window = {}; let finish;
+  const action = trackNativeOperation(window, 'old', () => new Promise(resolve => { finish = resolve; }));
+  assert.equal(window.__tvCliNativeOperations.old.pending, true);
+  await assert.rejects(trackNativeOperation(window, 'new', async () => 2), /NATIVE_BUSY/);
+  finish(1); assert.equal(await action, 1);
+  assert.deepEqual(window.__tvCliNativeOperations, {});
+  assert.equal(await trackNativeOperation(window, 'new', async () => 2), 2);
+  assert.deepEqual(window.__tvCliNativeOperations, {});
 });
 
 it('workspace admission reclaims only dead leases under the gate and preserves journals', () => {
@@ -42,8 +53,8 @@ it('workspace admission reclaims only dead leases under the gate and preserves j
 
 it('operation setup failure rolls back only its operation and dead repair is explicitly recoverable', () => {
   const opts = options(), resource = reserveWorkspace({ file: join(opts.directory, 'qa.json'), target: 'qa', layout: 'qa', pine: 'qa' }, opts);
-  writeFileSync(join(opts.directory, '.tv-workspaces'), 'block directory');
-  assert.throws(() => acquireWorkspace(resource.file, opts), { code: 'ENOTDIR' });
+  writeFileSync(workspaceArtifactDirectory(resource, opts), 'block directory');
+  assert.throws(() => acquireWorkspace(resource.file, opts), { code: 'EEXIST' });
   assert.equal(workspaceStatus(resource.file, opts).operation, null);
   writeFileSync(`${sessionPaths(opts).gate}.repair`, JSON.stringify({ token: 'dead-repair', pid: 99999999 }));
   assert.throws(() => clearAdmissionGate(null, { ...opts, repairToken: 'wrong' }), { code: 'GATE_TOKEN_MISMATCH' });
@@ -74,6 +85,9 @@ it('pre-dispatch failure releases compile busy; pending dispatch cannot be repla
   observePineCompilation(window, controller, 'second');
   assert.throws(() => observePineCompilation(window, controller, 'third'), /PINE_NATIVE_BUSY/);
   assert.equal(window.__tvCliPineCompile.token, 'second');
+  assert.equal(abortPineObservation(window, 'second', 'pre-dispatch failure'), true);
+  assert.throws(() => dispatchPineCompilation(window, controller, 'second'), /PINE_DISPATCH_CANCELLED/);
+  assert.equal(window.__tvCliPineCompile.actionDone, true);
 });
 
 it('input baseline snapshots old shared native values before applying a cloned override array', async () => {

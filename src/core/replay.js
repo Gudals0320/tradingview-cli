@@ -28,7 +28,7 @@ export async function start({ date, _deps } = {}) {
   // selectDate() is async — it calls enableReplayMode() then _onPointSelected()
   // which initializes the server-side replay session. Must be awaited inside the
   // page context, otherwise the promise is fire-and-forget and replay state says
-  // "started" but stepping doesn't work (issue #26).
+  // "started" but stepping doesn't work (issue upstream#26).
   if (date) {
     const ts = new Date(date).getTime();
     if (isNaN(ts)) throw new Error(`Invalid date: "${date}". Use YYYY-MM-DD format.`);

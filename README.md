@@ -363,6 +363,12 @@ run ID 없는 손상 journal은 status에 노출된 hash와
 `workspace gate-status`는 repair 소유권도 표시하며,
 `workspace gate-clear --repair-token TOKEN`은 확인된 죽은 repair만 제거합니다.
 
+조회 명령은 UI 패널을 자동으로 열지 않습니다. `pine get/errors/console`은 편집기가
+닫혀 있으면 PINE_EDITOR_REQUIRED, `watchlist get`은 패널이 닫혀 있으면
+WATCHLIST_PANEL_REQUIRED를 반환합니다. 명시적으로 `tv ui panel pine-editor open` 또는
+`tv ui panel watchlist open`으로 준비한 뒤 조회하세요. 이 준비 명령은 변경 명령이며,
+workspace 예약 전에 전용 target에서 실행합니다.
+
 Legacy `pine compile`/`pine save`는 `--expect-script-id ID`를 지원하며 source_hash를
 반환합니다. draft와 사용자 저장 문서를 구분합니다. GUI의 reserved study 입력 변경은
 native schema 변경과 완전히 구별할 수 없으므로 실행 중 GUI 편집은 지원하지 않습니다.

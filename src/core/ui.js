@@ -1,4 +1,5 @@
 import { nativeCheckpoint } from '../session.js';
+import { layoutConfirmationVisible } from '../layout-state.js';
 /**
  * Core UI automation logic.
  */
@@ -59,7 +60,7 @@ export async function openPanel({ panel, action }) {
         }
         return { was_open: isOpen, performed: performed };
       })()
-    `);
+    `, { mutation: true });
     if (result && result.error) throw new Error(result.error);
     return { success: true, panel, action, was_open: result?.was_open ?? false, performed: result?.performed ?? 'unknown' };
   } else {
@@ -147,7 +148,11 @@ export function requestLayoutSwitch(window, name, timeout = 5000) {
             error: matches.length ? 'Ambiguous layout name; use an exact unique name or ID.' : 'Layout not found.' });
           const chart = matches[0], id = chart.id || chart.chartId;
           if (!id) return finish({ success: false, error: 'Saved layout has no stable ID.' });
-          window.TradingViewApi.loadChartFromServer(id);
+          const uid = window.TradingViewApi._chartWidgetCollection?.metaInfo?.uid;
+          const original = typeof uid?.value === 'function' ? uid.value() : uid;
+          const operation = window.__tvCliLayoutSwitch = { pending: true, expected_id: String(id), original_id: String(original), confirmation_seen: false };
+          try { window.TradingViewApi.loadChartFromServer(id); }
+          catch (error) { operation.pending = false; throw error; }
           finish({ success: true, id: String(id), name: chart.name || chart.title });
         } catch (error) { finish({ success: false, error: error.message }); }
       });
@@ -159,22 +164,31 @@ export async function layoutSwitch({ name, _deps } = {}) {
   const inspect = _deps?.evaluate || evaluate;
   const inspectAsync = _deps?.evaluateAsync || evaluateAsync;
   const sleep = _deps?.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
+  const existing = await inspect(`(${layoutConfirmationVisible.toString()})(document)`);
+  if (existing === true) return { success: false, confirmation_required: true, error: 'Resolve the existing layout confirmation before switching.' };
   const result = await inspectAsync(`(${requestLayoutSwitch.toString()})(window,${JSON.stringify(name)})`, { mutation: true });
   if (!result?.success) return { success: false, ...result };
+  nativeCheckpoint('layout switch', configuredTarget(), { expected_layout_id: result.id });
   let actual;
   for (let attempt = 0; attempt < 20; attempt++) {
     await sleep(250);
     actual = await inspect(`(() => {
       const meta = window.TradingViewApi?._chartWidgetCollection?.metaInfo;
       const uid = typeof meta?.uid?.value === 'function' ? meta.uid.value() : meta?.uid;
-      return { id: uid ? String(uid) : null, dialog: Boolean(document.querySelector('[role="dialog"]')) };
+      const dialog=(${layoutConfirmationVisible.toString()})(document);
+      const operation=window.__tvCliLayoutSwitch;
+      if(operation?.expected_id===${JSON.stringify(result.id)}) {
+        if(dialog)operation.confirmation_seen=true;
+        if(String(uid)===operation.expected_id)operation.pending=false;
+      }
+      return { id: uid ? String(uid) : null, dialog };
     })()`);
     if (actual?.id === result.id) return { success: true, layout: result.name || name, layout_id: result.id,
       action: 'switched', layout_verified: true, unsaved_dialog_dismissed: false };
     if (actual?.dialog) break;
   }
   return { success: false, layout: result.name || name, layout_id: result.id, actual_layout_id: actual?.id || null,
-    action: 'switch_pending', layout_verified: false, confirmation_required: true,
+    action: 'switch_pending', layout_verified: false, confirmation_required: actual?.dialog === true, recovery_required: true,
     error: 'Requested layout was not opened. Resolve the Desktop save/discard confirmation explicitly; no changes were discarded.' };
 }
 
@@ -311,6 +325,6 @@ export async function findElement({ query, strategy }) {
 }
 
 export async function uiEvaluate({ expression }) {
-  const result = await evaluate(expression);
+  const result = await evaluate(expression, { mutation: true });
   return { success: true, result };
 }

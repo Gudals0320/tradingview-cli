@@ -4,6 +4,11 @@ import { mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
+// Each test worker uses its own session root; production private ACLs must not
+// be shared with a differently sandboxed OS account.
+const runtimeSessionRoot = mkdtempSync(join(tmpdir(), 'tv-runtime-session-'));
+process.env.TEMP = runtimeSessionRoot;
+process.env.TMP = runtimeSessionRoot;
 process.env.TV_CDP_HOST = `runtime-fixture-${randomUUID()}`;
 process.env.TV_CDP_PORT = '1';
 const { reserveWorkspace, acquireWorkspace, workspaceStatus, abandonWorkspace } = await import('../src/workspace-store.js');
@@ -48,6 +53,16 @@ it('pure workspace observation can run during an active operation without consum
     assert.equal(workspaceStatus(f.workspace.file).operation.id,active.operation);
     active.finish({success:true});
   }finally{f.cleanup();}
+});
+it('a pre-start CDP timeout retains an interrupted operation even before its page acknowledgment', async()=>{
+  const f=fixture();try {
+    f.deps.raw=async()=>{throw Object.assign(new Error('unknown page dispatch'),{code:'CDP_TIMEOUT'});};
+    await assert.rejects(()=>runWorkspace(f.workspace.file,'pine compile',{},[],async()=>({success:true}),{_deps:f.deps}),{code:'CDP_TIMEOUT'});
+    assert.ok(workspaceStatus(f.workspace.file).interrupted?.operation_id);
+  }finally{
+    const status=workspaceStatus(f.workspace.file);
+    abandonWorkspace(f.workspace.file,{workspaceId:f.workspace.id,operationId:status.interrupted?.operation_id});
+  }
 });
 it('rejects rebind on the same page generation without adopting external state', async()=>{
   const f=fixture();try {

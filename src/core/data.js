@@ -12,7 +12,7 @@ const MAX_TRADES = 20;
 
 // Round to 8 dp — enough to kill float noise (29899.999999997 → 29900) without
 // destroying precision on forex/crypto prices. The old 2-dp rounding flattened
-// sub-cent levels to 0.00 (issue #77).
+// sub-cent levels to 0.00 (issue upstream#77).
 const roundPrice = (v) => (v == null ? null : Math.round(v * 1e8) / 1e8);
 const CHART_API = KNOWN_PATHS.chartApi;
 const BARS_PATH = KNOWN_PATHS.mainSeriesBars;
@@ -33,13 +33,15 @@ async function readData(expression, _deps = {}) {
     return { data, context };
   })()`);
   if (!result || !result.context) throw new Error('Chart context unavailable.');
+  if (result.context.loading) throw Object.assign(new Error('Chart data is loading; retry after it becomes ready.'), { code: 'DATA_NOT_READY' });
+  if (result.context.feed_error) throw Object.assign(new Error('Chart feed failed: ' + result.context.feed_error), { code: 'DATA_FEED_ERROR' });
   return { ...result, context: { ...result.context, target_id: _deps.targetId || configuredTarget() } };
 }
 
 async function graphics(collection, map, filter, _deps) {
   const result = await readData(buildGraphicsJS(collection, map, filter), _deps);
   if (filter && result.data.matched_studies === 0) {
-    throw Object.assign(new Error('No study matches filter: ' + filter), { code: 'STUDY_NOT_FOUND' });
+    throw Object.assign(new Error('No study matches filter: ' + filter), { code: 'STUDY_NOT_FOUND', details: { context: result.context } });
   }
   return { raw: result.data.studies, context: result.context };
 }
@@ -376,7 +378,7 @@ export async function getStudyValues({ _deps } = {}) {
             }
           } catch(e) {}
           // Include id + inputs so multiple instances of the same indicator
-          // (e.g. two EMAs with different lengths) are distinguishable (#143).
+          // (e.g. two EMAs with different lengths) are distinguishable (upstream#143).
           var id = null;
           try { id = s.id ? s.id() : null; } catch(e) {}
           var inputs = null;

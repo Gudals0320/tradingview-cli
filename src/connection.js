@@ -3,6 +3,9 @@ import { CDP_HOST, CDP_PORT } from './config.js';
 import { getDesktopInventory, activeTarget, bindShellTab } from './desktop.js';
 import { assertSessionAccess, isReadOnlySession, currentWorkspaceSession, nativeCheckpoint } from './session.js';
 import { WORKSPACE_PAGE_CODE } from './workspace-page.js';
+import { randomUUID } from 'node:crypto';
+import { trackNativeOperation } from './native-operation.js';
+export { trackNativeOperation } from './native-operation.js';
 
 let client = null;
 let targetInfo = null;
@@ -75,8 +78,10 @@ export async function getClient() {
       await client.Runtime.evaluate({ expression: '1', returnByValue: true });
       return client;
     } catch {
+      const stale = client;
       client = null;
       targetInfo = null;
+      try { await stale.close(); } catch { /* The bounded client terminates failed close handshakes. */ }
     }
   }
   return connect();
@@ -108,6 +113,7 @@ export async function connect(targetId = null) {
 
       return client;
     } catch (err) {
+      if (client) await disconnect();
       if (['TARGET_AMBIGUOUS', 'TARGET_NOT_FOUND'].includes(err.code)) throw err;
       lastError = err;
       const delay = Math.min(BASE_DELAY * Math.pow(2, attempt), 30000);
@@ -159,13 +165,19 @@ export async function evaluate(expression, opts = {}) {
   const c = await getClient();
   const { mutation = false, ...protocolOptions } = opts;
   opts = protocolOptions;
-  if (mutation) nativeCheckpoint(null, configuredTarget());
+  if (mutation) {
+    nativeCheckpoint(null, configuredTarget());
+    const token = randomUUID();
+    expression = `(${trackNativeOperation.toString()})(window,${JSON.stringify(token)},async () => (${expression}))`;
+    opts = { ...opts, awaitPromise: true };
+  }
   const workspace = currentWorkspaceSession()?.workspace;
   if (workspace) {
     const owner = { id: workspace.id, token: workspace.token, nonce: workspace.binding?.nonce };
+    const observe = currentWorkspaceSession()?.observe === true;
     expression = `(async () => {${WORKSPACE_PAGE_CODE};const owner=${JSON.stringify(owner)};
-      guardWorkspacePage(window,document,owner);
-      const value=await (${expression});guardWorkspacePage(window,document,owner);return value;})()`;
+      guardWorkspacePage(window,document,owner,{observe:${observe}});
+      const value=await (${expression});guardWorkspacePage(window,document,owner,{observe:${observe}});return value;})()`;
     opts = { ...opts, awaitPromise: true };
   }
   const result = await c.Runtime.evaluate({

@@ -1,5 +1,7 @@
 import { findPineEditor, findPineController } from './core/desktop-dom.js';
 import { readChartContext, normalizeTimeframe, symbolMatches } from './chart-context.js';
+import { layoutConfirmationVisible, layoutOperationPending } from './layout-state.js';
+import { trackNativeOperation } from './native-operation.js';
 
 /** Serialized page functions have no captured Node state. */
 export function readWorkspacePage(window, document) {
@@ -21,6 +23,8 @@ export function readWorkspacePage(window, document) {
   const context = readChartContext(window);
   const pending_action = Object.keys(controller._editorStore?.getStore?.().getState()?.ui?.pendingRequests || {}).length > 0
     || Boolean(window.__tvCliSave?.pending) || Boolean(window.__tvCliPineCompile && !window.__tvCliPineCompile.actionDone)
+    || Object.values(window.__tvCliNativeOperations || {}).some(operation => operation.pending)
+    || layoutOperationPending(window, document)
     ;
   const calculating = studies.some(study => study.status === 0 || study.status === 1);
   return { layout: String(layout), pine: identity?.scriptIdPart || null, version: identity?.version,
@@ -52,20 +56,34 @@ export async function restoreWorkspaceDocument(window, document, resource) {
     if (controller.isModified?.() !== false) throw new Error('WORKSPACE_FOREIGN_DRAFT: Refusing to discard an unowned modified document.');
     const version = resource.binding?.snapshot?.version;
     if (!version) throw new Error('WORKSPACE_VERSION_REQUIRED: Recorded owned document version is unavailable.');
-    await controller.openScript({ scriptIdPart: resource.pine, version });
+    await trackNativeOperation(window, `${resource.id}-restore-document`, () => controller.openScript({ scriptIdPart: resource.pine, version }));
     if (chart !== window.TradingViewApi._activeChartWidgetWV.value()) throw new Error('WORKSPACE_GENERATION_CHANGED: Chart changed during document restore.');
   }
   const after = readWorkspacePage(window, document);
   if (after.layout !== resource.layout || after.pine !== resource.pine) throw new Error('WORKSPACE_IDENTITY_MISMATCH: Restored document did not match the registered resources.');
-  return { restored_document: before.pine !== resource.pine };
+  const recorded = resource.binding?.snapshot;
+  let restoredDraft = false;
+  if (recorded?.modified === true && typeof recorded.source === 'string' && after.source !== recorded.source) {
+    if (after.modified !== false) throw new Error('WORKSPACE_FOREIGN_DRAFT: Refusing to overwrite a different modified source.');
+    if (typeof controller.setScript !== 'function') throw new Error('WORKSPACE_NOT_READY: Draft restore action is unavailable.');
+    await trackNativeOperation(window, `${resource.id}-restore-source`, () => controller.setScript(recorded.source));
+    const verified = readWorkspacePage(window, document);
+    if (verified.pine !== resource.pine || verified.source !== recorded.source) throw new Error('WORKSPACE_IDENTITY_MISMATCH: Private draft source did not restore exactly.');
+    restoredDraft = true;
+  }
+  return { restored_document: before.pine !== resource.pine, restored_draft: restoredDraft };
 }
 
-export function guardWorkspacePage(window, document, owner) {
+export function guardWorkspacePage(window, document, owner, { observe = false } = {}) {
   const bound = window.__tvCliWorkspace;
   if (!bound || bound.nonce !== owner.nonce || bound.id !== owner.id || bound.token !== owner.token
     || bound.chart !== window.TradingViewApi?._activeChartWidgetWV?.value()
     || bound.controller !== findPineController(document)) throw new Error('WORKSPACE_GENERATION_CHANGED: Target page or controller changed; explicit recovery required.');
-  const actual = readWorkspacePage(window, document), before = bound.baseline, permit = bound.permit;
+  const actual = readWorkspacePage(window, document);
+  // Observation validates the same contract using local copies. It must never
+  // consume another invocation's permit or advance its baseline.
+  const before = observe ? { ...bound.baseline, context: { ...bound.baseline.context } } : bound.baseline;
+  const permit = observe ? { ...bound.permit } : bound.permit;
   const fail = () => { throw new Error('WORKSPACE_EXTERNAL_CHANGE: Workspace source, context or studies changed outside the requested operation.'); };
   if (actual.layout !== before.layout || actual.pine !== before.pine) fail();
   if (actual.source !== before.source) {
@@ -128,6 +146,7 @@ export function finishWorkspacePage(window, document, owner, operation) {
   const snapshot = guardWorkspacePage(window, document, owner), bound = window.__tvCliWorkspace;
   if (bound.operation !== operation) throw new Error('WORKSPACE_OWNERSHIP_LOST: Page operation changed.');
   if (snapshot.pending_action) throw new Error('WORKSPACE_NATIVE_BUSY: Native actions remain pending.');
+  if (bound.permit.compile && snapshot.calculating) throw new Error('WORKSPACE_NATIVE_BUSY: Owned compilation calculation remains pending.');
   if (bound.permit.compile && snapshot.studies.length !== 1) throw new Error('WORKSPACE_STUDY_MISSING: Compilation cannot complete without its single owned study.');
   bound.operation = null; bound.permit = {}; bound.baseline = snapshot;
   bound.dispose?.();
@@ -138,5 +157,5 @@ export function finishWorkspacePage(window, document, owner, operation) {
     report_verified: epoch.report_verified, inputs_fingerprint: epoch.inputs_fingerprint } : null };
 }
 
-export const WORKSPACE_PAGE_CODE = [findPineEditor, findPineController, readChartContext, normalizeTimeframe, symbolMatches,
+export const WORKSPACE_PAGE_CODE = [findPineEditor, findPineController, readChartContext, normalizeTimeframe, symbolMatches, layoutConfirmationVisible, layoutOperationPending, trackNativeOperation,
   readWorkspacePage, bindWorkspacePage, restoreWorkspaceDocument, guardWorkspacePage, startWorkspacePage, finishWorkspacePage].map(fn => fn.toString()).join('\n');

@@ -1,6 +1,6 @@
 import CDP from './cdp.js';
 import { CDP_HOST, CDP_PORT } from './config.js';
-import { assertSessionAccess, currentWorkspaceSession } from './session.js';
+import { assertSessionAccess, currentWorkspaceSession, nativeCheckpoint } from './session.js';
 
 /** These functions are serialized and executed without captured Node variables. */
 export function readShellState(document, window) {
@@ -62,16 +62,17 @@ export function resolveInventory(targets, shells, identities) {
   return tabs.map((tab, index) => ({ ...tab, index }));
 }
 
-export async function inspectTarget(target, expression, { _deps } = {}) {
+export async function inspectTarget(target, expression, { _deps, mutation = false, mutationTarget } = {}) {
   if (!_deps) assertSessionAccess();
   if (!_deps && currentWorkspaceSession()) { const error = new Error('Workspace operations cannot inspect or control Desktop shell/other targets.'); error.code = 'WORKSPACE_COMMAND_UNSUPPORTED'; throw error; }
   const create = _deps?.createClient || CDP;
   const client = await create({ host: CDP_HOST, port: CDP_PORT, target: target.id });
   try {
+    if (mutation) nativeCheckpoint(null, mutationTarget || target.id);
     const result = await client.Runtime.evaluate({ expression, returnByValue: true, awaitPromise: true });
     if (result.exceptionDetails) throw new Error(result.exceptionDetails.text || 'Desktop inspection failed');
     return result.result?.value;
-  } finally { await client.close(); }
+  } finally { try { await client.close(); } catch { /* Preserve the primary inspection result/error. */ } }
 }
 
 export async function getDesktopInventory({ _deps } = {}) {

@@ -46,6 +46,20 @@ async function protectedState() {
   )))));
 }
 const before = await protectedState();
+async function qaStateHash() {
+  const page = await withReadOnlySession(() => inspectTarget(qa, `(() => {
+    const c=window.TradingViewApi._activeChartWidgetWV.value(),controller=(${findPineController.toString()})(document);
+    return { symbol:c.symbol(),resolution:c.resolution(),type:c.chartType(),
+      panes:window.TradingViewApi._chartWidgetCollection.getAll().map(p=>({symbol:p.model().mainSeries().symbol(),resolution:p.model().mainSeries().interval()})),
+      studies:c.getAllStudies().map(s=>({id:s.id,visible:c.getStudyById(s.id).isVisible()})),
+      layout:document.querySelector('[data-qa-id="save-load-button"]')?.innerText,
+      modified:controller?.isModified?.() ?? null,
+      editor_visible:Array.from(document.querySelectorAll('.pine-editor-monaco')).some(node=>node.offsetParent!==null),
+      widgets:Array.from(document.querySelectorAll('[role="tab"][aria-selected="true"],button[aria-pressed="true"]')).map(node=>node.getAttribute('data-name')||node.getAttribute('aria-label')) };
+  })()`));
+  const tabs = await withReadOnlySession(() => getDesktopInventory());
+  return sourceHash(JSON.stringify({ page, active_tabs: tabs.tabs.filter(tab => tab.active).map(tab => tab.id) }));
+}
 function cli(args, env = process.env, timeout = 60000) {
   const result = spawnSync(process.execPath, ['src/cli/index.js', '--target', qa.id, ...args], {
     encoding: 'utf8', env, timeout,
@@ -56,6 +70,25 @@ function cli(args, env = process.env, timeout = 60000) {
 }
 
 try {
+  const chartState = cli(['state']);
+  assert.equal(chartState.exit, 0);
+  const readInvocations = [['state'], ['info'], ['ohlcv', '--count', '2'], ['values'], ['quote'],
+    ['data', 'lines'], ['data', 'labels'], ['data', 'tables'], ['data', 'boxes'],
+    ['data', 'strategy'], ['data', 'trades'], ['data', 'ledger'], ['data', 'equity'], ['data', 'depth'],
+    ['pine', 'get'], ['pine', 'errors'], ['pine', 'console'], ['pine', 'list'], ['alert', 'list'],
+    ['watchlist', 'get'], ['tab', 'list'], ['layout', 'list'], ['pane', 'list'], ['draw', 'list'],
+    ['replay', 'status'], ['discover'], ['ui-state'], ['range'], ['symbol'], ['timeframe'], ['type']];
+  if (chartState.value.studies.length) {
+    readInvocations.push(['indicator', 'get', chartState.value.studies[0].id], ['data', 'indicator', chartState.value.studies[0].id]);
+  }
+  for (const args of readInvocations) {
+    const prior = await qaStateHash();
+    const read = cli(args);
+    const after = await qaStateHash();
+    check(`pure read preserves QA state: ${args.slice(0, 2).join(' ')}`, 'live natural before/after hash', () => assert.equal(after, prior));
+    output.checks.at(-1).exit = read.exit; // Missing graphics/panels/reports remain explicit failures.
+    if (args[0] === 'ohlcv' && read.exit === 0) assert.equal(read.value.context.target_id, qa.id);
+  }
   check('strict positional rejection before CDP', 'live natural CLI', () => assert.equal(cli(['ohlcv', 'AAPL']).exit, 1));
   const isolated = mkdtempSync(join(root, 'stream-'));
   const childCode = `const timer=setInterval(()=>{if(process.listenerCount('SIGINT')){
@@ -133,6 +166,13 @@ try {
     if (nativeChild.exitCode === null) nativeChild.kill('SIGKILL');
     await nativeClient.Runtime.evaluate({ expression: 'window.__qaResolveNative?.();window.__tvCliSave=window.__qaPreviousSave;delete window.__qaPreviousSave;delete window.__qaRetainedNative;delete window.__qaResolveNative;', returnByValue: true });
     await nativeClient.close();
+  }
+  for (const script of ['scripts/smoke-pine-desktop.mjs', 'scripts/smoke-layout-desktop.mjs']) {
+    const phase = spawnSync(process.execPath, [script], { encoding: 'utf8', timeout: 300000 });
+    writeFileSync(join(root, script.includes('pine') ? 'smoke-pine-private-run.json' : 'smoke-layout-private-run.json'), JSON.stringify(phase));
+    assert.equal(phase.status, 0, phase.stderr);
+    check(script.includes('pine') ? 'full dedicated Pine/workspace regression phase' : 'full dedicated layout/dialog regression phase',
+      'live natural QA only', () => {});
   }
 } finally {
   const after = await protectedState();

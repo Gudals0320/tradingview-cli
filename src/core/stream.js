@@ -2,10 +2,28 @@
  * Core streaming logic — real-time JSONL output from TradingView.
  * Uses efficient poll + dedup: only emits when data changes.
  */
-import { evaluate, KNOWN_PATHS, CDP_PORT, requireInteger } from '../connection.js';
+import { readChartContext } from '../chart-context.js';
+import { getStudyValues, getPineLines, getPineLabels, getPineTables } from './data.js';
+import { evaluate, configuredTarget, KNOWN_PATHS, CDP_PORT, requireInteger } from '../connection.js';
 
 const CHART_API = KNOWN_PATHS.chartApi;
 const MODEL = `${CHART_API}._chartWidget.model()`;
+
+export function streamExpression(expression, scope = 'active_chart') {
+  return `(() => {
+    const context=(${readChartContext.toString()})(window),data=(${expression});
+    const after=(${readChartContext.toString()})(window);
+    if(!context||!after||context.symbol!==after.symbol||context.resolution!==after.resolution) throw new Error('STREAM_CONTEXT_CHANGED: Chart changed during sample.');
+    if(context.loading||context.feed_error)return {success:false,code:context.feed_error?'DATA_FEED_ERROR':'DATA_NOT_READY',
+      error:context.feed_error||'Chart data is loading.',context:{...context,scope:${JSON.stringify(scope)}}};
+    return data ? {...data,context:{...context,scope:${JSON.stringify(scope)}}} : null;
+  })()`;
+}
+async function streamEvaluate(expression, scope) {
+  const data=await evaluate(streamExpression(expression,scope));
+  if(data?.context)data.context.target_id=configuredTarget();
+  return data;
+}
 
 /**
  * Generic poll-and-diff loop.
@@ -48,7 +66,11 @@ async function pollLoop(fetcher, { interval = 500, dedupe = true, label = 'strea
         await sleep(2000);
         continue;
       }
-      process.stderr.write(`[stream:${label}] error: ${err.message}\n`);
+      if(err.code==='STUDY_NOT_FOUND') {
+        const failure={success:false,code:err.code,error:err.message,context:err.details?.context};
+        const hash=JSON.stringify(failure);
+        if(hash!==lastHash){lastHash=hash;process.stdout.write(JSON.stringify({...failure,_ts:Date.now(),_stream:label})+'\n');}
+      } else process.stderr.write(`[stream:${label}] error: ${err.message}\n`);
     }
     await sleep(interval);
   }
@@ -64,7 +86,7 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 // ── Stream: quote ──
 
 async function fetchQuote() {
-  return evaluate(`
+  return streamEvaluate(`
     (function() {
       var chart = ${CHART_API};
       var m = ${MODEL};
@@ -92,7 +114,7 @@ export async function streamQuote({ interval } = {}) {
 // ── Stream: ohlcv (last N bars, emits on new bar) ──
 
 async function fetchLastBar() {
-  return evaluate(`
+  return streamEvaluate(`
     (function() {
       var chart = ${CHART_API};
       var m = ${MODEL};
@@ -122,31 +144,7 @@ export async function streamBars({ interval } = {}) {
 // ── Stream: indicator values ──
 
 async function fetchValues() {
-  return evaluate(`
-    (function() {
-      var chart = ${CHART_API};
-      var m = ${MODEL};
-      var studies = chart.getAllStudies();
-      var results = [];
-      for (var i = 0; i < studies.length; i++) {
-        try {
-          var study = chart.getStudyById(studies[i].id);
-          if (!study || !study.isVisible()) continue;
-          var src = study._study || study;
-          var data = src._lastBarValues || src._data;
-          if (!data) continue;
-          var vals = {};
-          if (typeof data === 'object') {
-            for (var k in data) {
-              if (typeof data[k] === 'number' && !isNaN(data[k])) vals[k] = data[k];
-            }
-          }
-          if (Object.keys(vals).length > 0) results.push({ name: studies[i].name, values: vals });
-        } catch(e) {}
-      }
-      return { symbol: chart.symbol(), study_count: results.length, studies: results };
-    })()
-  `);
+  return getStudyValues();
 }
 
 export async function streamValues({ interval } = {}) {
@@ -156,43 +154,7 @@ export async function streamValues({ interval } = {}) {
 // ── Stream: pine lines ──
 
 async function fetchLines(studyFilter) {
-  const filter = studyFilter ? JSON.stringify(studyFilter) : 'null';
-  return evaluate(`
-    (function() {
-      var filter = ${filter};
-      var chart = ${CHART_API};
-      var studies = chart.getAllStudies();
-      var results = [];
-      for (var i = 0; i < studies.length; i++) {
-        var s = studies[i];
-        if (filter && (s.name || '').toLowerCase().indexOf(filter.toLowerCase()) === -1) continue;
-        try {
-          var study = chart.getStudyById(s.id);
-          if (!study) continue;
-          var src = study._study || study;
-          var g = src._graphics || (src._source && src._source._graphics);
-          if (!g) continue;
-          var pc = g._primitivesCollection;
-          if (!pc || !pc.dwglines) continue;
-          var linesMap = pc.dwglines.get('lines');
-          if (!linesMap) continue;
-          var data = linesMap.get(false);
-          if (!data || !data._primitivesDataById) continue;
-          var levels = [];
-          var seen = {};
-          data._primitivesDataById.forEach(function(line) {
-            var p1 = line.points && line.points[0] ? line.points[0].price : null;
-            var p2 = line.points && line.points[1] ? line.points[1].price : null;
-            var price = (p1 !== null && p1 === p2) ? p1 : (p1 || p2);
-            if (price !== null && !seen[price]) { seen[price] = true; levels.push(price); }
-          });
-          levels.sort(function(a, b) { return b - a; });
-          if (levels.length > 0) results.push({ study: s.name, levels: levels });
-        } catch(e) {}
-      }
-      return { symbol: chart.symbol(), study_count: results.length, studies: results };
-    })()
-  `);
+  return getPineLines({study_filter:studyFilter});
 }
 
 export async function streamLines({ interval, filter } = {}) {
@@ -202,40 +164,7 @@ export async function streamLines({ interval, filter } = {}) {
 // ── Stream: pine labels ──
 
 async function fetchLabels(studyFilter) {
-  const filterStr = studyFilter ? JSON.stringify(studyFilter) : 'null';
-  return evaluate(`
-    (function() {
-      var filter = ${filterStr};
-      var chart = ${CHART_API};
-      var studies = chart.getAllStudies();
-      var results = [];
-      for (var i = 0; i < studies.length; i++) {
-        var s = studies[i];
-        if (filter && (s.name || '').toLowerCase().indexOf(filter.toLowerCase()) === -1) continue;
-        try {
-          var study = chart.getStudyById(s.id);
-          if (!study) continue;
-          var src = study._study || study;
-          var g = src._graphics || (src._source && src._source._graphics);
-          if (!g) continue;
-          var pc = g._primitivesCollection;
-          if (!pc || !pc.dwglabels) continue;
-          var labelsMap = pc.dwglabels.get('labels');
-          if (!labelsMap) continue;
-          var data = labelsMap.get(false);
-          if (!data || !data._primitivesDataById) continue;
-          var labels = [];
-          data._primitivesDataById.forEach(function(lbl) {
-            var text = lbl.text || '';
-            var price = lbl.points && lbl.points[0] ? lbl.points[0].price : null;
-            if (text) labels.push({ text: text, price: price });
-          });
-          if (labels.length > 0) results.push({ study: s.name, labels: labels.slice(0, 50) });
-        } catch(e) {}
-      }
-      return { symbol: chart.symbol(), study_count: results.length, studies: results };
-    })()
-  `);
+  return getPineLabels({study_filter:studyFilter,max_labels:50,verbose:true});
 }
 
 export async function streamLabels({ interval, filter } = {}) {
@@ -245,47 +174,8 @@ export async function streamLabels({ interval, filter } = {}) {
 // ── Stream: pine tables ──
 
 async function fetchTables(studyFilter) {
-  const filterStr = studyFilter ? JSON.stringify(studyFilter) : 'null';
-  return evaluate(`
-    (function() {
-      var filter = ${filterStr};
-      var chart = ${CHART_API};
-      var studies = chart.getAllStudies();
-      var results = [];
-      for (var i = 0; i < studies.length; i++) {
-        var s = studies[i];
-        if (filter && (s.name || '').toLowerCase().indexOf(filter.toLowerCase()) === -1) continue;
-        try {
-          var study = chart.getStudyById(s.id);
-          if (!study) continue;
-          var src = study._study || study;
-          var g = src._graphics || (src._source && src._source._graphics);
-          if (!g) continue;
-          var pc = g._primitivesCollection;
-          if (!pc || !pc.ownFirstValue) continue;
-          var tableMap = pc.ownFirstValue();
-          if (!tableMap) continue;
-          var tables = [];
-          if (typeof tableMap.forEach === 'function') {
-            tableMap.forEach(function(table) {
-              if (!table || !table.data) return;
-              var rows = [];
-              for (var r = 0; r < table.data.length; r++) {
-                var row = [];
-                for (var c = 0; c < table.data[r].length; c++) {
-                  row.push(table.data[r][c].text || '');
-                }
-                rows.push(row);
-              }
-              tables.push({ rows: rows });
-            });
-          }
-          if (tables.length > 0) results.push({ study: s.name, tables: tables });
-        } catch(e) {}
-      }
-      return { symbol: chart.symbol(), study_count: results.length, studies: results };
-    })()
-  `);
+  const result=await getPineTables({study_filter:studyFilter});
+  return {...result,studies:result.studies.map(study=>({...study,tables:study.tables.map(table=>({...table,display_rows:table.rows,rows:table.cells}))}))};
 }
 
 export async function streamTables({ interval, filter } = {}) {
@@ -294,10 +184,10 @@ export async function streamTables({ interval, filter } = {}) {
 
 // ── Stream: all panes (multi-symbol) ──
 
-const CWC = 'window.TradingViewApi._chartWidgetCollection';
+const CWC = KNOWN_PATHS.chartWidgetCollection;
 
 async function fetchAllPanes() {
-  return evaluate(`
+  return streamEvaluate(`
     (function() {
       var cwc = ${CWC};
       var all = cwc.getAll();
@@ -331,7 +221,7 @@ async function fetchAllPanes() {
       }
       return { layout: layoutType, pane_count: panes.length, panes: panes };
     })()
-  `);
+  `, 'all_panes');
 }
 
 export async function streamAllPanes({ interval } = {}) {

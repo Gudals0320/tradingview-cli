@@ -1,11 +1,11 @@
 /**
  * Core chart control logic.
  */
-import { evaluate as _evaluate, evaluateAsync as _evaluateAsync, safeString, requireFinite } from '../connection.js';
+import { evaluate as _evaluate, evaluateAsync as _evaluateAsync, safeString, requireFinite, KNOWN_PATHS } from '../connection.js';
 import { waitForChartReady as _waitForChartReady } from '../wait.js';
 import { normalizeTimeframe } from '../chart-context.js';
 
-const CHART_API = 'window.TradingViewApi._activeChartWidgetWV.value()';
+const CHART_API = KNOWN_PATHS.chartApi;
 
 function _resolve(deps) {
   return {
@@ -50,7 +50,7 @@ export async function setSymbol({ symbol, _deps }) {
     })()
   `, { mutation: true });
   const ready = await waitForChartReady(symbol);
-  return { success: ready, symbol, chart_ready: ready, ...(!ready && { error: `Chart did not become ready for ${symbol}.` }) };
+  return { success: ready, symbol, chart_ready: ready, ...(!ready && { recovery_required: true, error: `Chart did not become ready for ${symbol}.` }) };
 }
 
 export async function setTimeframe({ timeframe, _deps }) {
@@ -63,7 +63,7 @@ export async function setTimeframe({ timeframe, _deps }) {
     })()
   `, { mutation: true });
   const ready = await waitForChartReady(null, timeframe);
-  return { success: ready, timeframe, chart_ready: ready, ...(!ready && { error: `Chart did not reach timeframe ${timeframe}.` }) };
+  return { success: ready, timeframe, chart_ready: ready, ...(!ready && { recovery_required: true, error: `Chart did not reach timeframe ${timeframe}.` }) };
 }
 
 export async function setType({ chart_type, _deps }) {
@@ -103,7 +103,7 @@ export async function manageIndicator({ action, indicator, entity_id, inputs: in
     const newIds = (after || []).filter(id => !(before || []).includes(id));
     const entityId = newIds[0] || null;
 
-    // createStudy's inputs argument is unreliable across builds (#249): the
+    // createStudy's inputs argument is unreliable across builds (upstream#249): the
     // study is created with defaults regardless. Apply overrides afterward
     // via the study's own getInputValues/setInputValues, then read back to
     // report what actually took.

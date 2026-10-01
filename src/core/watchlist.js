@@ -16,7 +16,7 @@ const WL_BUTTON_JS = `(document.querySelector('[data-name="base-watchlist-widget
   || document.querySelector('[aria-label^="Watchlist"]'))`;
 
 // The watchlist widget lazy-loads after the panel opens; a fixed 500ms wait
-// raced it (issue #164). Poll until its Add-symbol button or rows exist.
+// raced it (issue upstream#164). Poll until its Add-symbol button or rows exist.
 async function ensureWatchlistOpen(maxWaitMs = 5000) {
   const state = await evaluate(`
     (function() {
@@ -45,7 +45,7 @@ async function ensureWatchlistOpen(maxWaitMs = 5000) {
 }
 
 // Active watchlist metadata (id, name, symbols) read from the React fiber
-// tree — needed for the REST endpoints. Approach from PR #65.
+// tree — needed for the REST endpoints. Approach from PR upstream#65.
 async function getActiveListInfo() {
   return evaluate(`
     (function() {
@@ -78,7 +78,7 @@ export async function get() {
   // Positional cell mapping (name, last, change, change%, volume) with
   // Unicode-minus normalization. The old regex classifier dropped every
   // negative value (TV renders U+2212, not ASCII '-') and all tick-notation
-  // prices like 106'28'7 — issue #111.
+  // prices like 106'28'7 — issue upstream#111.
   const data = await evaluate(`
     (function() {
       function norm(t) { return t.replace(/\\u2212/g, '-').trim(); }

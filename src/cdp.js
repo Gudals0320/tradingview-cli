@@ -27,6 +27,10 @@ export function boundClient(client) {
     get(target, name) {
       const value = Reflect.get(target, name);
       if (typeof value === 'function') {
+        if (name === 'close') return async (...args) => {
+          try { return await deadline(() => value.apply(target, args), { label: 'CDP.close' }); }
+          catch (error) { target._ws?.terminate?.(); throw error; }
+        };
         return (...args) => deadline(() => value.apply(target, args), { label: `CDP.${String(name)}` });
       }
       if (!value || typeof value !== 'object' || !/^[A-Z]/.test(String(name))) return value;
@@ -43,7 +47,11 @@ export function boundClient(client) {
 }
 
 export default async function boundedCDP(options) {
-  return boundClient(await deadline(() => CDP(options), { label: 'CDP connect' }));
+  let expired = false;
+  const pending = CDP(options);
+  pending.then(client => { if (expired) { client._ws?.terminate?.(); } }, () => {});
+  try { return boundClient(await deadline(() => pending, { label: 'CDP connect' })); }
+  catch (error) { expired = true; throw error; }
 }
 for (const name of ['List', 'Version', 'Activate', 'Close', 'New']) {
   boundedCDP[name] = (...args) => deadline(() => CDP[name](...args), { label: `CDP.${name}` });
