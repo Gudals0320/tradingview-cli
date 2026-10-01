@@ -48,3 +48,29 @@ Product baseline: 57ee8e7. Shared product source stays unchanged during this run
 - Lead corrected two stale handoff summary cells after worker's metadata repair:
   C7 4/4 -> 3/3 and the concluding C9 BLOCKED -> NOT TESTED, matching its detailed
   sections/evidence. No further Desktop calls were made for editorial correction.
+
+## S03 — reviewed
+
+- Execution incident: early harness failed to pass target, then continued after
+  failed open on the dedicated layout and overwrote S02 QA source. This is a
+  worker/harness failure, not a CLI defect. Exclude commands001-055 from acceptance.
+- Worker restored the original S02 saved ID and source; Lead inspected restoration
+  JSON showing expected and reopened SHA eb174c78...b2251 identical, same study and
+  settings/status. Saved/source version5->8 is a lasting, disclosed history change.
+- Subsequent harness verifies target URL/native saved ID/title before/after calls,
+  propagates unexpected child failures, and verifies report/study identity.
+- Dedicated final evidence: 17 positions / 34 qty5 exit legs; 6 TP1R. Entry/exit R
+  matches, 28 sampled MANAGE transitions nondecreasing, stop/order/ledger agree.
+- maxBars3 run actually has 4 TIME exits (3 residual qty5); maxBars1 has 17 full
+  qty10 time exits. Baseline time0 is not used as time-exit passing evidence.
+- Direct corrected-source save->compile returned Rejected / REPORT_PENDING once.
+  Comment edit + compile --save recovered. Keep direct FAIL separate from workaround.
+- Reopen LF/CRLF compile Rejected observed once; raw versus normalized hashes and
+  sourceHash code support a line-ending hypothesis, not an independently repeated
+  root-cause proof. Final source/report equality and raw alias passed after refresh.
+- Read full final HANDOFF and 147-command evidence/criteria; all numeric assertions
+  true, with direct workflow FAIL and early isolation FAIL retained separately.
+- A stray 50-byte root file named after the S03 target contained only the intended
+  target.txt path (from early reversed shell arguments). Lead inspected it and
+  moved it into S03 ignored results as misplaced-target-marker.txt. No user file
+  was removed. Mandatory target/document/exit guards added to shared protocol.

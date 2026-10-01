@@ -14,6 +14,21 @@ Do not install dependencies or plugins unless unavoidable and discussed with Lea
 Use only disposable documents with prefix CLI-QA-S01 ... CLI-QA-S06 matching your scenario. Prefer a dedicated layout named CLI-QA-Sxx-20261001 using the CLI tab new workflow; discover the returned target with tab list and pin every command to that target. If a new layout is unavailable, use only the known QA layout CLI-QA-Pine-20261001 / chart kdn7wAFi and document the fallback; never use personal charts. Existing old QA duplicate/draft studies may cause AMBIGUOUS_TARGET: do not delete another scenario's or old QA assets. Record a blockage or create your own layout. No broker actions, publishing or real orders; strategy.entry/exit simulate backtests only.
 At finish list your layout/chart, saved QA document names, remaining study counts, active editor, pending dialogs and any changed chart settings. Close/cancel your pending modal; do not close personal tabs or terminate Desktop. Sequential scheduling does not authorize changing a different worker's assets.
 
+### Mandatory guards learned during S03
+
+A newly created layout can still open the last saved Pine document from another
+layout. NEVER assume it is blank. Before first source mutation, run pine new of
+the intended type, verify the expected template and unsaved document identity,
+then set your own source and save. Record the returned saved ID and the actual
+saved name from pine list (Desktop may suffix names). Before each later mutation,
+verify the editor's native document ID belongs to your scenario; findPineController
+in src/core/desktop-dom.js exposes getScriptIdVersion for a read-only ID check.
+Verify the target URL is your QA layout as well. An open failure MUST stop the
+sequence; never continue to set/save. Your recorder must check the CHILD CLI exit
+code and parsed result, and propagate unexpected failure instead of returning
+outer exit0. Expected diagnostic failures must be named explicitly in the runner.
+Chart-study IDs/count and source hash after save/open are separate assertions.
+
 ## CLI quick start (PowerShell, from repository root)
 
 node src/cli/index.js --help
