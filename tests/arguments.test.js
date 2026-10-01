@@ -54,6 +54,15 @@ it('rejects blank/null numeric values and malformed ports; keeps minute/month di
     assert.throws(() => execFileSync(process.execPath, ['--input-type=module', '-e', 'import "./src/config.js"'], {
       env: { ...process.env, TV_CDP_PORT: port }, stdio: 'pipe',
     }));
+    assert.throws(() => execFileSync(process.execPath, ['src/cli/index.js', 'status'], {
+      env: { ...process.env, TV_CDP_PORT: port }, stdio: 'pipe',
+    }), error => {
+      assert.equal(error.status, 1);
+      const result = JSON.parse(error.stderr.toString());
+      assert.equal(result.success, false);
+      assert.equal(result.code, 'INVALID_CONFIG');
+      return true;
+    });
   }
   for (const [request, applied] of [['1m', '1'], ['1M', '1M'], ['1h', '60'], ['1D', '1D']]) {
     assert.equal(normalizeTimeframe(request), applied);

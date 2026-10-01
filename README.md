@@ -139,6 +139,7 @@ tv replay stop
 
 # 가격 변화를 계속 수집
 tv stream quote --interval 500
+# 종료할 때까지 같은 endpoint의 다른 tv 명령은 SESSION_BUSY입니다.
 ```
 
 `pine raw-compile`은 deprecated 호환 별칭이며 `pine compile`과 같은 스마트 검증을 수행합니다.
@@ -338,7 +339,7 @@ npm run lint
 npm test
 ```
 
-GitHub Actions는 `main` push, `main` 대상 PR, 수동 실행에서 Windows와 Node.js 24로 lint와 단위 테스트를 수행합니다. CI는 `TRADINGVIEW_SKIP_NETWORK_TESTS=1`로 Pine 서버에 접속하는 테스트 5개를 제외하므로 Desktop이나 계정이 필요하지 않습니다. 일반 로컬 `npm test`에는 서버 검사가 포함됩니다.
+GitHub Actions는 `main` push, `main` 대상 PR, 수동 실행에서 Windows와 Node.js 24로 lint와 단위 테스트를 수행합니다. CI는 `TRADINGVIEW_SKIP_NETWORK_TESTS=1`로 Pine 서버에 접속하는 테스트 5개를 제외하므로 Desktop이나 계정이 필요하지 않습니다. 기본 `npm test`는 오프라인 단위 검사이며 Pine 서버의 2개 스위트(5개 테스트)는 `npm run test:network`로 명시적으로 실행합니다.
 
 테스트는 명령 처리, Pine 검사, 입력값 검증, 차트 히스토리, 지표 설정, 전략 결과 검증, 배치 소유권·복구, 탭 처리, 업데이트 등을 다룹니다.
 
@@ -375,3 +376,41 @@ tv 명령 → 명령 어댑터 → 핵심 동작 → localhost:9222의 CDP → T
 개인 이슈와 PR은 이 저장소에서 관리합니다. 개발 절차는 [CONTRIBUTING.md](CONTRIBUTING.md)를 참고하세요. 제안하는 기능은 위의 정보 수집·연구·백테스트·알림 범위에 맞아야 합니다.
 
 TradingView는 TradingView Inc.의 상표입니다. 이 프로젝트는 해당 회사와 제휴·승인·후원 관계가 없으며 TradingView 소프트웨어를 포함하거나 수정하지 않습니다. 원본 코드와 출처는 [NOTICE.md](NOTICE.md), MIT 라이선스와 상표 고지는 [LICENSE](LICENSE)에 보존되어 있습니다.
+
+
+### Stream ownership and timeout recovery
+
+Legacy streams own an exclusive endpoint lease for their full lifetime. Stop a
+stream before another legacy command or workspace registration. Collection in a
+registered workspace uses its supported read commands. A conflict identifies the
+command, PID, run ID and start time. Endpoint locks cooperate only within the same
+OS user and TEMP/session directory; cross-user or independently configured TEMP
+processes are outside the support contract. PID reuse remains conservative: a
+live or unverifiable PID is never reclaimed solely because a timestamp differs.
+
+CDP requests are bounded (15 seconds by default, TV_CDP_TIMEOUT_MS 100..120000).
+Timeout does not cancel native work. Interrupted mutation results retain a journal;
+`tv session status` gives its run ID. Use `tv session recover --run-id ID` to check
+native requests and compilation/calculation quiescence without reload. If dispatch
+could not record a target, also pass `--target-id EXACT_QA_TARGET`. Recovery reports
+`incomplete:true`: inspect the resulting state before retrying. A still-pending
+native action keeps the fence. Workspace recovery uses its existing exact
+operation ID and the same page quiescence checks.
+
+For a corrupt journal with no run ID, `session status` exposes only its hash;
+`session discard --journal-hash HASH` archives the unchanged bytes for manual
+recovery. Valid journals require their exact run ID. Native mutation journals use
+`session recover`, not discard. `workspace gate-status` also reports repair
+ownership; `workspace gate-clear --repair-token TOKEN` removes only a verified dead
+repair. No live PID is cleared.
+
+Legacy Pine mutations expose `source_hash`; `pine compile` and `pine save` accept
+`--expect-script-id ID` to reject the wrong open document before native dispatch.
+GUI edits during compilation cannot be distinguished from all native schema
+changes; reserved resources must not be edited in the GUI during execution.
+
+Run `npm run smoke:desktop` with exactly one open saved `CLI-QA-I22-A` QA tab.
+The smoke checks resource identity first and protects other chart tabs. Raw
+results remain in ignored `results/issue-overhaul/`; publish only sanitized
+summaries. The stream signal check emits the child's SIGINT handler on Windows;
+it does not claim physical keyboard Ctrl+C coverage.

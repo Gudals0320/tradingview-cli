@@ -3,7 +3,7 @@
  * Zero dependencies — uses only Node.js built-ins.
  */
 import { parseArgs } from 'node:util';
-import { disconnect, configureTarget } from '../connection.js';
+import { disconnect, configureTarget, configuredTarget } from '../connection.js';
 import { acquireSession, withReadOnlySession, assertNoWorkspaceAnywhere } from '../session.js';
 import { runWorkspace } from '../workspace.js';
 import { commandScope } from './policy.js';
@@ -152,26 +152,47 @@ export async function run(argv) {
 }
 
 async function execute(handler, values, positionals, offline = false, readOnly = false, workspaceFile = null, command = '') {
-  let lease;
+  let lease, result, primaryError, retainRecovery = false;
+  const cleanupWarnings = [];
   try {
     const action = async () => {
       if (workspaceFile) return runWorkspace(workspaceFile, command, values, positionals, handler);
       if (command === 'workspace wait') throw new Error('workspace wait requires --workspace FILE.');
       if (command === 'launch') assertNoWorkspaceAnywhere();
-      if (['workspace', 'legacy'].includes(commandScope(command))) lease = acquireSession({ readOnly, desktopWide: command === 'launch' });
+      if (['workspace', 'legacy'].includes(commandScope(command))) {
+        lease = acquireSession({ readOnly, command, desktopWide: command === 'launch' });
+        if (!readOnly) lease.checkpoint({ phase: 'running', command, native_quiescence_required: true });
+      }
       return handler(values, positionals);
     };
-    const result = await (readOnly ? withReadOnlySession(action) : action());
-    console.log(JSON.stringify(result, null, 2));
-    process.exitCode = result?.success === false || result?.compiled === false || result?.has_errors === true ? 1 : 0;
+    result = await (readOnly ? withReadOnlySession(action) : action());
+    retainRecovery = result?.recovery_required === true;
   } catch (err) {
-    handleError(err);
+    primaryError = err;
+    retainRecovery = err.code === 'CDP_TIMEOUT' || err.recovery_required === true;
   } finally {
+    if (lease && retainRecovery) {
+      try { lease.checkpoint({ phase: 'recovery_required', command, target_id: configuredTarget(), native_quiescence_required: true }); }
+      catch (error) { cleanupWarnings.push(error.message); }
+    }
     // Close CDP explicitly and let pending stdout/HTTP handles drain. Forcing
     // exit after fetch() can abort in libuv on Windows Node.js 24.
-    await disconnect();
-    if (lease) lease.release();
+    try { await disconnect(); } catch (error) { cleanupWarnings.push(error.message); }
+    if (lease) {
+      try { lease.release({ restored: !readOnly && !retainRecovery }); }
+      catch (error) { cleanupWarnings.push(error.message); }
+    }
   }
+  if (primaryError) {
+    if (cleanupWarnings.length) primaryError.details = { ...primaryError.details, cleanup_warnings: cleanupWarnings };
+    handleError(primaryError);
+    return;
+  }
+  if (result !== undefined) {
+    if (cleanupWarnings.length) result = { ...result, cleanup_warnings: cleanupWarnings };
+    console.log(JSON.stringify(result, null, 2));
+  } else if (cleanupWarnings.length) console.error(JSON.stringify({ cleanup_warnings: cleanupWarnings }));
+  process.exitCode = result?.success === false || result?.compiled === false || result?.has_errors === true ? 1 : 0;
 }
 
 function handleError(err) {

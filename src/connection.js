@@ -1,4 +1,4 @@
-import CDP from 'chrome-remote-interface';
+import CDP from './cdp.js';
 import { CDP_HOST, CDP_PORT } from './config.js';
 import { getDesktopInventory, activeTarget, bindShellTab } from './desktop.js';
 import { assertSessionAccess, isReadOnlySession, currentWorkspaceSession } from './session.js';
@@ -12,6 +12,7 @@ let targetInfo = null;
 export { CDP_HOST, CDP_PORT };
 let preferredTarget = null;
 export function configureTarget(id) { preferredTarget = id || null; }
+export function configuredTarget() { return targetInfo?.id || preferredTarget || process.env.TV_CDP_TARGET || null; }
 const MAX_RETRIES = 5;
 const BASE_DELAY = 500;
 
@@ -142,7 +143,7 @@ async function findChartTarget() {
 }
 
 async function findTargetById(id) {
-  const resp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`);
+  const resp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`, { signal: globalThis.AbortSignal.timeout(15000) });
   const targets = await resp.json();
   return targets.find(t => t.id === id) || null;
 }

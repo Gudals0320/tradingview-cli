@@ -1,4 +1,4 @@
-import CDP from 'chrome-remote-interface';
+import CDP from '../cdp.js';
 import { CDP_HOST, CDP_PORT, safeString } from '../connection.js';
 import { newTab } from './tab.js';
 

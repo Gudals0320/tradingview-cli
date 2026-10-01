@@ -2,9 +2,9 @@
  * Core streaming logic — real-time JSONL output from TradingView.
  * Uses efficient poll + dedup: only emits when data changes.
  */
-import { evaluate } from '../connection.js';
+import { evaluate, KNOWN_PATHS, CDP_PORT, requireInteger } from '../connection.js';
 
-const CHART_API = 'window.TradingViewApi._activeChartWidgetWV.value()';
+const CHART_API = KNOWN_PATHS.chartApi;
 const MODEL = `${CHART_API}._chartWidget.model()`;
 
 /**
@@ -13,18 +13,21 @@ const MODEL = `${CHART_API}._chartWidget.model()`;
  * Writes to stdout directly for pipe-friendliness.
  */
 async function pollLoop(fetcher, { interval = 500, dedupe = true, label = 'stream' } = {}) {
+  interval = requireInteger(interval, 'interval', 100);
   let lastHash = null;
   let running = true;
 
   const cleanup = () => { running = false; };
   process.on('SIGINT', cleanup);
   process.on('SIGTERM', cleanup);
+  const stdoutError = error => { if (error.code === 'EPIPE') cleanup(); else throw error; };
+  process.stdout.on('error', stdoutError);
 
   // Emit header with compliance notice
   const start = Date.now();
   process.stderr.write(`\u26A0  tradingview-cli  |  Unofficial tool. Not affiliated with TradingView Inc.\n`);
   process.stderr.write(`   Streams from your locally running TradingView Desktop instance only.\n`);
-  process.stderr.write(`   Does not connect to TradingView servers. Requires --remote-debugging-port=9222.\n`);
+  process.stderr.write(`   Does not connect to TradingView servers. Requires --remote-debugging-port=${CDP_PORT}.\n`);
   process.stderr.write(`   Ensure your usage complies with TradingView's Terms of Use.\n`);
   process.stderr.write(`[stream:${label}] started, interval=${interval}ms, Ctrl+C to stop\n`);
 
@@ -53,6 +56,7 @@ async function pollLoop(fetcher, { interval = 500, dedupe = true, label = 'strea
   process.stderr.write(`[stream:${label}] stopped after ${((Date.now() - start) / 1000).toFixed(1)}s\n`);
   process.removeListener('SIGINT', cleanup);
   process.removeListener('SIGTERM', cleanup);
+  process.stdout.removeListener('error', stdoutError);
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -82,7 +86,7 @@ async function fetchQuote() {
 }
 
 export async function streamQuote({ interval } = {}) {
-  return pollLoop(fetchQuote, { interval: interval || 300, label: 'quote' });
+  return pollLoop(fetchQuote, { interval: interval ?? 300, label: 'quote' });
 }
 
 // ── Stream: ohlcv (last N bars, emits on new bar) ──
@@ -112,7 +116,7 @@ async function fetchLastBar() {
 }
 
 export async function streamBars({ interval } = {}) {
-  return pollLoop(fetchLastBar, { interval: interval || 500, label: 'bars' });
+  return pollLoop(fetchLastBar, { interval: interval ?? 500, label: 'bars' });
 }
 
 // ── Stream: indicator values ──
@@ -146,7 +150,7 @@ async function fetchValues() {
 }
 
 export async function streamValues({ interval } = {}) {
-  return pollLoop(fetchValues, { interval: interval || 500, label: 'values' });
+  return pollLoop(fetchValues, { interval: interval ?? 500, label: 'values' });
 }
 
 // ── Stream: pine lines ──
@@ -192,7 +196,7 @@ async function fetchLines(studyFilter) {
 }
 
 export async function streamLines({ interval, filter } = {}) {
-  return pollLoop(() => fetchLines(filter), { interval: interval || 1000, label: 'lines' });
+  return pollLoop(() => fetchLines(filter), { interval: interval ?? 1000, label: 'lines' });
 }
 
 // ── Stream: pine labels ──
@@ -235,7 +239,7 @@ async function fetchLabels(studyFilter) {
 }
 
 export async function streamLabels({ interval, filter } = {}) {
-  return pollLoop(() => fetchLabels(filter), { interval: interval || 1000, label: 'labels' });
+  return pollLoop(() => fetchLabels(filter), { interval: interval ?? 1000, label: 'labels' });
 }
 
 // ── Stream: pine tables ──
@@ -285,7 +289,7 @@ async function fetchTables(studyFilter) {
 }
 
 export async function streamTables({ interval, filter } = {}) {
-  return pollLoop(() => fetchTables(filter), { interval: interval || 2000, label: 'tables' });
+  return pollLoop(() => fetchTables(filter), { interval: interval ?? 2000, label: 'tables' });
 }
 
 // ── Stream: all panes (multi-symbol) ──
@@ -331,5 +335,5 @@ async function fetchAllPanes() {
 }
 
 export async function streamAllPanes({ interval } = {}) {
-  return pollLoop(fetchAllPanes, { interval: interval || 500, label: 'all-panes' });
+  return pollLoop(fetchAllPanes, { interval: interval ?? 500, label: 'all-panes' });
 }

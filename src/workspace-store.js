@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync, renameSync, openSync, closeSyn
 import { resolve, dirname, join } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { sessionPaths, sessionStatus, readReservations, withAdmissionGate, assertNoPortLease, canonicalSessionHost } from './session.js';
+import { sessionPaths, sessionStatus, readReservations, withAdmissionGate, assertNoPortLease, canonicalSessionHost, reclaimDeadSession } from './session.js';
 import { CDP_HOST } from './config.js';
 
 export function workspaceError(code, message) { const error = new Error(message); error.code = code; return error; }
@@ -30,6 +30,7 @@ function match(rows, workspace) {
 }
 const samePath = (a, b) => process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
 function available(options) {
+  reclaimDeadSession(options);
   const state = sessionStatus(options);
   if (state.locked || state.recovery_required) fail('SESSION_BUSY', 'An endpoint lease or recovery journal prevents workspace admission.');
   if (canonicalSessionHost(options.host ?? CDP_HOST) === '127.0.0.1') assertNoPortLease(options);
@@ -80,9 +81,21 @@ export function acquireWorkspace(file, { recover = false, recoveryOperation, ...
     atomic(paths.reservations, rows);
   });
   const artifactDirectory = join(dirname(workspace.file), '.tv-workspaces', workspace.id);
-  mkdirSync(artifactDirectory, { recursive: true });
+  let status;
+  try {
+    mkdirSync(artifactDirectory, { recursive: true });
+    status = workspaceStatus(file, options);
+  } catch (error) {
+    try {
+      withAdmissionGate(options, paths => {
+        const rows = readReservations(options), row = match(rows, workspace);
+        if (row.operation?.id === operation) { row.operation = null; atomic(paths.reservations, rows); }
+      });
+    } catch (cleanup) { error.details = { ...error.details, cleanup_error: cleanup.message }; }
+    throw error;
+  }
   const journal = join(artifactDirectory, `journal-${operation}.json`), history = join(artifactDirectory, 'history.jsonl');
-  const interruptedJournal = workspaceStatus(file, options).interrupted?.journal;
+  const interruptedJournal = status.interrupted?.journal;
   let finished = false;
   let reconciled = false;
   const lease = {
@@ -99,7 +112,7 @@ export function acquireWorkspace(file, { recover = false, recoveryOperation, ...
     saveBinding(binding) {
       lease.assertOwner(); workspace.binding = binding; atomic(workspace.file, workspace);
     },
-    recoveredOperation: workspaceStatus(file, options).interrupted?.operation_id || null,
+    recoveredOperation: status.interrupted?.operation_id || null,
     acknowledgeRecovery(operationId) {
       lease.assertOwner();
       if (!recover || lease.recoveredOperation !== operationId) fail('WORKSPACE_OPERATION_MISMATCH', 'Cannot acknowledge another interrupted operation.');

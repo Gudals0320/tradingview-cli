@@ -1,4 +1,4 @@
-import CDP from 'chrome-remote-interface';
+import CDP from './cdp.js';
 import { CDP_HOST, CDP_PORT } from './config.js';
 import { assertSessionAccess, currentWorkspaceSession } from './session.js';
 

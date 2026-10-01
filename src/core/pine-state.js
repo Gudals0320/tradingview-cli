@@ -1,5 +1,8 @@
 /** Observe Redux request transitions so a fast compile cannot be missed by polling. */
 export function observePineCompilation(window, controller, token) {
+  if ((window.__tvCliPineCompile && !window.__tvCliPineCompile.actionDone) || window.__tvCliSave?.pending) {
+    throw new Error('PINE_NATIVE_BUSY: Previous native action may still be running; verify quiescence before retrying.');
+  }
   const store = controller?._editorStore?.getStore?.();
   if (!store?.subscribe || !store?.getState) return false;
   if (Object.keys(store.getState()?.ui?.pendingRequests || {}).length) {
@@ -130,7 +133,9 @@ export function verifyPineCompilation(window, operation) {
 export function dispatchPineCompilation(window, controller, token) {
   const operation = window.__tvCliPineCompile;
   if (operation?.token !== token) throw new Error('Pine compile observer was replaced.');
-  const plan = planPineCompilation(window, controller);
+  let plan;
+  try {
+  plan = planPineCompilation(window, controller);
   if (plan.error) throw new Error(plan.code + ': ' + plan.error);
   const refresh=plan.method==='updateOnChart'&&controller.isModified?.()===false;
   const saveRefresh=plan.method==='updateOnChart'&&controller.isModified?.()===true&&controller.isDraft?.()===false
@@ -141,6 +146,16 @@ export function dispatchPineCompilation(window, controller, token) {
   operation.controller = controller;
   operation.plan = plan;
   operation.check = () => verifyPineCompilation(window, operation);
+  } catch (error) {
+    operation.error = error.message;
+    operation.actionDone = true;
+    operation.dispose?.();
+    throw error;
+  }
+  const refresh=plan.method==='updateOnChart'&&controller.isModified?.()===false;
+  const saveRefresh=plan.method==='updateOnChart'&&controller.isModified?.()===true&&controller.isDraft?.()===false
+    && String(controller.getScriptIdVersion()?.version)!==String(plan.target_version);
+  const method = refresh?'refreshSavedOnChart':saveRefresh?'saveThenRefreshOnChart':plan.method;
   Promise.resolve().then(async () => {
     if(saveRefresh){
       // A reloaded layout can retain an older study than the saved editor.
@@ -159,6 +174,9 @@ export function dispatchPineCompilation(window, controller, token) {
 }
 
 export function pineCompileContext(window, controller) {
+  if ((window.__tvCliPineCompile && !window.__tvCliPineCompile.actionDone) || window.__tvCliSave?.pending) {
+    return { code: 'PINE_NATIVE_BUSY', error: 'A previous native action is still pending; wait for quiescence and recover.' };
+  }
   const plan = planPineCompilation(window, controller);
   if (plan.error) return {...plan,identity:controller?.getScriptIdVersion?.(),draft:controller?.isDraft?.(),modified:controller?.isModified?.()};
   const identity = controller?.getScriptIdVersion?.();

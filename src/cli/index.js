@@ -8,25 +8,16 @@
  * Pipe-friendly: every command outputs JSON for use with jq.
  */
 
-// Register all commands
-import './commands/health.js';
-import './commands/chart.js';
-import './commands/data.js';
-import './commands/pine.js';
-import './commands/capture.js';
-import './commands/replay.js';
-import './commands/drawing.js';
-import './commands/alerts.js';
-import './commands/watchlist.js';
-import './commands/layout.js';
-import './commands/indicator.js';
-import './commands/ui.js';
-import './commands/pane.js';
-import './commands/tab.js';
-import './commands/stream.js';
-import './commands/session.js';
-import './commands/workspace.js';
-
-// Run
-import { run } from './router.js';
-await run(process.argv);
+// Import failures (including invalid environment configuration) use the same
+// structured error contract as command failures.
+try {
+  for (const name of ['health', 'chart', 'data', 'pine', 'capture', 'replay', 'drawing',
+    'alerts', 'watchlist', 'layout', 'indicator', 'ui', 'pane', 'tab', 'stream', 'session', 'workspace']) {
+    await import(`./commands/${name}.js`);
+  }
+  const { run } = await import('./router.js');
+  await run(process.argv);
+} catch (error) {
+  console.error(JSON.stringify({ success: false, code: error.code || 'CLI_INITIALIZATION', error: error.message }));
+  process.exitCode = 1;
+}

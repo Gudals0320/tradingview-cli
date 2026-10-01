@@ -86,12 +86,44 @@ it('save never reports success on persistence mismatch, rejection, or timeout', 
   pending.controller.saveScript = () => new Promise(() => {});
   assert.match((await save({ timeout: 200, _deps: pending })).error, /timeout/);
   pending.controller.isModified = () => false;
-  assert.equal((await save({ _deps: pending })).saved, true);
+  const duplicate = await save({ _deps: pending });
+  assert.equal(duplicate.success, false);
+  assert.match(duplicate.error, /pending/);
+  assert.equal(pending.context.window.__tvCliSave.pending, true);
 });
-it('save recovers an expired page operation left by an interrupted CLI', async () => {
+it('save retains expired operation fencing until native quiescence', async () => {
   const f = saveFixture();
   f.context.window.__tvCliSave = { pending: true, token: 'dead-process', expiresAt: Date.now() - 1 };
+  assert.equal((await save({ _deps: f })).success, false);
+  assert.equal(f.context.window.__tvCliSave.pending, true);
+  f.context.window.__tvCliSave.pending = false;
   assert.equal((await save({ _deps: f })).saved, true);
+});
+it('late native save completion releases only its original pending operation', async () => {
+  const f = saveFixture(); let resolveNative, calls = 0, modified = true;
+  f.controller.isModified = () => modified;
+  f.controller.saveScript = () => { calls++; return new Promise(resolve => { resolveNative = resolve; }); };
+  const timedOut = await save({ timeout: 200, _deps: f });
+  assert.equal(timedOut.saved, null);
+  assert.equal(timedOut.persistence_verified, false);
+  assert.equal(timedOut.recovery_required, true);
+  const old = f.context.window.__tvCliSave;
+  assert.equal(old.pending, true);
+  assert.equal((await save({ _deps: f })).success, false);
+  assert.equal(calls, 1);
+  modified = false; resolveNative();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(old.pending, false);
+  assert.equal((await save({ _deps: f })).saved, true);
+  assert.notEqual(f.context.window.__tvCliSave.token, old.token);
+  assert.equal(calls, 1);
+});
+it('unmodified draft cannot claim saved-document persistence', async () => {
+  const f = saveFixture(); f.controller.isDraft = () => true;
+  const result = await save({ _deps: f });
+  assert.equal(result.success, false);
+  assert.equal(result.saved, false);
+  assert.equal(result.persistence_kind, 'draft');
 });
 it('save fails if a user cancels the native name dialog', async () => {
   const f = saveFixture(); f.controller.isModified = () => true;

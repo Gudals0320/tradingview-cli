@@ -11,9 +11,10 @@
     "lint": "eslint src/ tests/ examples/",
     "test": "npm run test:unit",
     "test:unit": "node scripts/test-unit.mjs",
-    "test:e2e": "node --test tests/e2e.test.js",
+    "test:e2e": "npm run smoke:desktop",
     "test:all": "node --test tests/*.test.js",
-    "test:network": "node scripts/test-unit.mjs --network"
+    "test:network": "node scripts/test-unit.mjs --network",
+    "smoke:desktop": "node scripts/smoke-desktop.mjs"
   },
   "engines": {
     "node": ">=20"

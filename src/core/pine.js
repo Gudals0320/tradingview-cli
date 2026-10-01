@@ -167,6 +167,7 @@ export async function check({ source,_deps }) {
         'Referer': 'https://www.tradingview.com/',
       },
       body: formData,
+      signal: globalThis.AbortSignal.timeout(15000),
     }
   );
 
@@ -301,7 +302,7 @@ export async function getErrors({ _deps } = {}) {
   };
 }
 
-export async function save({ timeout = 15000, _deps } = {}) {
+export async function save({ timeout = 15000, expect_script_id, _deps } = {}) {
   if (!_deps && !await ensurePineEditorOpen()) throw new Error('Could not open Pine Editor.');
   const inspect = _deps?.evaluate || evaluate;
   const inspectAsync = _deps?.evaluateAsync || evaluateAsync;
@@ -313,7 +314,7 @@ export async function save({ timeout = 15000, _deps } = {}) {
   const finishSave=async result=>{if(!result.success&&prepareStrategy)await inspect(`(() => {${STRATEGY_PAGE_CODE};return failCompilation(window,${JSON.stringify(token+'-save')},${JSON.stringify(result.error||'Save failed.')},'SAVE_FAILED');})()`);return result;};
   try {
   if(prepareStrategy) await inspect(`(() => { ${PINE_TARGET_PAGE_CODE}; ${STRATEGY_PAGE_CODE};
-    const operation=window.__tvCliSave;if(operation?.pending&&!operation.abandoned&&Date.now()<operation.expiresAt)return true;
+    const operation=window.__tvCliSave;if(operation?.pending)return true;
     const c=${FIND_CONTROLLER},plan=planPineCompilation(window,c);
     if(!plan.error&&plan.target_id&&c.isModified()) beginCompilation(window,${JSON.stringify(token+'-save')},${JSON.stringify(sourceHash(canonicalPineSource(savedSource)))},true,null,plan.script_id,plan.target_id);
     return true;})()`);
@@ -323,9 +324,10 @@ export async function save({ timeout = 15000, _deps } = {}) {
     if (!controller || !m || typeof controller.saveScript !== 'function' || typeof controller.isModified !== 'function') {
       throw new Error('Pine save controller unavailable.');
     }
-    if (window.__tvCliSave?.pending && !window.__tvCliSave.abandoned && Date.now() < window.__tvCliSave.expiresAt) {
+    if (window.__tvCliSave?.pending || (window.__tvCliPineCompile && !window.__tvCliPineCompile.actionDone)) {
       throw new Error('A Pine save is already pending.');
     }
+    if (${JSON.stringify(expect_script_id || null)} && controller.getScriptIdVersion()?.scriptIdPart !== ${JSON.stringify(expect_script_id || null)}) throw new Error('PINE_DOCUMENT_MISMATCH: Expected Pine document is not open.');
     const operation = window.__tvCliSave = {token:${JSON.stringify(token)}, pending:true,
       expiresAt:Date.now()+${Number(timeout)}, source:m.editor.getValue(), dialogConfirmed:false};
     if (controller.getScriptIdVersion()?.scriptIdPart && !controller.isModified()) {
@@ -347,13 +349,14 @@ export async function save({ timeout = 15000, _deps } = {}) {
         ? (${confirmPineSaveDialog.toString()})(document) : false;
       if (clicked) operation.dialogConfirmed = true;
       return {pending:operation.pending,error:operation.error,clicked,
-        identity:controller.getScriptIdVersion(),modified:controller.isModified()};
+        identity:controller.getScriptIdVersion(),modified:controller.isModified(),draft:controller.isDraft?.()};
     })()`);
     dialogHandled ||= Boolean(state.clicked);
     if (state.error) return finishSave({ success:false, saved:false, error:state.error });
     if (!state.pending) {
-      if (!state.identity?.scriptIdPart || state.modified) return finishSave({ success:false, saved:false,
-        error:'Pine save finished without a saved document identity or with unsaved changes.' });
+      if (!state.identity?.scriptIdPart || state.modified || state.draft) return finishSave({ success:false, saved:false,
+        persistence_kind:state.draft?'draft':'unknown',persistence_verified:false,
+        error:'Pine save finished without a saved document identity, remained a draft, or retained unsaved changes.' });
       const verified = await inspectAsync(`(async () => {
         const operation = window.__tvCliSave, controller = ${FIND_CONTROLLER};
         if (operation?.token !== ${JSON.stringify(token)}) return false;
@@ -368,16 +371,16 @@ export async function save({ timeout = 15000, _deps } = {}) {
       })()`);
       if(verified&&prepareStrategy) await inspect(`(() => {${STRATEGY_PAGE_CODE};const epoch=window.__tvCliCompilation;
         if(epoch?.token===${JSON.stringify(token+'-save')}){epoch.persistence_confirmed=true;epoch.saved_version=${JSON.stringify(state.identity.version)};compilationState(window);}return true;})()`);
-      return finishSave(verified ? { success:true,saved:true,action:dialogHandled?'saved_with_dialog':'saved',
+      return finishSave(verified ? { success:true,saved:true,persistence_verified:true,persistence_kind:'saved_document',source_hash:typeof savedSource==='string'?sourceHash(canonicalPineSource(savedSource)):null,action:dialogHandled?'saved_with_dialog':'saved',
         script_id:state.identity.scriptIdPart,version:state.identity.version }
         : {success:false,saved:false,error:'Persisted Pine source did not match the editor source.'});
     }
   } while (now() - start < timeout);
   await inspect(`(() => { const operation=window.__tvCliSave;
-    if (operation?.token === ${JSON.stringify(token)}) { operation.abandoned=true;operation.pending=false; }
+    if (operation?.token === ${JSON.stringify(token)}) { operation.abandoned=true; }
     return true; })()`);
-  return finishSave({ success:false,saved:false,error:'Pine save did not complete before timeout.' });
-  } catch(error){return finishSave({success:false,saved:null,code:'SAVE_FAILED',error:error.message});}
+  return finishSave({ success:false,saved:null,persistence_verified:false,recovery_required:true,code:'SAVE_TIMEOUT',error:'Pine save did not complete before timeout; native execution may continue.' });
+  } catch(error){return finishSave({success:false,saved:null,persistence_verified:false,recovery_required:error.code==='CDP_TIMEOUT'||/already pending/.test(error.message),code:error.code||'SAVE_FAILED',error:error.message});}
 }
 export async function getConsole({ _deps } = {}) {
   if (!_deps && !await ensurePineEditorOpen()) throw new Error('Could not open Pine Editor.');
@@ -393,7 +396,7 @@ export async function finalizePineCompile(result, {source,token,context={},saveC
   try { observed=_deps?.readOutcome?await _deps.readOutcome():await inspect(`(() => {${PINE_TARGET_PAGE_CODE};
     return readPineOutcome(window,${FIND_CONTROLLER},${FIND_MONACO},${JSON.stringify(token)});})()`); }
   catch(error){observed={state_error:error.message};}
-  const outcome={...result};
+  const outcome={...result,source_hash:sourceHash(canonicalPineSource(source))};
   if(observed?.state_error){outcome.state_error=observed.state_error;outcome.chart_changed=null;
     if(outcome.success){outcome.success=false;outcome.compiled=false;outcome.code='POST_COMPILE_STATE_UNREADABLE';outcome.error=observed.state_error;}}
   else {
@@ -439,7 +442,7 @@ export async function finalizePineCompile(result, {source,token,context={},saveC
   }
   return outcome;
 }
-export async function smartCompile({ timeout = 30000, save: saveChanges = false, _deps } = {}) {
+export async function smartCompile({ timeout = 30000, save: saveChanges = false, expect_script_id, _deps } = {}) {
   const inspect = _deps?.evaluate || evaluate;
   if (!_deps && !await ensurePineEditorOpen()) throw new Error('Could not open Pine Editor.');
   const source = _deps?.source || (await getSource()).source;
@@ -453,10 +456,11 @@ export async function smartCompile({ timeout = 30000, save: saveChanges = false,
   const contextExpression = `(() => { ${PINE_TARGET_PAGE_CODE}; const controller = ${FIND_CONTROLLER};
     return (${pineCompileContext.toString()})(window, controller); })()`;
   context = await inspect(contextExpression);
+  if (expect_script_id && context.identity?.scriptIdPart !== expect_script_id) return finish({success:false,compiled:false,compile_performed:false,code:'PINE_DOCUMENT_MISMATCH',error:'Expected Pine document is not open.'});
   if (context.error) return finish({success:false,compiled:false,report_ready:false,code:context.code,error:context.error,target_count:context.target_count});
   if (context.save_required && !saveChanges) return finish({ success:false,compiled:false,code:'SAVE_REQUIRED',
     error:'This saved script has unsaved changes. Run pine save first or compile with --save.' });
-  const strategyMode = /^\s*strategy\s*\(/m.test(source);
+  const strategyMode = declaration.kind === 'strategy';
   if (!strategyMode && context.pending) {
     const sleep = _deps?.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
     const now = _deps?.now || Date.now, started = now();
@@ -467,8 +471,7 @@ export async function smartCompile({ timeout = 30000, save: saveChanges = false,
   }
   if (!strategyMode && context.unchanged) return finish({success:true,compiled:true,compile_performed:false,
     unchanged:true,has_errors:false,errors:[],warnings:[]});
-  const literal = source.match(/^\s*strategy\s*\(\s*(?:title\s*=\s*)?("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/m)?.[1];
-  const strategyName = literal ? literal.slice(1, -1).replace(/\\([\\"'nrt])/g, (_, ch) => ({ n: '\n', r: '\r', t: '\t' }[ch] || ch)) : null;
+  const strategyName = declaration.title || null;
   const begun = await inspect(`(() => { ${STRATEGY_PAGE_CODE}; return beginCompilation(window, ${JSON.stringify(token)}, ${JSON.stringify(sourceHash(canonicalPineSource(source)))}, ${strategyMode}, ${JSON.stringify(strategyName)}, ${JSON.stringify(context.identity?.scriptIdPart || null)}, ${JSON.stringify(context.target_id || null)},${Boolean(context.same_version_refresh)}); })()`);
   if (begun?.phase === 'unchanged') return finish({ success: true, compiled: true, compile_performed: false, unchanged: true,
     has_errors: false, errors: [], warnings: [], strategy_id: begun.strategy_id, strategy_inputs: begun.inputs,
@@ -539,10 +542,10 @@ export async function smartCompile({ timeout = 30000, save: saveChanges = false,
       strategy_id: state.strategy_id, strategy_inputs: state.inputs, compilation_token: activeToken, report_ready: true });
   } while (now() - start < timeout);
   if (!awaiting) await inspect(`(${pineCompilationStatus.toString()})(window, ${JSON.stringify(token)}, true)`);
-  return finish({ success: false, compiled: false, has_errors: false,code:'REPORT_TIMEOUT',calculation_pending:awaiting,...splitMarkers(markers || []),
+  return finish({ success: false, compiled: false, has_errors: false,code:'REPORT_TIMEOUT',calculation_pending:awaiting,recovery_required:!awaiting,...splitMarkers(markers || []),
     error: awaiting ? 'Strategy recalculation did not produce a verified report before timeout.' : 'Compilation did not produce a provably fresh report before timeout.',
     compilation_token: activeToken, report_ready: false, ...(awaiting && { compile_performed: false }) });
-  }catch(error){const code=error.code||String(error.message||'').match(/\b([A-Z][A-Z_]+):/)?.[1]||'COMPILE_EXCEPTION';return finish({success:false,compiled:false,code,error:error.message});}
+  }catch(error){const code=error.code||String(error.message||'').match(/\b([A-Z][A-Z_]+):/)?.[1]||'COMPILE_EXCEPTION';return finish({success:false,compiled:false,code,recovery_required:error.code==='CDP_TIMEOUT',error:error.message});}
 }
 
 export async function newScript({ type, _deps }) {
@@ -552,14 +555,13 @@ export async function newScript({ type, _deps }) {
   const editorReady = _deps ? true : await ensurePineEditorOpen();
   if (!editorReady) throw new Error('Could not open Pine Editor.');
 
-  const typeMap = { indicator: 'indicator', strategy: 'strategy', library: 'library' };
   const templates = {
     indicator: '//@version=6\nindicator("My script")\nplot(close)',
     strategy: '//@version=6\nstrategy("My strategy", overlay=true)\n',
     library: '//@version=6\n// @description TODO: add library description here\nlibrary("MyLibrary")\n',
   };
 
-  const template = templates[type] || templates.indicator;
+  const template = templates[type];
 
   // Await the document transition before replacing the asynchronous template.
   const escaped = JSON.stringify(template);
@@ -576,7 +578,7 @@ export async function newScript({ type, _deps }) {
 
   if (!set) throw new Error('New Pine script identity/template verification failed.');
 
-  return { success: true, type, action: 'new_script_created', template: typeMap[type] };
+  return { success: true, type, action: 'new_script_created', template: type };
 }
 
 export async function openScript({ name, _deps }) {
@@ -607,7 +609,7 @@ export async function openScript({ name, _deps }) {
 
           var id = match.scriptIdPart;
           var ver = match.version || 1;
-          return fetch('https://pine-facade.tradingview.com/pine-facade/get/' + id + '/' + ver, { credentials: 'include' })
+          return fetch('https://pine-facade.tradingview.com/pine-facade/get/' + encodeURIComponent(id) + '/' + encodeURIComponent(ver), { credentials: 'include' })
             .then(function(r2) { return r2.json(); })
             .then(function(data) {
               var source = data.source || '';
@@ -657,7 +659,7 @@ export async function listScripts() {
   `);
 
   return {
-    success: true,
+    success: Boolean(scripts && !scripts.error),
     scripts: scripts?.scripts || [],
     count: scripts?.scripts?.length || 0,
     source: 'internal_api',

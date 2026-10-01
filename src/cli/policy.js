@@ -2,7 +2,7 @@
 export const WORKSPACE_COMMANDS = new Set(['state', 'symbol', 'timeframe', 'type', 'info',
   'pine get', 'pine set', 'pine compile', 'pine raw-compile', 'pine save', 'pine errors', 'pine console',
   'indicator get', 'indicator set', 'data strategy', 'data trades', 'data ledger', 'data equity', 'workspace wait']);
-export const OFFLINE_COMMANDS = new Set(['update', 'search', 'pine analyze', 'pine check', 'session status', 'session discard',
+export const OFFLINE_COMMANDS = new Set(['update', 'search', 'pine analyze', 'pine check', 'session status', 'session discard', 'session recover',
   'workspace inventory', 'workspace status', 'workspace interrupt', 'workspace abandon', 'workspace gate-status', 'workspace gate-clear']);
 export const ADMIN_COMMANDS = new Set(['workspace init', 'workspace recover', 'workspace rebind', 'workspace release']);
 export const LEGACY_COMMANDS = new Set(['status', 'launch', 'range', 'scroll', 'discover', 'ui-state', 'quote', 'ohlcv', 'values', 'screenshot',

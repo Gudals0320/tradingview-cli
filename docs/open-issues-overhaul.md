@@ -169,3 +169,14 @@ All rows retain individual completion evidence; parent rows close only after eve
 - [ ] #22/F15: pending; mapped by issue remediation table and groups A–F above.
 
 - Current environment remeasured: Node 24.19.0, Desktop 3.4.1, Electron 41.7.1, Chromium 146; current single personal tab has no Pine editor. Inventory inspected read-only; raw IDs retained only in ignored results.
+
+### Group B implementation and validation
+
+- Reviewer accepted exclusive legacy stream lease as #20.2 support contract with corrected examples, actual owner diagnostics, and normal signal cleanup. Streams now return and emit no extra JSONL line.
+- Request deadlines bound every connected CDP domain through src/cdp.js; no timeout is treated as cancellation. Legacy router writes a recovery journal before dispatch, retains it on unknown native outcomes, and session recover verifies quiescence without reload. Workspace recover already rejects pending native work. Saved timeout is saved:null/persistence_verified:false; page pending remains true.
+- Dispatch validation failure marks only that observer actionDone and disposes it. New observer/save rejects unfinished native work even after expiration or abandonment. Native completion remains responsible for pending clearance.
+- Gate unlink retries preserve original errors; dead repair cleanup is token/PID checked. Dead leases are reclaimed under admission only, journals remain separate. Workspace operation setup rollback removes only its new operation.
+- R1 shared-input baseline corrected with cloned overrides after prepareInputChange; VM regression preserves old fingerprint. R2 invalid configuration now emits JSON INVALID_CONFIG through CLI entry.
+- Offline full suite: 381/381 pass, lint pass. Live Desktop 3.4.1/Electron 41.7.1, Korean UI: emitted child SIGINT handler exited 0, JSONL-only stream, no lock/journal, subsequent isolated workspace reservation successful. Protected personal chart hash unchanged. Harness scripts/smoke-desktop.mjs; raw evidence ignored. This is signal-handler validation, not physical Ctrl+C.
+- #20.5 support choices: same-user/same-TEMP cooperating lock scope; conservative live-PID reuse rejection; malformed journal exact-hash archival preserves bytes. GUI compile input edits remain prohibited because native schema changes are indistinguishable (#20.5a); no speculative input coercion or cycle requirement introduced.
+- Partial B commit also adds legacy Pine source_hash/--expect-script-id, draft save distinction and duplicated declaration/template cleanup; remaining validation stays open.

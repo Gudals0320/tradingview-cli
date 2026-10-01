@@ -9,7 +9,7 @@
  * `.tabs-container .tab`, its close button, and `create-new-tab-button`.
  * (Approach from issue #155 and PR #163, verified on Desktop 3.1.0.)
  */
-import CDP from 'chrome-remote-interface';
+import CDP from '../cdp.js';
 import { getDesktopInventory, inspectTarget, bindShellTab, readShellState } from '../desktop.js';
 import { isLandingTarget, clickNewTabButton, landingTabResult } from './desktop-dom.js';
 import { getClient, getTargetInfo, reconnectTo, CDP_HOST, CDP_PORT } from '../connection.js';
@@ -50,7 +50,7 @@ async function withShell(fn) {
 
 /** Find an open new-tab landing page target (shows the layout picker). */
 async function findLandingTarget() {
-  const resp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`);
+  const resp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`, { signal: globalThis.AbortSignal.timeout(15000) });
   const targets = await resp.json();
   return targets.find(isLandingTarget) || null;
 }
@@ -103,7 +103,7 @@ export async function newTab({ layout, name, reconnect = true } = {}) {
   if (!landing) throw new Error('New tab opened but its landing page target was not found.');
 
   // Snapshot existing chart targets so we can spot the one the pick creates.
-  const beforeResp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`);
+  const beforeResp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`, { signal: globalThis.AbortSignal.timeout(15000) });
   const chartIdsBefore = new Set(
     (await beforeResp.json())
       .filter(t => t.type === 'page' && /tradingview\.com\/chart/i.test(t.url))
@@ -186,7 +186,7 @@ export async function newTab({ layout, name, reconnect = true } = {}) {
   let chartTarget = null;
   for (let i = 0; i < 30; i++) {
     await new Promise(r => setTimeout(r, 500));
-    const resp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`);
+    const resp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`, { signal: globalThis.AbortSignal.timeout(15000) });
     const targets = await resp.json();
     chartTarget = targets.find(x =>
       x.type === 'page' && /tradingview\.com\/chart/i.test(x.url) && !chartIdsBefore.has(x.id)

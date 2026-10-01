@@ -1,4 +1,4 @@
-import CDP from 'chrome-remote-interface';
+import CDP from './cdp.js';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { CDP_HOST, CDP_PORT } from './config.js';
@@ -102,7 +102,12 @@ async function permitFor(command, values, positionals) {
   if (command === 'pine save') return { save: true };
   return {};
 }
-async function readInput() { const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk); return Buffer.concat(chunks).toString('utf8'); }
+async function readInput() {
+  if (process.stdin.isTTY) throw workspaceError('PINE_SOURCE_REQUIRED', 'Pipe Pine source through stdin or use --file.');
+  const chunks = [];
+  for await (const chunk of process.stdin) chunks.push(chunk);
+  return Buffer.concat(chunks).toString('utf8');
+}
 
 export async function runWorkspace(file, command, values, positionals, handler, { _deps } = {}) {
   if (!WORKSPACE_COMMANDS.has(command)) throw workspaceError('WORKSPACE_COMMAND_UNSUPPORTED', `Command ${command} cannot run independently in a workspace.`);

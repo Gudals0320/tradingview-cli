@@ -2,9 +2,7 @@ import { register } from '../router.js';
 import * as core from '../../core/stream.js';
 import { streamOhlcvFeeds } from '../../core/multi-feed.js';
 
-// Stream commands are special — they don't return JSON, they write JSONL to stdout forever.
-// The router's execute() wrapper won't work since these never resolve.
-// We override the handler to call the stream directly and never return.
+// Streams return without a result so router cleanup runs without an extra JSONL record.
 
 register('stream', {
   description: 'Monitor your local TradingView chart for changes (JSONL output)',
@@ -16,7 +14,7 @@ register('stream', {
       },
       handler: async (opts) => {
         await core.streamQuote({ interval: opts.interval ? Number(opts.interval) : undefined });
-        process.exit(0); // unreachable unless stopped
+        return; // unreachable unless stopped
       },
     }],
     ['bars', {
@@ -26,7 +24,7 @@ register('stream', {
       },
       handler: async (opts) => {
         await core.streamBars({ interval: opts.interval ? Number(opts.interval) : undefined });
-        process.exit(0);
+        return;
       },
     }],
     ['values', {
@@ -36,7 +34,7 @@ register('stream', {
       },
       handler: async (opts) => {
         await core.streamValues({ interval: opts.interval ? Number(opts.interval) : undefined });
-        process.exit(0);
+        return;
       },
     }],
     ['lines', {
@@ -47,7 +45,7 @@ register('stream', {
       },
       handler: async (opts) => {
         await core.streamLines({ interval: opts.interval ? Number(opts.interval) : undefined, filter: opts.filter });
-        process.exit(0);
+        return;
       },
     }],
     ['labels', {
@@ -58,7 +56,7 @@ register('stream', {
       },
       handler: async (opts) => {
         await core.streamLabels({ interval: opts.interval ? Number(opts.interval) : undefined, filter: opts.filter });
-        process.exit(0);
+        return;
       },
     }],
     ['tables', {
@@ -69,7 +67,7 @@ register('stream', {
       },
       handler: async (opts) => {
         await core.streamTables({ interval: opts.interval ? Number(opts.interval) : undefined, filter: opts.filter });
-        process.exit(0);
+        return;
       },
     }],
     ['ohlcv', {
@@ -79,7 +77,7 @@ register('stream', {
       },
       handler: async (opts, positionals) => {
         await streamOhlcvFeeds({ feedSpecs: positionals, interval: opts.interval });
-        process.exit(0);
+        return;
       },
     }],
     ['all', {
@@ -89,7 +87,7 @@ register('stream', {
       },
       handler: async (opts) => {
         await core.streamAllPanes({ interval: opts.interval ? Number(opts.interval) : undefined });
-        process.exit(0);
+        return;
       },
     }],
   ]),

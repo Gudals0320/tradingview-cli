@@ -182,16 +182,14 @@ export async function setInputs({ entity_id, inputs: inputsRaw, timeout = 30000,
       var unknown = Object.keys(overrides).filter(key => !ids.has(key));
       if (unknown.length) return { error: 'Unknown input ids: ' + unknown.join(', '), code: 'UNKNOWN_INPUT' };
       var updatedKeys = {};
-      var changed = false;
-      for (var i = 0; i < currentInputs.length; i++) {
-        if (Object.prototype.hasOwnProperty.call(overrides, currentInputs[i].id)) {
-          if (currentInputs[i].value !== overrides[currentInputs[i].id]) changed = true;
-          currentInputs[i].value = overrides[currentInputs[i].id];
-          updatedKeys[currentInputs[i].id] = overrides[currentInputs[i].id];
-        }
-      }
+      var changed = currentInputs.some(input => Object.hasOwn(overrides, input.id) && input.value !== overrides[input.id]);
       var strategy = changed ? prepareInputChange(window, ${safeString(entity_id)}) : false;
-      if (changed) study.setInputValues(currentInputs);
+      var nextInputs = currentInputs.map(input => {
+        if (!Object.hasOwn(overrides, input.id)) return { ...input };
+        updatedKeys[input.id] = overrides[input.id];
+        return { ...input, value: overrides[input.id] };
+      });
+      if (changed) study.setInputValues(nextInputs);
       return { updated_inputs: updatedKeys, strategy, changed };
     })()
   `);
