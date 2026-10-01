@@ -5,6 +5,9 @@ import { beginCompilation, compilationState, readStrategyReport, splitMarkers, r
 import { getStrategyResults, getTrades, getTradeLedger, getEquity } from '../src/core/data.js';
 import { smartCompile } from '../src/core/pine.js';
 import { normalizeTimeframe, symbolMatches } from '../src/chart-context.js';
+import { failCompilation } from '../src/strategy-state.js';
+import { canonicalPineSource } from '../src/pine-source.js';
+import { sourceHash } from '../src/session.js';
 
 function fixture() {
   let report = { performance: { all: { netProfit: 10, netProfitPercent: 0.001, totalTrades: 2, numberOfWiningTrades: 1, numberOfLosingTrades: 0 } },
@@ -36,6 +39,29 @@ function fixture() {
 }
 
 describe('Strategy report identity and metadata', () => {
+  it('canonicalizes physical CRLF only without changing source contents or trailing newlines', () => {
+    const lf='strategy("\\r\\n")\n// 한글\n';
+    assert.equal(sourceHash(canonicalPineSource(lf.replace(/\n/g,'\r\n'))),sourceHash(lf));
+    assert.notEqual(sourceHash(canonicalPineSource(lf+'\n')),sourceHash(lf));
+    assert.equal(canonicalPineSource('a\rb'),'a\rb');
+  });
+  it('keeps verified per-study monitoring while another document is compiled', () => {
+    const f=fixture();beginCompilation(f.window,'run','hash',true);f.compile();f.update();
+    assert.equal(compilationState(f.window).phase,'ready');
+    const verified=f.window.__tvCliCompilation;
+    beginCompilation(f.window,'indicator','other',false);
+    f.status(1);f.input(70);f.status(2);f.update();
+    f.window.__tvCliCompilation=verified;
+    assert.equal(compilationState(f.window).phase,'ready');
+    assert.equal(f.window.__tvCliCompilation.inputs_fingerprint.includes('70'),true);
+  });
+  it('rejected actions become a terminal code, and a new actual compile can recover', () => {
+    const f=fixture();beginCompilation(f.window,'rejected','hash',true,null,null,'strategy');
+    failCompilation(f.window,'rejected','No changes','NATIVE_ACTION_REJECTED');
+    assert.equal(readStrategyReport(f.window).code,'NATIVE_ACTION_REJECTED');
+    beginCompilation(f.window,'recovery','hash',true);f.compile();f.update();
+    assert.equal(readStrategyReport(f.window).success,true);
+  });
   it('binds report freshness to the Pine document despite another changed same-title strategy', () => {
     const f = fixture(), chart = f.window.TradingViewApi._activeChartWidgetWV.value();
     const inputs = chart.getStudyById;
