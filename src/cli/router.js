@@ -7,6 +7,7 @@ import { disconnect, configureTarget } from '../connection.js';
 import { acquireSession, withReadOnlySession, assertNoWorkspaceAnywhere } from '../session.js';
 import { runWorkspace } from '../workspace.js';
 import { commandScope } from './policy.js';
+import { validateArguments } from './arguments.js';
 
 /** @type {Map<string, { description: string, options?: object, handler: Function, subcommands?: Map<string, object> }>} */
 const commands = new Map();
@@ -109,7 +110,7 @@ export async function run(argv) {
         args: args.slice(2),
         options: { help: { type: 'boolean', short: 'h' }, ...options },
         allowPositionals: true,
-        strict: false,
+        strict: true,
       });
       if (values.help) {
         console.log(`Usage: tv ${cmdName} ${subName} [options]\n`);
@@ -123,6 +124,7 @@ export async function run(argv) {
         }
         process.exit(0);
       }
+      validateArguments(`${cmdName} ${subName}`, values, positionals);
       await execute(handler, values, positionals, offline, readOnly, workspaceFile, `${cmdName} ${subName}`);
     } catch (err) {
       handleError(err);
@@ -135,12 +137,13 @@ export async function run(argv) {
         args: args.slice(1),
         options: { help: { type: 'boolean', short: 'h' }, ...options },
         allowPositionals: true,
-        strict: false,
+        strict: true,
       });
       if (values.help) {
         printCommandHelp(cmdName, cmd);
         process.exit(0);
       }
+      validateArguments(cmdName, values, positionals);
       await execute(handler, values, positionals, offline, readOnly, workspaceFile, cmdName);
     } catch (err) {
       handleError(err);

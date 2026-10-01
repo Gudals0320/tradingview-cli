@@ -1,7 +1,7 @@
 /**
  * Core data access logic.
  */
-import { evaluate, evaluateAsync, KNOWN_PATHS, safeString } from '../connection.js';
+import { evaluate, evaluateAsync, KNOWN_PATHS, safeString, requireInteger } from '../connection.js';
 import { waitForChartReady } from '../wait.js';
 import { reportExpression, STRATEGY_PAGE_CODE } from '../strategy-state.js';
 
@@ -136,7 +136,7 @@ function buildGraphicsJS(collectionName, mapKey, filter) {
 }
 
 export async function getOhlcv({ count, summary } = {}) {
-  const limit = Math.min(count || 100, MAX_OHLCV_BARS);
+  const limit = requireInteger(count === undefined ? 100 : count, 'count', 1, MAX_OHLCV_BARS);
   let data;
   try {
     data = await evaluate(`

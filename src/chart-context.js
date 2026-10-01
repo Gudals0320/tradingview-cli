@@ -1,5 +1,8 @@
 export function normalizeTimeframe(value) {
-  const text = String(value || '').trim().toUpperCase();
+  const original = String(value || '').trim();
+  const minutes = original.match(/^(\d+)m$/);
+  if (minutes) return String(Number(minutes[1]));
+  const text = original.toUpperCase();
   if (['D', 'W', 'M'].includes(text)) return `1${text}`;
   const hours = text.match(/^(\d+)H$/); if (hours) return String(Number(hours[1]) * 60);
   return text;

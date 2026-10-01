@@ -160,10 +160,11 @@ export async function addStudyFromSearch({ query, match, section } = {}) {
   };
 }
 
-export async function setInputs({ entity_id, inputs: inputsRaw, timeout = 30000 }) {
+export async function setInputs({ entity_id, inputs: inputsRaw, timeout = 30000, _deps = {} }) {
+  const evaluate = _deps.evaluate || (await import('../connection.js')).evaluate;
   const inputs = inputsRaw ? (typeof inputsRaw === 'string' ? JSON.parse(inputsRaw) : inputsRaw) : undefined;
   if (!entity_id) throw new Error('entity_id is required. Use chart_get_state to find study IDs.');
-  if (!inputs || typeof inputs !== 'object' || Object.keys(inputs).length === 0) {
+  if (!inputs || Array.isArray(inputs) || typeof inputs !== 'object' || Object.keys(inputs).length === 0) {
     throw new Error('inputs must be a non-empty object, e.g. { length: 50 }');
   }
 
@@ -175,30 +176,33 @@ export async function setInputs({ entity_id, inputs: inputsRaw, timeout = 30000 
       var chart = ${CHART_API};
       var study = chart.getStudyById(${safeString(entity_id)});
       if (!study) return { error: 'Study not found: ' + ${safeString(entity_id)} };
-      var strategy = prepareInputChange(window, ${safeString(entity_id)});
       var currentInputs = study.getInputValues();
       var overrides = ${inputsJson};
+      var ids = new Set(currentInputs.map(input => input.id));
+      var unknown = Object.keys(overrides).filter(key => !ids.has(key));
+      if (unknown.length) return { error: 'Unknown input ids: ' + unknown.join(', '), code: 'UNKNOWN_INPUT' };
       var updatedKeys = {};
       var changed = false;
       for (var i = 0; i < currentInputs.length; i++) {
-        if (overrides.hasOwnProperty(currentInputs[i].id)) {
+        if (Object.prototype.hasOwnProperty.call(overrides, currentInputs[i].id)) {
           if (currentInputs[i].value !== overrides[currentInputs[i].id]) changed = true;
           currentInputs[i].value = overrides[currentInputs[i].id];
           updatedKeys[currentInputs[i].id] = overrides[currentInputs[i].id];
         }
       }
+      var strategy = changed ? prepareInputChange(window, ${safeString(entity_id)}) : false;
       if (changed) study.setInputValues(currentInputs);
       return { updated_inputs: updatedKeys, strategy, changed };
     })()
   `);
 
-  if (result && result.error) throw new Error(result.error);
+  if (result && result.error) throw Object.assign(new Error(result.error), { code: result.code });
   if (result.strategy && result.changed) {
     const start = Date.now();
     do {
       const state = await evaluate(`(() => { ${STRATEGY_PAGE_CODE}; return compilationState(window); })()`);
       if (state.phase === 'ready' && Object.entries(result.updated_inputs).every(([id, value]) => state.inputs?.some(input => input.id === id && input.value === value))) {
-        return { success: true, entity_id, updated_inputs: result.updated_inputs, report_ready: true };
+        return { success: true, entity_id, changed: true, updated_inputs: result.updated_inputs, report_ready: true };
       }
       if (['failed', 'invalidated'].includes(state.phase)) return { success: false, entity_id, updated_inputs: result.updated_inputs, error: state.error, report_ready: false };
       await delay(100);
@@ -206,7 +210,7 @@ export async function setInputs({ entity_id, inputs: inputsRaw, timeout = 30000 
     return { success: false, entity_id, updated_inputs: result.updated_inputs, report_ready: false,
       error: 'Strategy inputs were applied but their recalculation was not verified before timeout.' };
   }
-  return { success: true, entity_id, updated_inputs: result.updated_inputs };
+  return { success: true, entity_id, changed: result.changed, updated_inputs: result.updated_inputs };
 }
 
 export async function toggleVisibility({ entity_id, visible }) {

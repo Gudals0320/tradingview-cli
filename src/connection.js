@@ -15,7 +15,7 @@ export function configureTarget(id) { preferredTarget = id || null; }
 const MAX_RETRIES = 5;
 const BASE_DELAY = 500;
 
-// Known direct API paths discovered via live probing (see PROBE_RESULTS.md)
+// Known direct API paths verified against Desktop; covered by the Desktop smoke.
 const KNOWN_PATHS = {
   chartApi: 'window.TradingViewApi._activeChartWidgetWV.value()',
   chartWidgetCollection: 'window.TradingViewApi._chartWidgetCollection',
@@ -51,8 +51,18 @@ export function safeString(str) {
  */
 export function requireFinite(value, name) {
   const n = Number(value);
-  if (!Number.isFinite(n)) throw new Error(`${name} must be a finite number, got: ${value}`);
+  if (!['number', 'string'].includes(typeof value) || (typeof value === 'string' && !value.trim()) || !Number.isFinite(n)) {
+    throw new Error(`${name} must be a finite number, got: ${value}`);
+  }
   return n;
+}
+
+export function requireInteger(value, name, min = 1, max = Number.MAX_SAFE_INTEGER) {
+  const number = requireFinite(value, name);
+  if (!Number.isSafeInteger(number) || number < min || number > max) {
+    throw new Error(`${name} must be an integer from ${min} to ${max}.`);
+  }
+  return number;
 }
 
 export async function getClient() {
