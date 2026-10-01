@@ -43,6 +43,23 @@ export function bindWorkspacePage(window, document, resource, nonce) {
   return { nonce, snapshot };
 }
 
+export async function restoreWorkspaceDocument(window, document, resource) {
+  const before = readWorkspacePage(window, document), controller = findPineController(document);
+  const chart = window.TradingViewApi._activeChartWidgetWV.value();
+  if (before.layout !== resource.layout) throw new Error('WORKSPACE_IDENTITY_MISMATCH: Cannot restore a document on a different layout.');
+  if (before.pending) throw new Error('WORKSPACE_NATIVE_BUSY: Wait for native quiescence before restoring a document.');
+  if (before.pine !== resource.pine) {
+    if (controller.isModified?.() !== false) throw new Error('WORKSPACE_FOREIGN_DRAFT: Refusing to discard an unowned modified document.');
+    const version = resource.binding?.snapshot?.version;
+    if (!version) throw new Error('WORKSPACE_VERSION_REQUIRED: Recorded owned document version is unavailable.');
+    await controller.openScript({ scriptIdPart: resource.pine, version });
+    if (chart !== window.TradingViewApi._activeChartWidgetWV.value()) throw new Error('WORKSPACE_GENERATION_CHANGED: Chart changed during document restore.');
+  }
+  const after = readWorkspacePage(window, document);
+  if (after.layout !== resource.layout || after.pine !== resource.pine) throw new Error('WORKSPACE_IDENTITY_MISMATCH: Restored document did not match the registered resources.');
+  return { restored_document: before.pine !== resource.pine };
+}
+
 export function guardWorkspacePage(window, document, owner) {
   const bound = window.__tvCliWorkspace;
   if (!bound || bound.nonce !== owner.nonce || bound.id !== owner.id || bound.token !== owner.token
@@ -121,4 +138,4 @@ export function finishWorkspacePage(window, document, owner, operation) {
 }
 
 export const WORKSPACE_PAGE_CODE = [findPineEditor, findPineController, readChartContext, normalizeTimeframe, symbolMatches,
-  readWorkspacePage, bindWorkspacePage, guardWorkspacePage, startWorkspacePage, finishWorkspacePage].map(fn => fn.toString()).join('\n');
+  readWorkspacePage, bindWorkspacePage, restoreWorkspaceDocument, guardWorkspacePage, startWorkspacePage, finishWorkspacePage].map(fn => fn.toString()).join('\n');

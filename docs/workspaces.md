@@ -97,6 +97,21 @@ requires its exact ID. Abandon preserves private journals/results and records
 workspace can then explicitly register newly provisioned resources. Initialization
 checks HTTP inventory before reservation and rolls back a failed bind.
 
+Desktop can reopen the globally most recent Pine document after a reload. If its
+editor is mounted and unmodified, `workspace rebind --file FILE --id ID
+--restore-document` explicitly reopens the registered document's recorded version
+on that exact target. Modified foreign drafts and pending actions are refused.
+Interrupted recovery uses `--rebind --restore-document` with the exact operation
+ID. No tab is activated and another workspace's document is not saved or edited.
+
+Init, recover and rebind may read the user's own saved script versions from
+pine-facade with the target's existing authenticated session. This verifies editor
+source and the version actually applied to the chart, even when a saved layout
+restores an older version. If the reads fail, there is no persisted-source proof;
+verified compilation can still establish report identity. An edited document
+whose chart study has an older version saves the requested edits once and applies
+them explicitly to that study version.
+
 Synchronous page expressions have guards in the same turn. Async expressions have
 guards before dispatch and after completion; native actions run in between. During
 compilation, changing the owned study's input schema/defaults can be a native

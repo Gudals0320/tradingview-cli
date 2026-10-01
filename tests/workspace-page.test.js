@@ -63,4 +63,14 @@ describe('atomic workspace page guards', () => {
     f.inputs[1].value = 'new compiled identity';f.call('guardWorkspacePage', f.owner);
     f.inputs[2].value = 99;assert.throws(() => f.call('guardWorkspacePage', f.owner), /EXTERNAL_CHANGE/);
   });
+  it('restores only the recorded document and refuses a modified foreign draft', async () => {
+    for (const modified of [false,true]) {
+      const f=fixture();let documentId='foreign',opened=0;
+      f.controller.getScriptIdVersion=()=>({scriptIdPart:documentId,version:1});f.controller.isModified=()=>modified;
+      f.controller.openScript=async request=>{assert.equal(request.scriptIdPart,'pine');assert.equal(request.version,1);documentId=request.scriptIdPart;opened++;};
+      const resource={...f.resource,binding:{snapshot:{version:1}}};
+      if(modified){await assert.rejects(()=>f.call('restoreWorkspaceDocument',resource),/FOREIGN_DRAFT/);assert.equal(opened,0);}
+      else{assert.equal((await f.call('restoreWorkspaceDocument',resource)).restored_document,true);assert.equal(opened,1);}
+    }
+  });
 });

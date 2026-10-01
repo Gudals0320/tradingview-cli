@@ -162,7 +162,8 @@ export async function runWorkspace(file, command, values, positionals, handler, 
   });
 }
 
-export async function recoverWorkspace(file, { operationId, rebind = false } = {}) {
+export async function recoverWorkspace(file, { operationId, rebind = false, restoreDocument = false } = {}) {
+  if (restoreDocument && !rebind) throw workspaceError('WORKSPACE_REBIND_REQUIRED', '--restore-document requires explicit --rebind recovery.');
   const lease = acquireWorkspace(file, { recover: true, recoveryOperation: operationId }), workspace = lease.workspace;
   return withWorkspaceSession(lease, async () => {
     try {
@@ -176,6 +177,7 @@ export async function recoverWorkspace(file, { operationId, rebind = false } = {
         if (operation && operation !== operationId) throw workspaceError('WORKSPACE_OPERATION_MISMATCH', 'Page operation does not match the interrupted operation.');
       }
       // bind validates resource IDs and native quiescence before changing page state.
+      if (restoreDocument) await raw(client, pageCall('restoreWorkspaceDocument', workspace));
       const binding = await raw(client, pageCall('bindWorkspacePage', workspace, randomUUID()));
       const source_proof = await sourceProof(client, binding.snapshot);
       const previous = workspace.binding?.snapshot;
@@ -191,7 +193,7 @@ export async function recoverWorkspace(file, { operationId, rebind = false } = {
   });
 }
 
-export async function rebindWorkspace(file, workspaceId, { _deps } = {}) {
+export async function rebindWorkspace(file, workspaceId, { _deps, restoreDocument = false } = {}) {
   const lease = acquireWorkspace(file), workspace = lease.workspace;
   return withWorkspaceSession(lease, async () => {
     try {
@@ -202,6 +204,7 @@ export async function rebindWorkspace(file, workspaceId, { _deps } = {}) {
       if (workspace.binding?.browser === browser && workspace.binding?.nonce === nonce) {
         throw workspaceError('WORKSPACE_GENERATION_UNCHANGED', 'The bound page generation still exists. Inspect unexpected changes instead of rebinding it.');
       }
+      if (restoreDocument) await raw(client, pageCall('restoreWorkspaceDocument', workspace));
       const binding = await raw(client, pageCall('bindWorkspacePage', workspace, randomUUID()));
       const source_proof = await sourceProof(client, binding.snapshot), previous = workspace.binding?.snapshot;
       const adopted_changes = { source: previous?.source !== binding.snapshot.source,
