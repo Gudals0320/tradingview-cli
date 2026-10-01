@@ -1,0 +1,5858 @@
+{
+  "scenario": "S04 pivot support/resistance drawings: create, break-update, retention delete",
+  "generated": "2026-10-01T04:18:26.528Z",
+  "environment": {
+    "cwd": "C:/Codex/.worktrees/tradingview-cli-pinescript-qa",
+    "branch": "codex/pine-qa",
+    "layout": "CLI-QA-S04-20261001",
+    "chartId": "ofWK5ePT",
+    "target": "A80BFC8814BDE6007E9C57E8CB604788",
+    "symbol": "BINANCE:ETHUSDT",
+    "resolution": "15",
+    "savedName": "CLI-QA-S04 Pivot Zones",
+    "savedId": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+    "finalVersion": "6.0",
+    "studyId": "7AVlth",
+    "windowRestore": {
+      "pid": 18220,
+      "action": "ShowWindow SW_SHOWNOACTIVATE(4)",
+      "iconicBefore": true,
+      "iconicAfter": false,
+      "reason": "page visibility hidden, viewport 0x0 (005)"
+    }
+  },
+  "sourceHashes": {
+    "v1-baseline-labels.pine": "9f378e9fcf8d11347099b8ae7bcdcea2e108ba1529d3028d2eeef92ccd05c187",
+    "v2-zones-keep30.pine": "a4a98103e79acfe64738e291e8f62d3535163faf7f57d7360eee2ad8a2047c2a",
+    "v3-zones-keep5.pine": "bf7782e39ac380df7d06abd69e6daa00185a3bab851149959341286fbc5acd2e",
+    "v4-delete-update.pine": "674d36e7ff282655193a39bc035674068832018787d1c04508ac5a0d6bbf96b4",
+    "v5-error-injected.pine": "f41cb6dddb144bafc494a25729c992ee67569b4d3fc5828326e4fb1b653430c5",
+    "v6 fix (= v4 file)": "674d36e7ff282655193a39bc035674068832018787d1c04508ac5a0d6bbf96b4",
+    "template_021": "1f0fc5b36b487cf721c6dad8956174678ab95d3d82c6228769a8e718067a1045",
+    "editor_130": "674d36e7ff282655193a39bc035674068832018787d1c04508ac5a0d6bbf96b4",
+    "reopened_134": "674d36e7ff282655193a39bc035674068832018787d1c04508ac5a0d6bbf96b4",
+    "reopened_134_rawBytes": "359533410b1c27bd4652501a69abbcf403bfd00aa8174aeafc880e39f99b3321",
+    "editor_130_rawBytes": "674d36e7ff282655193a39bc035674068832018787d1c04508ac5a0d6bbf96b4"
+  },
+  "assertions": {
+    "noForeignTargetUsed": true,
+    "firstSaveFromUnsavedTemplate": true,
+    "everyMutationOnS04DocAfterSave": true,
+    "allChildExitsAsExpected_exceptRecordedStops": true,
+    "savedNameExactSingle": true,
+    "v1LabelsMatchStrictPivots": true,
+    "v1NoLabelBeyondLastConfirmablePivot": true,
+    "zonesAllMatched": true,
+    "keep30Count": true,
+    "keep5CountAtMost5": true,
+    "scriptTablesAlignedNoMismatch": true,
+    "createdConstantAcrossRecompiles": true,
+    "singleS04StudyThroughout": true,
+    "injectedErrorDetected": true,
+    "recoveryCompileOk": true,
+    "sourcePreservedSaveOpen": true,
+    "reopenRawLineEndingsDiffer": true,
+    "logsMatchOhlc": true
+  },
+  "verification": {
+    "033-resolve-v1": {
+      "mode": "labels",
+      "tag": "033-resolve-v1",
+      "at": "2026-10-01T04:07:26.083Z",
+      "study": "7AVlth",
+      "loadedBars": 389,
+      "firstBarTime": 1790478000,
+      "formingBarTime": 1790827200,
+      "lastConfirmedTime": 1790826300,
+      "determinableWindow": [
+        1790482500,
+        1790821800
+      ],
+      "labelsTotal": 505,
+      "labelsResolved": 48,
+      "labelsInWindow": 48,
+      "labelsAfterLastConfirmablePivot": [],
+      "textMismatches": 0,
+      "variants": {
+        "strictBoth": {
+          "expected": 48,
+          "missing": 0,
+          "extra": 0,
+          "missingSample": [],
+          "extraSample": []
+        },
+        "leftStrictRightLoose": {
+          "expected": 49,
+          "missing": 1,
+          "extra": 0,
+          "missingSample": [
+            "1790507700|-1|2707.18"
+          ],
+          "extraSample": []
+        },
+        "leftLooseRightStrict": {
+          "expected": 48,
+          "missing": 0,
+          "extra": 0,
+          "missingSample": [],
+          "extraSample": []
+        },
+        "looseBoth": {
+          "expected": 49,
+          "missing": 1,
+          "extra": 0,
+          "missingSample": [
+            "1790507700|-1|2707.18"
+          ],
+          "extraSample": []
+        }
+      }
+    },
+    "049-resolve-v2": {
+      "mode": "zones",
+      "tag": "049-resolve-v2",
+      "at": "2026-10-01T04:08:59.074Z",
+      "study": "7AVlth",
+      "loadedBars": 389,
+      "firstBarTime": 1790478000,
+      "formingBarTime": 1790827200,
+      "lastConfirmedTime": 1790826300,
+      "determinableWindow": [
+        1790482500,
+        1790821800
+      ],
+      "pivotVariant": "strictBoth",
+      "keep": 30,
+      "ttl": null,
+      "simulatedWindowCounters": {
+        "created": 48,
+        "deletedLimit": 18,
+        "deletedTtl": 0,
+        "broken": 34,
+        "live": 30
+      },
+      "actualCounts": {
+        "boxes": 30,
+        "lines": 30,
+        "labels": 30,
+        "boxesUnresolved": 0,
+        "linesUnresolved": 0,
+        "labelsUnresolved": 0
+      },
+      "expectedCount": 30,
+      "allMatched": true,
+      "preConfirmationObjects": 0,
+      "newestExpectedPivotTime": 1790820900,
+      "matchedZones": [
+        {
+          "t1": 1790623800,
+          "kind": -1,
+          "text": "S 2665.00 BROKEN",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790629200,
+          "kind": 1,
+          "text": "R 2690.00 BROKEN",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790632800,
+          "kind": -1,
+          "text": "S 2667.86 BROKEN",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790636400,
+          "kind": 1,
+          "text": "R 2694.41 BROKEN",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790641800,
+          "kind": 1,
+          "text": "R 2695.38 BROKEN",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790649000,
+          "kind": -1,
+          "text": "S 2652.20 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790659800,
+          "kind": -1,
+          "text": "S 2656.00 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790669700,
+          "kind": 1,
+          "text": "R 2735.00 BROKEN",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790673300,
+          "kind": -1,
+          "text": "S 2702.78 BROKEN",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790684100,
+          "kind": 1,
+          "text": "R 2748.60 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790700300,
+          "kind": -1,
+          "text": "S 2668.40 BROKEN",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790708400,
+          "kind": 1,
+          "text": "R 2700.00 BROKEN",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790721000,
+          "kind": -1,
+          "text": "S 2675.00 BROKEN",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790722800,
+          "kind": 1,
+          "text": "R 2688.51 BROKEN",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790729100,
+          "kind": -1,
+          "text": "S 2668.08 BROKEN",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790733600,
+          "kind": 1,
+          "text": "R 2678.32 BROKEN",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790735400,
+          "kind": -1,
+          "text": "S 2666.19 BROKEN",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790746200,
+          "kind": 1,
+          "text": "R 2680.62 BROKEN",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790750700,
+          "kind": -1,
+          "text": "S 2656.92 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790760600,
+          "kind": 1,
+          "text": "R 2699.85 BROKEN",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790766000,
+          "kind": -1,
+          "text": "S 2685.37 BROKEN",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790772300,
+          "kind": 1,
+          "text": "R 2738.51 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790778600,
+          "kind": -1,
+          "text": "S 2668.00 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790787600,
+          "kind": 1,
+          "text": "R 2698.00 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790797500,
+          "kind": -1,
+          "text": "S 2667.94 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790805600,
+          "kind": -1,
+          "text": "S 2678.42 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790810100,
+          "kind": 1,
+          "text": "R 2694.33 BROKEN",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790813700,
+          "kind": -1,
+          "text": "S 2678.54 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790820000,
+          "kind": 1,
+          "text": "R 2694.61 BROKEN",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790820900,
+          "kind": -1,
+          "text": "S 2684.17 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        }
+      ]
+    },
+    "059-resolve-v3": {
+      "mode": "zones",
+      "tag": "059-resolve-v3",
+      "at": "2026-10-01T04:09:40.881Z",
+      "study": "7AVlth",
+      "loadedBars": 389,
+      "firstBarTime": 1790478000,
+      "formingBarTime": 1790827200,
+      "lastConfirmedTime": 1790826300,
+      "determinableWindow": [
+        1790482500,
+        1790821800
+      ],
+      "pivotVariant": "strictBoth",
+      "keep": 5,
+      "ttl": null,
+      "simulatedWindowCounters": {
+        "created": 48,
+        "deletedLimit": 43,
+        "deletedTtl": 0,
+        "broken": 24,
+        "live": 5
+      },
+      "actualCounts": {
+        "boxes": 5,
+        "lines": 5,
+        "labels": 5,
+        "boxesUnresolved": 0,
+        "linesUnresolved": 0,
+        "labelsUnresolved": 0
+      },
+      "expectedCount": 5,
+      "allMatched": true,
+      "preConfirmationObjects": 0,
+      "newestExpectedPivotTime": 1790820900,
+      "matchedZones": [
+        {
+          "t1": 1790805600,
+          "kind": -1,
+          "text": "S 2678.42 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790810100,
+          "kind": 1,
+          "text": "R 2694.33 BROKEN",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790813700,
+          "kind": -1,
+          "text": "S 2678.54 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790820000,
+          "kind": 1,
+          "text": "R 2694.61 BROKEN",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790820900,
+          "kind": -1,
+          "text": "S 2684.17 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        }
+      ]
+    },
+    "080-resolve-v4": {
+      "mode": "zones",
+      "tag": "080-resolve-v4",
+      "at": "2026-10-01T04:12:33.206Z",
+      "study": "7AVlth",
+      "loadedBars": 389,
+      "firstBarTime": 1790478000,
+      "formingBarTime": 1790827200,
+      "lastConfirmedTime": 1790826300,
+      "determinableWindow": [
+        1790482500,
+        1790821800
+      ],
+      "pivotVariant": "strictBoth",
+      "keep": 5,
+      "ttl": 10,
+      "simulatedWindowCounters": {
+        "created": 48,
+        "deletedLimit": 18,
+        "deletedTtl": 25,
+        "broken": 28,
+        "live": 5
+      },
+      "actualCounts": {
+        "boxes": 5,
+        "lines": 5,
+        "labels": 5,
+        "boxesUnresolved": 0,
+        "linesUnresolved": 0,
+        "labelsUnresolved": 0
+      },
+      "expectedCount": 5,
+      "allMatched": true,
+      "preConfirmationObjects": 0,
+      "newestExpectedPivotTime": 1790820900,
+      "matchedZones": [
+        {
+          "t1": 1790805600,
+          "kind": -1,
+          "text": "S 2678.42 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790810100,
+          "kind": 1,
+          "text": "R 2694.33 BROKEN@2696.07",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790813700,
+          "kind": -1,
+          "text": "S 2678.54 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790820000,
+          "kind": 1,
+          "text": "R 2694.61 BROKEN@2696.07",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790820900,
+          "kind": -1,
+          "text": "S 2684.17 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        }
+      ]
+    },
+    "085-resolve-ttl0": {
+      "mode": "zones",
+      "tag": "085-resolve-ttl0",
+      "at": "2026-10-01T04:13:02.780Z",
+      "study": "7AVlth",
+      "loadedBars": 389,
+      "firstBarTime": 1790478000,
+      "formingBarTime": 1790827200,
+      "lastConfirmedTime": 1790826300,
+      "determinableWindow": [
+        1790482500,
+        1790821800
+      ],
+      "pivotVariant": "strictBoth",
+      "keep": 5,
+      "ttl": 0,
+      "simulatedWindowCounters": {
+        "created": 48,
+        "deletedLimit": 16,
+        "deletedTtl": 29,
+        "broken": 29,
+        "live": 3
+      },
+      "actualCounts": {
+        "boxes": 5,
+        "lines": 5,
+        "labels": 5,
+        "boxesUnresolved": 0,
+        "linesUnresolved": 0,
+        "labelsUnresolved": 0
+      },
+      "expectedCount": 3,
+      "allMatched": false,
+      "preConfirmationObjects": 0,
+      "newestExpectedPivotTime": 1790820900,
+      "matchedZones": [
+        {
+          "t1": 1790805600,
+          "kind": -1,
+          "text": "S 2678.42 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790813700,
+          "kind": -1,
+          "text": "S 2678.54 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790820900,
+          "kind": -1,
+          "text": "S 2684.17 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        }
+      ],
+      "INVALID": "Harness error: 082 input change failed (PowerShell JSON quoting), study still ttl=10; comparing to ttl=0 simulation is invalid. Superseded by 086-090."
+    },
+    "090-resolve-ttl0": {
+      "mode": "zones",
+      "tag": "090-resolve-ttl0",
+      "at": "2026-10-01T04:13:36.137Z",
+      "study": "7AVlth",
+      "loadedBars": 389,
+      "firstBarTime": 1790478000,
+      "formingBarTime": 1790827200,
+      "lastConfirmedTime": 1790826300,
+      "determinableWindow": [
+        1790482500,
+        1790821800
+      ],
+      "pivotVariant": "strictBoth",
+      "keep": 5,
+      "ttl": 0,
+      "simulatedWindowCounters": {
+        "created": 48,
+        "deletedLimit": 16,
+        "deletedTtl": 29,
+        "broken": 29,
+        "live": 3
+      },
+      "actualCounts": {
+        "boxes": 3,
+        "lines": 3,
+        "labels": 3,
+        "boxesUnresolved": 0,
+        "linesUnresolved": 0,
+        "labelsUnresolved": 0
+      },
+      "expectedCount": 3,
+      "allMatched": true,
+      "preConfirmationObjects": 0,
+      "newestExpectedPivotTime": 1790820900,
+      "matchedZones": [
+        {
+          "t1": 1790805600,
+          "kind": -1,
+          "text": "S 2678.42 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790813700,
+          "kind": -1,
+          "text": "S 2678.54 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790820900,
+          "kind": -1,
+          "text": "S 2684.17 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        }
+      ]
+    },
+    "093-resolve-ttl10": {
+      "mode": "zones",
+      "tag": "093-resolve-ttl10",
+      "at": "2026-10-01T04:13:55.672Z",
+      "study": "7AVlth",
+      "loadedBars": 389,
+      "firstBarTime": 1790478000,
+      "formingBarTime": 1790827200,
+      "lastConfirmedTime": 1790826300,
+      "determinableWindow": [
+        1790482500,
+        1790821800
+      ],
+      "pivotVariant": "strictBoth",
+      "keep": 5,
+      "ttl": 10,
+      "simulatedWindowCounters": {
+        "created": 48,
+        "deletedLimit": 18,
+        "deletedTtl": 25,
+        "broken": 28,
+        "live": 5
+      },
+      "actualCounts": {
+        "boxes": 5,
+        "lines": 5,
+        "labels": 5,
+        "boxesUnresolved": 0,
+        "linesUnresolved": 0,
+        "labelsUnresolved": 0
+      },
+      "expectedCount": 5,
+      "allMatched": true,
+      "preConfirmationObjects": 0,
+      "newestExpectedPivotTime": 1790820900,
+      "matchedZones": [
+        {
+          "t1": 1790805600,
+          "kind": -1,
+          "text": "S 2678.42 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790810100,
+          "kind": 1,
+          "text": "R 2694.33 BROKEN@2696.07",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790813700,
+          "kind": -1,
+          "text": "S 2678.54 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790820000,
+          "kind": 1,
+          "text": "R 2694.61 BROKEN@2696.07",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790820900,
+          "kind": -1,
+          "text": "S 2684.17 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        }
+      ]
+    },
+    "116-resolve-v6": {
+      "mode": "zones",
+      "tag": "116-resolve-v6",
+      "at": "2026-10-01T04:15:09.205Z",
+      "study": "7AVlth",
+      "loadedBars": 390,
+      "firstBarTime": 1790478000,
+      "formingBarTime": 1790828100,
+      "lastConfirmedTime": 1790827200,
+      "determinableWindow": [
+        1790482500,
+        1790822700
+      ],
+      "pivotVariant": "strictBoth",
+      "keep": 5,
+      "ttl": 10,
+      "simulatedWindowCounters": {
+        "created": 48,
+        "deletedLimit": 18,
+        "deletedTtl": 25,
+        "broken": 28,
+        "live": 5
+      },
+      "actualCounts": {
+        "boxes": 5,
+        "lines": 5,
+        "labels": 5,
+        "boxesUnresolved": 0,
+        "linesUnresolved": 0,
+        "labelsUnresolved": 0
+      },
+      "expectedCount": 5,
+      "allMatched": true,
+      "preConfirmationObjects": 0,
+      "newestExpectedPivotTime": 1790820900,
+      "matchedZones": [
+        {
+          "t1": 1790805600,
+          "kind": -1,
+          "text": "S 2678.42 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790810100,
+          "kind": 1,
+          "text": "R 2694.33 BROKEN@2696.07",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790813700,
+          "kind": -1,
+          "text": "S 2678.54 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790820000,
+          "kind": 1,
+          "text": "R 2694.61 BROKEN@2696.07",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790820900,
+          "kind": -1,
+          "text": "S 2684.17 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        }
+      ]
+    },
+    "127-resolve-after-repeat": {
+      "mode": "zones",
+      "tag": "127-resolve-after-repeat",
+      "at": "2026-10-01T04:15:39.475Z",
+      "study": "7AVlth",
+      "loadedBars": 390,
+      "firstBarTime": 1790478000,
+      "formingBarTime": 1790828100,
+      "lastConfirmedTime": 1790827200,
+      "determinableWindow": [
+        1790482500,
+        1790822700
+      ],
+      "pivotVariant": "strictBoth",
+      "keep": 5,
+      "ttl": 10,
+      "simulatedWindowCounters": {
+        "created": 48,
+        "deletedLimit": 18,
+        "deletedTtl": 25,
+        "broken": 28,
+        "live": 5
+      },
+      "actualCounts": {
+        "boxes": 5,
+        "lines": 5,
+        "labels": 5,
+        "boxesUnresolved": 0,
+        "linesUnresolved": 0,
+        "labelsUnresolved": 0
+      },
+      "expectedCount": 5,
+      "allMatched": true,
+      "preConfirmationObjects": 0,
+      "newestExpectedPivotTime": 1790820900,
+      "matchedZones": [
+        {
+          "t1": 1790805600,
+          "kind": -1,
+          "text": "S 2678.42 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790810100,
+          "kind": 1,
+          "text": "R 2694.33 BROKEN@2696.07",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790813700,
+          "kind": -1,
+          "text": "S 2678.54 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790820000,
+          "kind": 1,
+          "text": "R 2694.61 BROKEN@2696.07",
+          "state": 1,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        },
+        {
+          "t1": 1790820900,
+          "kind": -1,
+          "text": "S 2684.17 INTACT",
+          "state": 0,
+          "boxRightOk": true,
+          "lineRightOk": true,
+          "textOk": true
+        }
+      ]
+    }
+  },
+  "logChecks": {
+    "v3": {
+      "console": "068-console-v3-logs-visible",
+      "resolve": "059-resolve-v3",
+      "scriptRows": 30,
+      "byEvent": {
+        "DELETE:limit": 13,
+        "CREATE": 12,
+        "BREAK": 5
+      },
+      "createConfirmLagAll5": true,
+      "createPriceChecked": 12,
+      "createPriceOk": 12,
+      "breakCloseChecked": 5,
+      "breakCloseOk": 5
+    },
+    "v4": {
+      "console": "079-console-v4",
+      "resolve": "080-resolve-v4",
+      "scriptRows": 30,
+      "byEvent": {
+        "DELETE:ttl": 7,
+        "CREATE": 12,
+        "BREAK": 6,
+        "DELETE:limit": 5
+      },
+      "createConfirmLagAll5": true,
+      "createPriceChecked": 12,
+      "createPriceOk": 12,
+      "breakCloseChecked": 6,
+      "breakCloseOk": 6
+    }
+  },
+  "scriptTables": {
+    "029-tables-v1": [
+      "S04 v1 | labels",
+      "pivotHighs | 1338",
+      "pivotLows | 1327",
+      "labelAll | 505"
+    ],
+    "048-tables-v2": [
+      "S04 | zones keep=30",
+      "created | 2665",
+      "deletedLimit | 2635",
+      "deletedTtl | n/a",
+      "broken | 2153",
+      "live | 30 expected=30",
+      "all box/line/label | 30/30/30",
+      "arraysAligned | true",
+      "mismatch | 0"
+    ],
+    "057-tables-v3": [
+      "S04 | zones keep=5",
+      "created | 2665",
+      "deletedLimit | 2660",
+      "deletedTtl | n/a",
+      "broken | 1468",
+      "live | 5 expected=5",
+      "all box/line/label | 5/5/5",
+      "arraysAligned | true",
+      "mismatch | 0"
+    ],
+    "078-tables-v4": [
+      "S04 | v4 keep=5 ttl=10",
+      "created | 2665",
+      "deletedLimit | 1219",
+      "deletedTtl | 1441",
+      "broken | 1554",
+      "live | 5 expected=5",
+      "all box/line/label | 5/5/5",
+      "arraysAligned | true",
+      "mismatch | 0"
+    ],
+    "088-tables-ttl0": [
+      "S04 | v4 keep=5 ttl=0",
+      "created | 2665",
+      "deletedLimit | 1007",
+      "deletedTtl | 1655",
+      "broken | 1655",
+      "live | 3 expected=3",
+      "all box/line/label | 3/3/3",
+      "arraysAligned | true",
+      "mismatch | 0"
+    ],
+    "092-tables-ttl10": [
+      "S04 | v4 keep=5 ttl=10",
+      "created | 2665",
+      "deletedLimit | 1219",
+      "deletedTtl | 1441",
+      "broken | 1554",
+      "live | 5 expected=5",
+      "all box/line/label | 5/5/5",
+      "arraysAligned | true",
+      "mismatch | 0"
+    ],
+    "105-tables-v5": [],
+    "115-tables-v6": [
+      "S04 | v4 keep=5 ttl=10",
+      "created | 2665",
+      "deletedLimit | 1219",
+      "deletedTtl | 1441",
+      "broken | 1554",
+      "live | 5 expected=5",
+      "all box/line/label | 5/5/5",
+      "arraysAligned | true",
+      "mismatch | 0"
+    ],
+    "123-tables-after-repeat": [
+      "S04 | v4 keep=5 ttl=10",
+      "created | 2665",
+      "deletedLimit | 1219",
+      "deletedTtl | 1441",
+      "broken | 1554",
+      "live | 5 expected=5",
+      "all box/line/label | 5/5/5",
+      "arraysAligned | true",
+      "mismatch | 0"
+    ],
+    "138-tables-after-reopen": [
+      "S04 | v4 keep=5 ttl=10",
+      "created | 2665",
+      "deletedLimit | 1219",
+      "deletedTtl | 1441",
+      "broken | 1554",
+      "live | 5 expected=5",
+      "all box/line/label | 5/5/5",
+      "arraysAligned | true",
+      "mismatch | 0"
+    ]
+  },
+  "commands": [
+    {
+      "tag": "000-tab-list-before",
+      "at": "2026-10-01T04:00:38.244Z",
+      "command": "node src/cli/index.js tab list",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 203,
+      "harness_accepted": true,
+      "fence_pre": null,
+      "fence_post": null,
+      "stderr": "",
+      "json": {
+        "success": true,
+        "tab_count": 6,
+        "tabs": [
+          {
+            "id": "D1AFFCCBC3A67669FD97D434AADFB942",
+            "chart_id": "KHbeIfLo",
+            "active": false
+          },
+          {
+            "id": "BACBB4E74A751DBFC2E3918B8E6B2B12",
+            "chart_id": "DgZswbBE",
+            "active": false
+          },
+          {
+            "id": "358BB580C74E309A605A52D3EDC6BDF9",
+            "chart_id": "kdn7wAFi",
+            "active": false
+          },
+          {
+            "id": "3D2E5C4CE6FF2209409B3094C7F0ABA2",
+            "chart_id": "XrSm3eti",
+            "active": false
+          },
+          {
+            "id": "7980FA5955C48DD48FF5EDBF9615BD45",
+            "chart_id": "nipHauoX",
+            "active": false
+          },
+          {
+            "id": "890408E3FA96D8076A7D49A8B3AF200A",
+            "chart_id": "8b3vQsAK",
+            "active": true
+          }
+        ]
+      }
+    },
+    {
+      "tag": "001-tab-new",
+      "at": "2026-10-01T04:00:39.399Z",
+      "command": "node src/cli/index.js tab new --layout new --name CLI-QA-S04-20261001",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 4891,
+      "harness_accepted": true,
+      "fence_pre": null,
+      "fence_post": null,
+      "stderr": "",
+      "json": {
+        "success": true,
+        "action": "new_layout_created",
+        "layout": "CLI-QA-S04-20261001",
+        "chart_id": "ofWK5ePT"
+      }
+    },
+    {
+      "tag": "002-tab-list-after",
+      "at": "2026-10-01T04:00:47.833Z",
+      "command": "node src/cli/index.js tab list",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 268,
+      "harness_accepted": true,
+      "fence_pre": null,
+      "fence_post": null,
+      "stderr": "",
+      "json": {
+        "success": true,
+        "tab_count": 7,
+        "tabs": [
+          {
+            "id": "D1AFFCCBC3A67669FD97D434AADFB942",
+            "chart_id": "KHbeIfLo",
+            "active": false
+          },
+          {
+            "id": "BACBB4E74A751DBFC2E3918B8E6B2B12",
+            "chart_id": "DgZswbBE",
+            "active": false
+          },
+          {
+            "id": "358BB580C74E309A605A52D3EDC6BDF9",
+            "chart_id": "kdn7wAFi",
+            "active": false
+          },
+          {
+            "id": "3D2E5C4CE6FF2209409B3094C7F0ABA2",
+            "chart_id": "XrSm3eti",
+            "active": false
+          },
+          {
+            "id": "7980FA5955C48DD48FF5EDBF9615BD45",
+            "chart_id": "nipHauoX",
+            "active": false
+          },
+          {
+            "id": "890408E3FA96D8076A7D49A8B3AF200A",
+            "chart_id": "8b3vQsAK",
+            "active": false
+          },
+          {
+            "id": "A80BFC8814BDE6007E9C57E8CB604788",
+            "chart_id": "ofWK5ePT",
+            "active": true
+          }
+        ]
+      }
+    },
+    {
+      "tag": "003-state-initial",
+      "at": "2026-10-01T04:00:55.342Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 state",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 144,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": null,
+        "version": null,
+        "modified": null,
+        "title": null
+      },
+      "fence_post": {
+        "id": null,
+        "version": null,
+        "modified": null,
+        "title": null
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "symbol": "BINANCE:ETHUSDT",
+        "resolution": "15",
+        "chartType": 1,
+        "studies": [
+          {
+            "id": "iBDNo5",
+            "name": "Volume"
+          }
+        ]
+      }
+    },
+    {
+      "tag": "004-pine-get-initial",
+      "at": "2026-10-01T04:00:56.587Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine get",
+      "expect_exit": 0,
+      "exit_code": 1,
+      "elapsed_ms": 31499,
+      "harness_accepted": false,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": null,
+        "version": null,
+        "modified": null,
+        "title": null
+      },
+      "fence_post": {
+        "id": null,
+        "version": null,
+        "modified": null,
+        "title": null
+      },
+      "stderr": "{\n  \"success\": false,\n  \"error\": \"Could not open Pine Editor or Monaco not found in React fiber tree.\"\n}\n",
+      "json": null
+    },
+    {
+      "tag": "005-diag-viewport",
+      "at": "2026-10-01T04:01:46.191Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 ui eval JSON.stringify({vis:document.visibilityState,w:innerWidth,h:innerHeight})",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 126,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": null,
+        "version": null,
+        "modified": null,
+        "title": null
+      },
+      "fence_post": {
+        "id": null,
+        "version": null,
+        "modified": null,
+        "title": null
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "result": "{\"vis\":\"hidden\",\"w\":0,\"h\":0}"
+      }
+    },
+    {
+      "tag": "007-pine-get-retry",
+      "at": "2026-10-01T04:02:30.929Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine get",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 824,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": null,
+        "version": null,
+        "modified": null,
+        "title": null
+      },
+      "fence_post": {
+        "id": null,
+        "version": null,
+        "modified": false,
+        "title": null
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "source": {
+          "chars": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "line_count": 1,
+        "char_count": 0
+      }
+    },
+    {
+      "tag": "010-check-v1-baseline-labels",
+      "at": "2026-10-01T04:04:40.592Z",
+      "command": "node src/cli/index.js pine check --file qa/pine/scenarios/s04-pivot-drawings/v1-baseline-labels.pine",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 483,
+      "harness_accepted": true,
+      "fence_pre": null,
+      "fence_post": null,
+      "stderr": "",
+      "json": {
+        "success": true,
+        "compiled": true,
+        "error_count": 0,
+        "warning_count": 0,
+        "note": "Pine Script compiled successfully."
+      }
+    },
+    {
+      "tag": "011-check-v2-zones-keep30",
+      "at": "2026-10-01T04:04:41.149Z",
+      "command": "node src/cli/index.js pine check --file qa/pine/scenarios/s04-pivot-drawings/v2-zones-keep30.pine",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 551,
+      "harness_accepted": true,
+      "fence_pre": null,
+      "fence_post": null,
+      "stderr": "",
+      "json": {
+        "success": true,
+        "compiled": true,
+        "error_count": 0,
+        "warning_count": 0,
+        "note": "Pine Script compiled successfully."
+      }
+    },
+    {
+      "tag": "012-check-v3-zones-keep5",
+      "at": "2026-10-01T04:04:41.772Z",
+      "command": "node src/cli/index.js pine check --file qa/pine/scenarios/s04-pivot-drawings/v3-zones-keep5.pine",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 491,
+      "harness_accepted": true,
+      "fence_pre": null,
+      "fence_post": null,
+      "stderr": "",
+      "json": {
+        "success": true,
+        "compiled": true,
+        "error_count": 0,
+        "warning_count": 0,
+        "note": "Pine Script compiled successfully."
+      }
+    },
+    {
+      "tag": "013-check-v4-delete-update",
+      "at": "2026-10-01T04:04:42.333Z",
+      "command": "node src/cli/index.js pine check --file qa/pine/scenarios/s04-pivot-drawings/v4-delete-update.pine",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 480,
+      "harness_accepted": true,
+      "fence_pre": null,
+      "fence_post": null,
+      "stderr": "",
+      "json": {
+        "success": true,
+        "compiled": true,
+        "error_count": 0,
+        "warning_count": 0,
+        "note": "Pine Script compiled successfully."
+      }
+    },
+    {
+      "tag": "014-check-v5-error-injected",
+      "at": "2026-10-01T04:04:42.885Z",
+      "command": "node src/cli/index.js pine check --file qa/pine/scenarios/s04-pivot-drawings/v5-error-injected.pine",
+      "expect_exit": 1,
+      "exit_code": 1,
+      "elapsed_ms": 498,
+      "harness_accepted": true,
+      "fence_pre": null,
+      "fence_post": null,
+      "stderr": "",
+      "json": {
+        "success": true,
+        "compiled": false,
+        "error_count": 2,
+        "warning_count": 0,
+        "errors": [
+          {
+            "line": 93,
+            "column": 24,
+            "end_line": 93,
+            "end_column": 37,
+            "message": "Could not find function or function reference 'box.qa_missing'"
+          },
+          {
+            "line": 95,
+            "column": 61,
+            "end_line": 95,
+            "end_column": 64,
+            "message": "Cannot call \"log.info\" with argument \"arg_1\"=\"pTtl\". An argument of \"unknown\" type was used but one from \"series int/float/bool/string/array<int/float/bool/string>\" is expected"
+          }
+        ]
+      }
+    },
+    {
+      "tag": "019-foreign-doc-observed",
+      "at": "2026-10-01T04:05:14.187Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 ui eval JSON.stringify({url:location.href})",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 130,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;d90436c7ff524821b19882294c3c4548",
+        "version": "9.0",
+        "modified": false,
+        "title": "CLI-QA-S03-EMA"
+      },
+      "fence_post": {
+        "id": "USER;d90436c7ff524821b19882294c3c4548",
+        "version": "9.0",
+        "modified": false,
+        "title": "CLI-QA-S03-EMA"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "result": "{\"url\":\"https://kr.tradingview.com/chart/ofWK5ePT/\"}"
+      }
+    },
+    {
+      "tag": "020-pine-new-indicator",
+      "at": "2026-10-01T04:05:22.240Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine new indicator",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 219,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;d90436c7ff524821b19882294c3c4548",
+        "version": "9.0",
+        "modified": false,
+        "title": "CLI-QA-S03-EMA"
+      },
+      "fence_post": {
+        "id": null,
+        "version": null,
+        "modified": true,
+        "title": "My script"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "type": "indicator",
+        "action": "new_script_created",
+        "template": "indicator"
+      }
+    },
+    {
+      "tag": "021-get-template",
+      "at": "2026-10-01T04:05:25.024Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine get",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 134,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": null,
+        "version": null,
+        "modified": true,
+        "title": "My script"
+      },
+      "fence_post": {
+        "id": null,
+        "version": null,
+        "modified": true,
+        "title": "My script"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "source": {
+          "chars": 47,
+          "sha256": "1f0fc5b36b487cf721c6dad8956174678ab95d3d82c6228769a8e718067a1045"
+        },
+        "line_count": 3,
+        "char_count": 47
+      }
+    },
+    {
+      "tag": "022-set-v1",
+      "at": "2026-10-01T04:05:32.781Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine set --file qa/pine/scenarios/s04-pivot-drawings/v1-baseline-labels.pine",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 139,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": null,
+        "version": null,
+        "modified": true,
+        "title": "My script"
+      },
+      "fence_post": {
+        "id": null,
+        "version": null,
+        "modified": true,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "lines_set": 32
+      }
+    },
+    {
+      "tag": "023-save-v1",
+      "at": "2026-10-01T04:05:35.477Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine save",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 1445,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": null,
+        "version": null,
+        "modified": true,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "saved": true,
+        "action": "saved_with_dialog",
+        "script_id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0"
+      }
+    },
+    {
+      "tag": "024-list-v1",
+      "at": "2026-10-01T04:05:49.309Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine list",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 272,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "scripts": [
+          {
+            "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+            "name": "CLI-QA-S04 Pivot Zones",
+            "title": "CLI-QA-S04 Pivot Zones",
+            "version": "1.0",
+            "modified": 1790827536
+          }
+        ],
+        "count": 25,
+        "source": {
+          "chars": 12,
+          "sha256": "edd69cf609067757576b2418a70658223d20e7c7cfc2067af0956789ccfb0249"
+        },
+        "scripts_total": 25
+      }
+    },
+    {
+      "tag": "025-compile-v1",
+      "at": "2026-10-01T04:05:58.404Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine compile",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 589,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "compiled": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": [],
+        "button_clicked": "addToChart",
+        "compilation_token": "38c1fd98-649f-4f48-bee7-046888a9c16c"
+      }
+    },
+    {
+      "tag": "026-state-v1",
+      "at": "2026-10-01T04:06:01.427Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 state",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 143,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "symbol": "BINANCE:ETHUSDT",
+        "resolution": "15",
+        "chartType": 1,
+        "studies": [
+          {
+            "id": "7AVlth",
+            "name": "CLI-QA-S04 Pivot Zones"
+          },
+          {
+            "id": "iBDNo5",
+            "name": "Volume"
+          }
+        ]
+      }
+    },
+    {
+      "tag": "027-errors-v1",
+      "at": "2026-10-01T04:06:03.955Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine errors",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 140,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "has_errors": false,
+        "error_count": 0,
+        "warning_count": 0,
+        "errors": [],
+        "warnings": []
+      }
+    },
+    {
+      "tag": "028-labels-v1",
+      "at": "2026-10-01T04:06:06.506Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data labels --filter CLI-QA-S04 -n 500 -v",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 143,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 1,
+        "studies": [
+          {
+            "name": "CLI-QA-S04 Pivot Zones",
+            "total_labels": 505,
+            "showing": 500,
+            "labels": {
+              "count": 500,
+              "sample": [
+                {
+                  "id": 2167,
+                  "text": "PL 2355.71",
+                  "price": 2355.71,
+                  "x": 5,
+                  "yloc": "pr",
+                  "size": "normal",
+                  "textColor": 1,
+                  "color": 2
+                },
+                {
+                  "id": 2168,
+                  "text": "PH 2426.03",
+                  "price": 2426.03,
+                  "x": 6,
+                  "yloc": "pr",
+                  "size": "normal",
+                  "textColor": 1,
+                  "color": 0
+                },
+                {
+                  "id": 2169,
+                  "text": "PL 2404.51",
+                  "price": 2404.51,
+                  "x": 7,
+                  "yloc": "pr",
+                  "size": "normal",
+                  "textColor": 1,
+                  "color": 2
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "tag": "029-tables-v1",
+      "at": "2026-10-01T04:06:09.049Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data tables --filter CLI-QA-S04",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 142,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 1,
+        "studies": [
+          {
+            "name": "CLI-QA-S04 Pivot Zones",
+            "tables": [
+              {
+                "rows": [
+                  "S04 v1 | labels",
+                  "pivotHighs | 1338",
+                  "pivotLows | 1327",
+                  "labelAll | 505"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "tag": "030-ohlcv-v1",
+      "at": "2026-10-01T04:06:11.570Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 ohlcv -n 500",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 145,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "bar_count": 389,
+        "total_available": 389,
+        "source": {
+          "chars": 11,
+          "sha256": "592602a43b4bdbb85f3ccfd5dfb4090564f4459fb3489a1baf61a305e82a25fb"
+        },
+        "bars": {
+          "count": 389,
+          "first": {
+            "time": 1790478000,
+            "open": 2697.87,
+            "high": 2700.85,
+            "low": 2697.87,
+            "close": 2700.1,
+            "volume": 547.0175
+          },
+          "last": {
+            "time": 1790827200,
+            "open": 2696.08,
+            "high": 2698.25,
+            "low": 2696.04,
+            "close": 2698.25,
+            "volume": 721.2424
+          }
+        }
+      }
+    },
+    {
+      "tag": "031-probe-label-raw",
+      "at": "2026-10-01T04:06:45.733Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 ui eval <read-only probe expression, see probe-expr.mjs / HANDOFF>",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 137,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "result": "{\"labelRawKeys\":[\"id\",\"x\",\"y\",\"yl\",\"t\",\"st\",\"ci\",\"tci\",\"sz\",\"ta\",\"tt\"],\"labelRaw\":{\"id\":2666,\"x\":502,\"y\":2684.17,\"yl\":\"pr\",\"t\":\"PL 2684.17\",\"st\":\"lup\",\"ci\":2,\"tci\":1,\"sz\":\"normal\",\"ta\":\"center\",\"tt\":\"\"},\"graphicsKeys\":{\"_indexes\":\"array503\",\"_hhistsByTimePointIndex\":[],\"_primitivesCollection\":[\"horizlines\",\"vertlines\",\"lines\",\"hlines\",\"textmarks\",\"shapemarks\",\"backgrounds\",\"polygons\",\"trendchannels\",\"hhists\",\"ovp\",\"dwgtablecells\"]},\"collKeys\":[\"_primitivesDataById\",\"_primitiveById\",\"_changed\",\"_cleared\",\"_materializePrimitive\",\"_isRematerializationRequiredWithNewIndexes\"]}"
+      }
+    },
+    {
+      "tag": "032-probe-index-map",
+      "at": "2026-10-01T04:06:57.789Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 ui eval <read-only probe expression, see probe-expr.mjs / HANDOFF>",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 140,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "result": "{\"ixLen\":503,\"ixHead\":[-2000000,-2000000,-2000000,-2000000,-2000000,-2000000],\"ixTail\":[266,275,280,284,291,292],\"barsSize\":389,\"firstIndex\":-89,\"firstTime\":1790478000,\"lastIndex\":299,\"lastTime\":1790827200,\"timeAtIxTail\":[1790813700,1790820000,1790820900],\"timeAtIxHead\":[null,null,null]}"
+      }
+    },
+    {
+      "tag": "033-resolve-v1",
+      "at": "2026-10-01T04:07:26.083Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 ui eval <read-only probe expression, see probe-expr.mjs / HANDOFF>",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 150,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "result": {
+          "chars": 52908,
+          "note": "resolver snapshot; see verify-*.json in ignored results"
+        }
+      }
+    },
+    {
+      "tag": "040-set-v2",
+      "at": "2026-10-01T04:08:27.084Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine set --file qa/pine/scenarios/s04-pivot-drawings/v2-zones-keep30.pine",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 148,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": true,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "lines_set": 119
+      }
+    },
+    {
+      "tag": "041-save-v2",
+      "at": "2026-10-01T04:08:29.724Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine save",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 2479,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "1.0",
+        "modified": true,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "2.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "saved": true,
+        "action": "saved",
+        "script_id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "2.0"
+      }
+    },
+    {
+      "tag": "042-compile-v2",
+      "at": "2026-10-01T04:08:34.562Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine compile",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 139,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "2.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "2.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "compiled": true,
+        "compile_performed": false,
+        "unchanged": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": []
+      }
+    },
+    {
+      "tag": "043-errors-v2",
+      "at": "2026-10-01T04:08:37.084Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine errors",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 134,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "2.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "2.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "has_errors": false,
+        "error_count": 0,
+        "warning_count": 0,
+        "errors": [],
+        "warnings": []
+      }
+    },
+    {
+      "tag": "044-state-v2",
+      "at": "2026-10-01T04:08:39.587Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 state",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 140,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "2.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "2.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "symbol": "BINANCE:ETHUSDT",
+        "resolution": "15",
+        "chartType": 1,
+        "studies": [
+          {
+            "id": "7AVlth",
+            "name": "CLI-QA-S04 Pivot Zones"
+          },
+          {
+            "id": "iBDNo5",
+            "name": "Volume"
+          }
+        ]
+      }
+    },
+    {
+      "tag": "045-boxes-v2",
+      "at": "2026-10-01T04:08:42.089Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data boxes --filter CLI-QA-S04 -v",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 137,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "2.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "2.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 1,
+        "studies": [
+          {
+            "name": "CLI-QA-S04 Pivot Zones",
+            "total_boxes": 30,
+            "zones": [
+              {
+                "high": 2748.6,
+                "low": 2737.21
+              },
+              {
+                "high": 2738.51,
+                "low": 2731.01
+              },
+              {
+                "high": 2735,
+                "low": 2723.44
+              },
+              {
+                "high": 2703.9,
+                "low": 2702.78
+              },
+              {
+                "high": 2700,
+                "low": 2697.03
+              },
+              {
+                "high": 2699.85,
+                "low": 2689.26
+              },
+              {
+                "high": 2698,
+                "low": 2695.83
+              },
+              {
+                "high": 2695.38,
+                "low": 2691
+              },
+              {
+                "high": 2694.61,
+                "low": 2691.06
+              },
+              {
+                "high": 2694.41,
+                "low": 2687.62
+              },
+              {
+                "high": 2694.33,
+                "low": 2689.21
+              },
+              {
+                "high": 2690.36,
+                "low": 2685.37
+              },
+              {
+                "high": 2690,
+                "low": 2686.16
+              },
+              {
+                "high": 2689.14,
+                "low": 2684.17
+              },
+              {
+                "high": 2688.51,
+                "low": 2687.86
+              },
+              {
+                "high": 2682.62,
+                "low": 2678.42
+              },
+              {
+                "high": 2682.3,
+                "low": 2678.54
+              },
+              {
+                "high": 2680.68,
+                "low": 2675
+              },
+              {
+                "high": 2680.62,
+                "low": 2678.41
+              },
+              {
+                "high": 2678.32,
+                "low": 2672.58
+              },
+              {
+                "high": 2673.96,
+                "low": 2668
+              },
+              {
+                "high": 2672.86,
+                "low": 2668.4
+              },
+              {
+                "high": 2672.74,
+                "low": 2665
+              },
+              {
+                "high": 2671.79,
+                "low": 2667.86
+              },
+              {
+                "high": 2670.62,
+                "low": 2668.08
+              },
+              {
+                "high": 2669.61,
+                "low": 2667.94
+              },
+              {
+                "high": 2669.47,
+                "low": 2656
+              },
+              {
+                "high": 2668.95,
+                "low": 2666.19
+              },
+              {
+                "high": 2662.07,
+                "low": 2656.92
+              },
+              {
+                "high": 2656.23,
+                "low": 2652.2
+              }
+            ],
+            "all_boxes": {
+              "count": 30,
+              "sample": [
+                {
+                  "id": 7907,
+                  "high": 2672.74,
+                  "low": 2665,
+                  "x1": 0,
+                  "x2": 6,
+                  "borderColor": 4287003512,
+                  "bgColor": 646347640
+                },
+                {
+                  "id": 7910,
+                  "high": 2690,
+                  "low": 2686.16,
+                  "x1": 1,
+                  "x2": 4,
+                  "borderColor": 4287003512,
+                  "bgColor": 646347640
+                },
+                {
+                  "id": 7913,
+                  "high": 2671.79,
+                  "low": 2667.86,
+                  "x1": 2,
+                  "x2": 6,
+                  "borderColor": 4287003512,
+                  "bgColor": 646347640
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "tag": "046-lines-v2",
+      "at": "2026-10-01T04:08:44.677Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data lines --filter CLI-QA-S04 -v",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 143,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "2.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "2.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 1,
+        "studies": [
+          {
+            "name": "CLI-QA-S04 Pivot Zones",
+            "total_lines": 30,
+            "horizontal_levels": [
+              2742.905,
+              2734.76,
+              2729.22,
+              2703.34,
+              2698.515,
+              2696.915,
+              2694.555,
+              2693.19,
+              2692.835,
+              2691.77,
+              2691.015,
+              2688.185,
+              2688.08,
+              2687.865,
+              2686.655,
+              2680.52,
+              2680.42,
+              2679.515,
+              2677.84,
+              2675.45,
+              2670.98,
+              2670.63,
+              2669.825,
+              2669.35,
+              2668.87,
+              2668.775,
+              2667.57,
+              2662.735,
+              2659.495,
+              2654.215
+            ],
+            "all_lines": {
+              "count": 30,
+              "sample": [
+                {
+                  "id": 7908,
+                  "y1": 2668.87,
+                  "y2": 2668.87,
+                  "x1": 0,
+                  "x2": 6,
+                  "horizontal": true,
+                  "style": "dsh",
+                  "width": 1,
+                  "color": 4287003512
+                },
+                {
+                  "id": 7911,
+                  "y1": 2688.08,
+                  "y2": 2688.08,
+                  "x1": 1,
+                  "x2": 4,
+                  "horizontal": true,
+                  "style": "dsh",
+                  "width": 1,
+                  "color": 4287003512
+                },
+                {
+                  "id": 7914,
+                  "y1": 2669.825,
+                  "y2": 2669.825,
+                  "x1": 2,
+                  "x2": 6,
+                  "horizontal": true,
+                  "style": "dsh",
+                  "width": 1,
+                  "color": 4287003512
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "tag": "047-labels-v2",
+      "at": "2026-10-01T04:08:47.221Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data labels --filter CLI-QA-S04 -n 500 -v",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 139,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "2.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "2.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 1,
+        "studies": [
+          {
+            "name": "CLI-QA-S04 Pivot Zones",
+            "total_labels": 30,
+            "showing": 30,
+            "labels": {
+              "count": 30,
+              "sample": [
+                {
+                  "id": 7909,
+                  "text": "S 2665.00 BROKEN",
+                  "price": 2665,
+                  "x": 0,
+                  "yloc": "pr",
+                  "size": "small",
+                  "textColor": 4294967295,
+                  "color": 4287003512
+                },
+                {
+                  "id": 7912,
+                  "text": "R 2690.00 BROKEN",
+                  "price": 2690,
+                  "x": 1,
+                  "yloc": "pr",
+                  "size": "small",
+                  "textColor": 4294967295,
+                  "color": 4287003512
+                },
+                {
+                  "id": 7915,
+                  "text": "S 2667.86 BROKEN",
+                  "price": 2667.86,
+                  "x": 2,
+                  "yloc": "pr",
+                  "size": "small",
+                  "textColor": 4294967295,
+                  "color": 4287003512
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "tag": "048-tables-v2",
+      "at": "2026-10-01T04:08:49.700Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data tables --filter CLI-QA-S04",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 138,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "2.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "2.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 1,
+        "studies": [
+          {
+            "name": "CLI-QA-S04 Pivot Zones",
+            "tables": [
+              {
+                "rows": [
+                  "S04 | zones keep=30",
+                  "created | 2665",
+                  "deletedLimit | 2635",
+                  "deletedTtl | n/a",
+                  "broken | 2153",
+                  "live | 30 expected=30",
+                  "all box/line/label | 30/30/30",
+                  "arraysAligned | true",
+                  "mismatch | 0"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "tag": "049-resolve-v2",
+      "at": "2026-10-01T04:08:59.074Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 ui eval <read-only probe expression, see probe-expr.mjs / HANDOFF>",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 136,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "2.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "2.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "result": {
+          "chars": 27929,
+          "note": "resolver snapshot; see verify-*.json in ignored results"
+        }
+      }
+    },
+    {
+      "tag": "050-set-v3",
+      "at": "2026-10-01T04:09:14.084Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine set --file qa/pine/scenarios/s04-pivot-drawings/v3-zones-keep5.pine",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 174,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "2.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "2.0",
+        "modified": true,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "lines_set": 119
+      }
+    },
+    {
+      "tag": "051-save-v3",
+      "at": "2026-10-01T04:09:16.845Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine save",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 2308,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "2.0",
+        "modified": true,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "saved": true,
+        "action": "saved",
+        "script_id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0"
+      }
+    },
+    {
+      "tag": "052-compile-v3",
+      "at": "2026-10-01T04:09:21.535Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine compile",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 140,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "compiled": true,
+        "compile_performed": false,
+        "unchanged": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": []
+      }
+    },
+    {
+      "tag": "053-state-v3",
+      "at": "2026-10-01T04:09:24.271Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 state",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 143,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "symbol": "BINANCE:ETHUSDT",
+        "resolution": "15",
+        "chartType": 1,
+        "studies": [
+          {
+            "id": "7AVlth",
+            "name": "CLI-QA-S04 Pivot Zones"
+          },
+          {
+            "id": "iBDNo5",
+            "name": "Volume"
+          }
+        ]
+      }
+    },
+    {
+      "tag": "054-boxes-v3",
+      "at": "2026-10-01T04:09:26.970Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data boxes --filter CLI-QA-S04 -v",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 142,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 1,
+        "studies": [
+          {
+            "name": "CLI-QA-S04 Pivot Zones",
+            "total_boxes": 5,
+            "zones": [
+              {
+                "high": 2694.61,
+                "low": 2691.06
+              },
+              {
+                "high": 2694.33,
+                "low": 2689.21
+              },
+              {
+                "high": 2689.14,
+                "low": 2684.17
+              },
+              {
+                "high": 2682.62,
+                "low": 2678.42
+              },
+              {
+                "high": 2682.3,
+                "low": 2678.54
+              }
+            ],
+            "all_boxes": {
+              "count": 5,
+              "sample": [
+                {
+                  "id": 7982,
+                  "high": 2682.62,
+                  "low": 2678.42,
+                  "x1": 0,
+                  "x2": 5,
+                  "borderColor": 4286683400,
+                  "bgColor": 646027528
+                },
+                {
+                  "id": 7985,
+                  "high": 2694.33,
+                  "low": 2689.21,
+                  "x1": 1,
+                  "x2": 5,
+                  "borderColor": 4287003512,
+                  "bgColor": 646347640
+                },
+                {
+                  "id": 7988,
+                  "high": 2682.3,
+                  "low": 2678.54,
+                  "x1": 2,
+                  "x2": 5,
+                  "borderColor": 4286683400,
+                  "bgColor": 646027528
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "tag": "055-lines-v3",
+      "at": "2026-10-01T04:09:29.924Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data lines --filter CLI-QA-S04 -v",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 139,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 1,
+        "studies": [
+          {
+            "name": "CLI-QA-S04 Pivot Zones",
+            "total_lines": 5,
+            "horizontal_levels": [
+              2692.835,
+              2691.77,
+              2686.655,
+              2680.52,
+              2680.42
+            ],
+            "all_lines": {
+              "count": 5,
+              "sample": [
+                {
+                  "id": 7983,
+                  "y1": 2680.52,
+                  "y2": 2680.52,
+                  "x1": 0,
+                  "x2": 5,
+                  "horizontal": true,
+                  "style": "dsh",
+                  "width": 1,
+                  "color": 4286683400
+                },
+                {
+                  "id": 7986,
+                  "y1": 2691.77,
+                  "y2": 2691.77,
+                  "x1": 1,
+                  "x2": 5,
+                  "horizontal": true,
+                  "style": "dsh",
+                  "width": 1,
+                  "color": 4287003512
+                },
+                {
+                  "id": 7989,
+                  "y1": 2680.42,
+                  "y2": 2680.42,
+                  "x1": 2,
+                  "x2": 5,
+                  "horizontal": true,
+                  "style": "dsh",
+                  "width": 1,
+                  "color": 4286683400
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "tag": "056-labels-v3",
+      "at": "2026-10-01T04:09:32.536Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data labels --filter CLI-QA-S04 -n 500 -v",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 151,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 1,
+        "studies": [
+          {
+            "name": "CLI-QA-S04 Pivot Zones",
+            "total_labels": 5,
+            "showing": 5,
+            "labels": {
+              "count": 5,
+              "sample": [
+                {
+                  "id": 7984,
+                  "text": "S 2678.42 INTACT",
+                  "price": 2678.42,
+                  "x": 0,
+                  "yloc": "pr",
+                  "size": "small",
+                  "textColor": 4294967295,
+                  "color": 4286683400
+                },
+                {
+                  "id": 7987,
+                  "text": "R 2694.33 BROKEN",
+                  "price": 2694.33,
+                  "x": 1,
+                  "yloc": "pr",
+                  "size": "small",
+                  "textColor": 4294967295,
+                  "color": 4287003512
+                },
+                {
+                  "id": 7990,
+                  "text": "S 2678.54 INTACT",
+                  "price": 2678.54,
+                  "x": 2,
+                  "yloc": "pr",
+                  "size": "small",
+                  "textColor": 4294967295,
+                  "color": 4286683400
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "tag": "057-tables-v3",
+      "at": "2026-10-01T04:09:35.161Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data tables --filter CLI-QA-S04",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 136,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 1,
+        "studies": [
+          {
+            "name": "CLI-QA-S04 Pivot Zones",
+            "tables": [
+              {
+                "rows": [
+                  "S04 | zones keep=5",
+                  "created | 2665",
+                  "deletedLimit | 2660",
+                  "deletedTtl | n/a",
+                  "broken | 1468",
+                  "live | 5 expected=5",
+                  "all box/line/label | 5/5/5",
+                  "arraysAligned | true",
+                  "mismatch | 0"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "tag": "058-console-v3",
+      "at": "2026-10-01T04:09:37.876Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine console",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 141,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "entries": {
+          "count": 10,
+          "scriptLogRows": 0,
+          "last3": [
+            "“CLI-QA-S04 Pivot Zones”이 세이브되었습니다",
+            "컴파일 중...",
+            "“CLI-QA-S04 Pivot Zones”이 세이브되었습니다"
+          ]
+        },
+        "entry_count": 10
+      }
+    },
+    {
+      "tag": "059-resolve-v3",
+      "at": "2026-10-01T04:09:40.881Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 ui eval <read-only probe expression, see probe-expr.mjs / HANDOFF>",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 141,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "result": {
+          "chars": 20170,
+          "note": "resolver snapshot; see verify-*.json in ignored results"
+        }
+      }
+    },
+    {
+      "tag": "060-probe-logs-widget",
+      "at": "2026-10-01T04:10:19.599Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 ui eval <read-only probe expression, see probe-expr.mjs / HANDOFF>",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 131,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "result": {
+          "chars": 708,
+          "note": "resolver snapshot; see verify-*.json in ignored results"
+        }
+      }
+    },
+    {
+      "tag": "061-probe-widgetbar",
+      "at": "2026-10-01T04:10:32.069Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 ui eval <read-only probe expression, see probe-expr.mjs / HANDOFF>",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 146,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "result": "{\"rb\":[\"right-toolbar|\",\"base|왓치리스트, 상세 정보 및 뉴스\",\"alerts|얼러트\",\"object_tree|오브젝트 트리 및 데이터 윈도우\",\"copilot-dialog-button|AI 코파일럿\",\"screener-dialog-button|스크리너\",\"pine-dialog-button|Pine\",\"calendar-dialog-button|캘린더\",\"community-hub-button|커뮤니티\",\"notifications-button|알림\",\"chats-button|채팅\",\"|프로덕트\",\"help-button|헬프 센터\"],\"wb\":[\"rightWidgetBarSettled\",\"bottomWidgetBar\"],\"hasRWB\":\"undefined\",\"logsParent\":\"widgetbar-page\"}"
+      }
+    },
+    {
+      "tag": "062-probe-logs-button",
+      "at": "2026-10-01T04:10:44.804Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 ui eval <read-only probe expression, see probe-expr.mjs / HANDOFF>",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 147,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "result": "[{\"tag\":\"BUTTON\",\"dn\":null,\"qa\":\"main-menu-button\",\"aria\":\"로그인계정: <redacted>\\n활성 레이아웃: CLI-QA-S04-20261001\",\"txt\":\"\"},{\"tag\":\"BUTTON\",\"dn\":null,\"qa\":null,\"aria\":\"로그 스케일 전환\",\"txt\":\"L\"}]"
+      }
+    },
+    {
+      "tag": "063-probe-pine-buttons",
+      "at": "2026-10-01T04:10:57.855Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 ui eval <read-only probe expression, see probe-expr.mjs / HANDOFF>",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 141,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "result": "[\"split-view-button|분할 화면을 오버레이로 이동|\",\"|패널 접기|\",\"fullscreen-button|전체 화면 모드|\",\"|클로즈|\",\"add-script-to-chart|차트 업데이트|\",\"pine-script-save-button||저장됨저장됨\",\"publish-script|스크립트를 커뮤니티와 공유하세요|스크립트 퍼블리쉬스크립트 퍼블리쉬\",\"script-more-options|더보기|\",\"||\",\"||3 ∙ 오늘, 13:09\",\"||라인 1, Col 1\"]"
+      }
+    },
+    {
+      "tag": "064-ui-open-more-menu",
+      "at": "2026-10-01T04:11:08.880Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 ui eval <read-only probe expression, see probe-expr.mjs / HANDOFF>",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 159,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "result": {}
+      }
+    },
+    {
+      "tag": "065-probe-logs-item",
+      "at": "2026-10-01T04:11:19.555Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 ui eval <read-only probe expression, see probe-expr.mjs / HANDOFF>",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 143,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "result": "{\"logsItem\":[{\"vis\":true,\"txt\":\"파인 로그\"}],\"menuOpen\":3}"
+      }
+    },
+    {
+      "tag": "066-ui-click-pine-logs",
+      "at": "2026-10-01T04:11:31.989Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 ui eval <read-only probe expression, see probe-expr.mjs / HANDOFF>",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 157,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "result": "clicked"
+      }
+    },
+    {
+      "tag": "067-probe-after-logs-click",
+      "at": "2026-10-01T04:11:36.034Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 ui eval <read-only probe expression, see probe-expr.mjs / HANDOFF>",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 151,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "result": "{\"dialogs\":[],\"yes\":0,\"logsVisible\":true,\"rows\":30}"
+      }
+    },
+    {
+      "tag": "068-console-v3-logs-visible",
+      "at": "2026-10-01T04:11:43.754Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine console",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 138,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "entries": {
+          "count": 40,
+          "scriptLogRows": 30,
+          "last3": [
+            "[2026-10-01T12:30:00.000+09:00]: DELETE limit pivotBar=20,527 bar=20,558",
+            "[2026-10-01T12:45:00.000+09:00]: BREAK kind=1 pivotBar=20,541 breakBar=20,559 close=2,696.07",
+            "[2026-10-01T12:45:00.000+09:00]: BREAK kind=1 pivotBar=20,552 breakBar=20,559 close=2,696.07"
+          ]
+        },
+        "entry_count": 40
+      }
+    },
+    {
+      "tag": "070-set-v4",
+      "at": "2026-10-01T04:12:04.136Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine set --file qa/pine/scenarios/s04-pivot-drawings/v4-delete-update.pine",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 152,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": true,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "lines_set": 137
+      }
+    },
+    {
+      "tag": "071-save-v4",
+      "at": "2026-10-01T04:12:06.857Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine save",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 2946,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "3.0",
+        "modified": true,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "saved": true,
+        "action": "saved",
+        "script_id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0"
+      }
+    },
+    {
+      "tag": "072-compile-v4",
+      "at": "2026-10-01T04:12:12.229Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine compile",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 145,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "compiled": true,
+        "compile_performed": false,
+        "unchanged": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": []
+      }
+    },
+    {
+      "tag": "073-errors-v4",
+      "at": "2026-10-01T04:12:14.747Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine errors",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 156,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "has_errors": false,
+        "error_count": 0,
+        "warning_count": 0,
+        "errors": [],
+        "warnings": []
+      }
+    },
+    {
+      "tag": "074-state-v4",
+      "at": "2026-10-01T04:12:17.256Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 state",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 134,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "symbol": "BINANCE:ETHUSDT",
+        "resolution": "15",
+        "chartType": 1,
+        "studies": [
+          {
+            "id": "7AVlth",
+            "name": "CLI-QA-S04 Pivot Zones"
+          },
+          {
+            "id": "iBDNo5",
+            "name": "Volume"
+          }
+        ]
+      }
+    },
+    {
+      "tag": "075-boxes-v4",
+      "at": "2026-10-01T04:12:19.869Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data boxes --filter CLI-QA-S04 -v",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 135,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 1,
+        "studies": [
+          {
+            "name": "CLI-QA-S04 Pivot Zones",
+            "total_boxes": 5,
+            "zones": [
+              {
+                "high": 2694.61,
+                "low": 2691.06
+              },
+              {
+                "high": 2694.33,
+                "low": 2689.21
+              },
+              {
+                "high": 2689.14,
+                "low": 2684.17
+              },
+              {
+                "high": 2682.62,
+                "low": 2678.42
+              },
+              {
+                "high": 2682.3,
+                "low": 2678.54
+              }
+            ],
+            "all_boxes": {
+              "count": 5,
+              "sample": [
+                {
+                  "id": 14849,
+                  "high": 2682.62,
+                  "low": 2678.42,
+                  "x1": 0,
+                  "x2": 5,
+                  "borderColor": 4286683400,
+                  "bgColor": 646027528
+                },
+                {
+                  "id": 14854,
+                  "high": 2694.33,
+                  "low": 2689.21,
+                  "x1": 1,
+                  "x2": 5,
+                  "borderColor": 4287003512,
+                  "bgColor": 646347640
+                },
+                {
+                  "id": 14859,
+                  "high": 2682.3,
+                  "low": 2678.54,
+                  "x1": 2,
+                  "x2": 5,
+                  "borderColor": 4286683400,
+                  "bgColor": 646027528
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "tag": "076-lines-v4",
+      "at": "2026-10-01T04:12:22.438Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data lines --filter CLI-QA-S04 -v",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 143,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 1,
+        "studies": [
+          {
+            "name": "CLI-QA-S04 Pivot Zones",
+            "total_lines": 5,
+            "horizontal_levels": [
+              2692.835,
+              2691.77,
+              2686.655,
+              2680.52,
+              2680.42
+            ],
+            "all_lines": {
+              "count": 5,
+              "sample": [
+                {
+                  "id": 14850,
+                  "y1": 2680.52,
+                  "y2": 2680.52,
+                  "x1": 0,
+                  "x2": 5,
+                  "horizontal": true,
+                  "style": "dsh",
+                  "width": 1,
+                  "color": 4286683400
+                },
+                {
+                  "id": 14855,
+                  "y1": 2691.77,
+                  "y2": 2691.77,
+                  "x1": 1,
+                  "x2": 5,
+                  "horizontal": true,
+                  "style": "dsh",
+                  "width": 1,
+                  "color": 4287003512
+                },
+                {
+                  "id": 14860,
+                  "y1": 2680.42,
+                  "y2": 2680.42,
+                  "x1": 2,
+                  "x2": 5,
+                  "horizontal": true,
+                  "style": "dsh",
+                  "width": 1,
+                  "color": 4286683400
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "tag": "077-labels-v4",
+      "at": "2026-10-01T04:12:24.955Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data labels --filter CLI-QA-S04 -n 500 -v",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 136,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 1,
+        "studies": [
+          {
+            "name": "CLI-QA-S04 Pivot Zones",
+            "total_labels": 5,
+            "showing": 5,
+            "labels": {
+              "count": 5,
+              "sample": [
+                {
+                  "id": 14851,
+                  "text": "S 2678.42 INTACT",
+                  "price": 2678.42,
+                  "x": 0,
+                  "yloc": "pr",
+                  "size": "small",
+                  "textColor": 4294967295,
+                  "color": 4286683400
+                },
+                {
+                  "id": 14856,
+                  "text": "R 2694.33 BROKEN@2696.07",
+                  "price": 2694.33,
+                  "x": 1,
+                  "yloc": "pr",
+                  "size": "small",
+                  "textColor": 4294967295,
+                  "color": 4287003512
+                },
+                {
+                  "id": 14861,
+                  "text": "S 2678.54 INTACT",
+                  "price": 2678.54,
+                  "x": 2,
+                  "yloc": "pr",
+                  "size": "small",
+                  "textColor": 4294967295,
+                  "color": 4286683400
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "tag": "078-tables-v4",
+      "at": "2026-10-01T04:12:27.524Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data tables --filter CLI-QA-S04",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 133,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 1,
+        "studies": [
+          {
+            "name": "CLI-QA-S04 Pivot Zones",
+            "tables": [
+              {
+                "rows": [
+                  "S04 | v4 keep=5 ttl=10",
+                  "created | 2665",
+                  "deletedLimit | 1219",
+                  "deletedTtl | 1441",
+                  "broken | 1554",
+                  "live | 5 expected=5",
+                  "all box/line/label | 5/5/5",
+                  "arraysAligned | true",
+                  "mismatch | 0"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "tag": "079-console-v4",
+      "at": "2026-10-01T04:12:30.079Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine console",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 144,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "entries": {
+          "count": 42,
+          "scriptLogRows": 30,
+          "last3": [
+            "[2026-10-01T12:30:00.000+09:00]: DELETE limit pivotBar=20,527 bar=20,558",
+            "[2026-10-01T12:45:00.000+09:00]: BREAK kind=1 pivotBar=20,541 breakBar=20,559 close=2,696.07",
+            "[2026-10-01T12:45:00.000+09:00]: BREAK kind=1 pivotBar=20,552 breakBar=20,559 close=2,696.07"
+          ]
+        },
+        "entry_count": 42
+      }
+    },
+    {
+      "tag": "080-resolve-v4",
+      "at": "2026-10-01T04:12:33.206Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 ui eval <read-only probe expression, see probe-expr.mjs / HANDOFF>",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 133,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "result": {
+          "chars": 20201,
+          "note": "resolver snapshot; see verify-*.json in ignored results"
+        }
+      }
+    },
+    {
+      "tag": "081-indicator-get-v4",
+      "at": "2026-10-01T04:12:49.640Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 indicator get 7AVlth",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 137,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "entity_id": "7AVlth",
+        "visible": true,
+        "inputs": [
+          {
+            "id": "pineId",
+            "value": "USER;e4b6a39e8a79466bb3134287eb3713a0"
+          },
+          {
+            "id": "pineVersion",
+            "value": "4.0"
+          },
+          {
+            "id": "pineFeatures",
+            "value": "{\"indicator\":1,\"str\":1,\"array\":1,\"ta\":1,\"math\":1,\"line\":1,\"box\":1,\"label\":1,\"table\":1,\"log\":1}"
+          },
+          {
+            "id": "in_0",
+            "value": 5
+          },
+          {
+            "id": "in_1",
+            "value": 5
+          },
+          {
+            "id": "in_2",
+            "value": 5
+          },
+          {
+            "id": "in_3",
+            "value": 10
+          },
+          {
+            "id": "__log_level",
+            "value": 7
+          },
+          {
+            "id": "__fast_calc",
+            "value": false
+          },
+          {
+            "id": "__profile",
+            "value": false
+          }
+        ]
+      }
+    },
+    {
+      "tag": "082-input-ttl0",
+      "at": "2026-10-01T04:12:59.429Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 indicator set 7AVlth --inputs {\\\"in_3\\\":0}",
+      "expect_exit": 0,
+      "exit_code": 1,
+      "elapsed_ms": 85,
+      "harness_accepted": false,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "{\n  \"success\": false,\n  \"error\": \"Expected property name or '}' in JSON at position 1 (line 1 column 2)\"\n}\n",
+      "json": null
+    },
+    {
+      "tag": "085-resolve-ttl0",
+      "at": "2026-10-01T04:13:02.780Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 ui eval <read-only probe expression, see probe-expr.mjs / HANDOFF>",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 131,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "result": {
+          "chars": 20201,
+          "note": "resolver snapshot; see verify-*.json in ignored results"
+        }
+      }
+    },
+    {
+      "tag": "086-input-ttl0",
+      "at": "2026-10-01T04:13:24.831Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 indicator set 7AVlth --inputs {\"in_3\":0}",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 140,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "entity_id": "7AVlth",
+        "updated_inputs": {
+          "in_3": 0
+        }
+      }
+    },
+    {
+      "tag": "087-indicator-get-ttl0",
+      "at": "2026-10-01T04:13:27.450Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 indicator get 7AVlth",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 131,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "entity_id": "7AVlth",
+        "visible": true,
+        "inputs": [
+          {
+            "id": "pineId",
+            "value": "USER;e4b6a39e8a79466bb3134287eb3713a0"
+          },
+          {
+            "id": "pineVersion",
+            "value": "4.0"
+          },
+          {
+            "id": "pineFeatures",
+            "value": "{\"indicator\":1,\"str\":1,\"array\":1,\"ta\":1,\"math\":1,\"line\":1,\"box\":1,\"label\":1,\"table\":1,\"log\":1}"
+          },
+          {
+            "id": "in_0",
+            "value": 5
+          },
+          {
+            "id": "in_1",
+            "value": 5
+          },
+          {
+            "id": "in_2",
+            "value": 5
+          },
+          {
+            "id": "in_3",
+            "value": 0
+          },
+          {
+            "id": "__log_level",
+            "value": 7
+          },
+          {
+            "id": "__fast_calc",
+            "value": false
+          },
+          {
+            "id": "__profile",
+            "value": false
+          }
+        ]
+      }
+    },
+    {
+      "tag": "088-tables-ttl0",
+      "at": "2026-10-01T04:13:30.154Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data tables --filter CLI-QA-S04",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 135,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 1,
+        "studies": [
+          {
+            "name": "CLI-QA-S04 Pivot Zones",
+            "tables": [
+              {
+                "rows": [
+                  "S04 | v4 keep=5 ttl=0",
+                  "created | 2665",
+                  "deletedLimit | 1007",
+                  "deletedTtl | 1655",
+                  "broken | 1655",
+                  "live | 3 expected=3",
+                  "all box/line/label | 3/3/3",
+                  "arraysAligned | true",
+                  "mismatch | 0"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "tag": "089-labels-ttl0",
+      "at": "2026-10-01T04:13:32.943Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data labels --filter CLI-QA-S04 -n 500 -v",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 134,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 1,
+        "studies": [
+          {
+            "name": "CLI-QA-S04 Pivot Zones",
+            "total_labels": 3,
+            "showing": 3,
+            "labels": {
+              "count": 3,
+              "sample": [
+                {
+                  "id": 14952,
+                  "text": "S 2678.42 INTACT",
+                  "price": 2678.42,
+                  "x": 0,
+                  "yloc": "pr",
+                  "size": "small",
+                  "textColor": 4294967295,
+                  "color": 4286683400
+                },
+                {
+                  "id": 14962,
+                  "text": "S 2678.54 INTACT",
+                  "price": 2678.54,
+                  "x": 1,
+                  "yloc": "pr",
+                  "size": "small",
+                  "textColor": 4294967295,
+                  "color": 4286683400
+                },
+                {
+                  "id": 14972,
+                  "text": "S 2684.17 INTACT",
+                  "price": 2684.17,
+                  "x": 2,
+                  "yloc": "pr",
+                  "size": "small",
+                  "textColor": 4294967295,
+                  "color": 4286683400
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "tag": "090-resolve-ttl0",
+      "at": "2026-10-01T04:13:36.137Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 ui eval <read-only probe expression, see probe-expr.mjs / HANDOFF>",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 132,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "result": {
+          "chars": 19575,
+          "note": "resolver snapshot; see verify-*.json in ignored results"
+        }
+      }
+    },
+    {
+      "tag": "091-input-ttl10-restore",
+      "at": "2026-10-01T04:13:50.126Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 indicator set 7AVlth --inputs {\"in_3\":10}",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 144,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "entity_id": "7AVlth",
+        "updated_inputs": {
+          "in_3": 10
+        }
+      }
+    },
+    {
+      "tag": "092-tables-ttl10",
+      "at": "2026-10-01T04:13:52.694Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data tables --filter CLI-QA-S04",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 134,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 1,
+        "studies": [
+          {
+            "name": "CLI-QA-S04 Pivot Zones",
+            "tables": [
+              {
+                "rows": [
+                  "S04 | v4 keep=5 ttl=10",
+                  "created | 2665",
+                  "deletedLimit | 1219",
+                  "deletedTtl | 1441",
+                  "broken | 1554",
+                  "live | 5 expected=5",
+                  "all box/line/label | 5/5/5",
+                  "arraysAligned | true",
+                  "mismatch | 0"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "tag": "093-resolve-ttl10",
+      "at": "2026-10-01T04:13:55.672Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 ui eval <read-only probe expression, see probe-expr.mjs / HANDOFF>",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 132,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "result": {
+          "chars": 20201,
+          "note": "resolver snapshot; see verify-*.json in ignored results"
+        }
+      }
+    },
+    {
+      "tag": "100-set-v5-error",
+      "at": "2026-10-01T04:14:07.547Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine set --file qa/pine/scenarios/s04-pivot-drawings/v5-error-injected.pine",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 143,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": true,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "lines_set": 137
+      }
+    },
+    {
+      "tag": "101-save-v5",
+      "at": "2026-10-01T04:14:10.213Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine save",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 1102,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "4.0",
+        "modified": true,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "5.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "saved": true,
+        "action": "saved",
+        "script_id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "5.0"
+      }
+    },
+    {
+      "tag": "102-compile-v5",
+      "at": "2026-10-01T04:14:13.737Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine compile",
+      "expect_exit": 1,
+      "exit_code": 1,
+      "elapsed_ms": 365,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "5.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "5.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": false,
+        "compiled": false,
+        "error": "Rejected"
+      }
+    },
+    {
+      "tag": "103-errors-v5",
+      "at": "2026-10-01T04:14:16.522Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine errors",
+      "expect_exit": 1,
+      "exit_code": 1,
+      "elapsed_ms": 133,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "5.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "5.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "has_errors": true,
+        "error_count": 2,
+        "warning_count": 0,
+        "errors": [
+          {
+            "line": 93,
+            "column": 24,
+            "message": "Could not find function or function reference 'box.qa_missing'",
+            "severity": 8
+          },
+          {
+            "line": 95,
+            "column": 61,
+            "message": "Cannot call \"log.info\" with argument \"arg_1\"=\"pTtl\". An argument of \"unknown\" type was used but one from \"series int/float/bool/string/array<int/float/bool/string>\" is expected",
+            "severity": 8
+          }
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "tag": "104-state-v5",
+      "at": "2026-10-01T04:14:19.062Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 state",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 132,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "5.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "5.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "symbol": "BINANCE:ETHUSDT",
+        "resolution": "15",
+        "chartType": 1,
+        "studies": [
+          {
+            "id": "7AVlth",
+            "name": "CLI-QA-S04 Pivot Zones"
+          },
+          {
+            "id": "iBDNo5",
+            "name": "Volume"
+          }
+        ]
+      }
+    },
+    {
+      "tag": "105-tables-v5",
+      "at": "2026-10-01T04:14:21.546Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data tables --filter CLI-QA-S04",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 130,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "5.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "5.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 0,
+        "studies": []
+      }
+    },
+    {
+      "tag": "106-boxes-v5",
+      "at": "2026-10-01T04:14:24.074Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data boxes --filter CLI-QA-S04",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 132,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "5.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "5.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 0,
+        "studies": []
+      }
+    },
+    {
+      "tag": "107-indicator-get-v5",
+      "at": "2026-10-01T04:14:26.532Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 indicator get 7AVlth",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 134,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "5.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "5.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "entity_id": "7AVlth",
+        "visible": true,
+        "inputs": [
+          {
+            "id": "pineId",
+            "value": "USER;e4b6a39e8a79466bb3134287eb3713a0"
+          },
+          {
+            "id": "pineVersion",
+            "value": "5.0"
+          },
+          {
+            "id": "pineFeatures",
+            "value": "{\"indicator\":1,\"plot\":1}"
+          },
+          {
+            "id": "__fast_calc",
+            "value": false
+          },
+          {
+            "id": "__profile",
+            "value": false
+          }
+        ]
+      }
+    },
+    {
+      "tag": "110-set-v6-fix",
+      "at": "2026-10-01T04:14:39.049Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine set --file qa/pine/scenarios/s04-pivot-drawings/v4-delete-update.pine",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 138,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "5.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "5.0",
+        "modified": true,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "lines_set": 137
+      }
+    },
+    {
+      "tag": "111-save-v6",
+      "at": "2026-10-01T04:14:41.565Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine save",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 1175,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "5.0",
+        "modified": true,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "saved": true,
+        "action": "saved",
+        "script_id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0"
+      }
+    },
+    {
+      "tag": "112-compile-v6",
+      "at": "2026-10-01T04:14:45.363Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine compile",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 140,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "compiled": true,
+        "compile_performed": false,
+        "unchanged": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": []
+      }
+    },
+    {
+      "tag": "113-indicator-get-v6",
+      "at": "2026-10-01T04:14:59.653Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 indicator get 7AVlth",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 129,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "entity_id": "7AVlth",
+        "visible": true,
+        "inputs": [
+          {
+            "id": "pineId",
+            "value": "USER;e4b6a39e8a79466bb3134287eb3713a0"
+          },
+          {
+            "id": "pineVersion",
+            "value": "6.0"
+          },
+          {
+            "id": "pineFeatures",
+            "value": "{\"indicator\":1,\"str\":1,\"array\":1,\"ta\":1,\"math\":1,\"line\":1,\"box\":1,\"label\":1,\"table\":1,\"log\":1}"
+          },
+          {
+            "id": "in_0",
+            "value": 5
+          },
+          {
+            "id": "in_1",
+            "value": 5
+          },
+          {
+            "id": "in_2",
+            "value": 5
+          },
+          {
+            "id": "in_3",
+            "value": 10
+          },
+          {
+            "id": "__log_level",
+            "value": 7
+          },
+          {
+            "id": "__fast_calc",
+            "value": false
+          },
+          {
+            "id": "__profile",
+            "value": false
+          }
+        ]
+      }
+    },
+    {
+      "tag": "114-state-v6",
+      "at": "2026-10-01T04:15:03.354Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 state",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 134,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "symbol": "BINANCE:ETHUSDT",
+        "resolution": "15",
+        "chartType": 1,
+        "studies": [
+          {
+            "id": "7AVlth",
+            "name": "CLI-QA-S04 Pivot Zones"
+          },
+          {
+            "id": "iBDNo5",
+            "name": "Volume"
+          }
+        ]
+      }
+    },
+    {
+      "tag": "115-tables-v6",
+      "at": "2026-10-01T04:15:05.881Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data tables --filter CLI-QA-S04",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 133,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 1,
+        "studies": [
+          {
+            "name": "CLI-QA-S04 Pivot Zones",
+            "tables": [
+              {
+                "rows": [
+                  "S04 | v4 keep=5 ttl=10",
+                  "created | 2665",
+                  "deletedLimit | 1219",
+                  "deletedTtl | 1441",
+                  "broken | 1554",
+                  "live | 5 expected=5",
+                  "all box/line/label | 5/5/5",
+                  "arraysAligned | true",
+                  "mismatch | 0"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "tag": "116-resolve-v6",
+      "at": "2026-10-01T04:15:09.205Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 ui eval <read-only probe expression, see probe-expr.mjs / HANDOFF>",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 139,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "result": {
+          "chars": 20248,
+          "note": "resolver snapshot; see verify-*.json in ignored results"
+        }
+      }
+    },
+    {
+      "tag": "117-compile-repeat1",
+      "at": "2026-10-01T04:15:12.212Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine compile",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 145,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "compiled": true,
+        "compile_performed": false,
+        "unchanged": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": []
+      }
+    },
+    {
+      "tag": "118-compile-repeat2",
+      "at": "2026-10-01T04:15:14.868Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine compile",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 139,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "compiled": true,
+        "compile_performed": false,
+        "unchanged": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": []
+      }
+    },
+    {
+      "tag": "119-raw-compile",
+      "at": "2026-10-01T04:15:17.724Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine raw-compile",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 135,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "compiled": true,
+        "compile_performed": false,
+        "unchanged": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": []
+      }
+    },
+    {
+      "tag": "120-compile-save",
+      "at": "2026-10-01T04:15:20.399Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine compile --save",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 133,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "compiled": true,
+        "compile_performed": false,
+        "unchanged": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": []
+      }
+    },
+    {
+      "tag": "121-errors-after-repeat",
+      "at": "2026-10-01T04:15:23.022Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine errors",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 138,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "has_errors": false,
+        "error_count": 0,
+        "warning_count": 0,
+        "errors": [],
+        "warnings": []
+      }
+    },
+    {
+      "tag": "122-state-after-repeat",
+      "at": "2026-10-01T04:15:25.660Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 state",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 136,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "symbol": "BINANCE:ETHUSDT",
+        "resolution": "15",
+        "chartType": 1,
+        "studies": [
+          {
+            "id": "7AVlth",
+            "name": "CLI-QA-S04 Pivot Zones"
+          },
+          {
+            "id": "iBDNo5",
+            "name": "Volume"
+          }
+        ]
+      }
+    },
+    {
+      "tag": "123-tables-after-repeat",
+      "at": "2026-10-01T04:15:28.425Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data tables --filter CLI-QA-S04",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 139,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 1,
+        "studies": [
+          {
+            "name": "CLI-QA-S04 Pivot Zones",
+            "tables": [
+              {
+                "rows": [
+                  "S04 | v4 keep=5 ttl=10",
+                  "created | 2665",
+                  "deletedLimit | 1219",
+                  "deletedTtl | 1441",
+                  "broken | 1554",
+                  "live | 5 expected=5",
+                  "all box/line/label | 5/5/5",
+                  "arraysAligned | true",
+                  "mismatch | 0"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "tag": "124-boxes-after-repeat",
+      "at": "2026-10-01T04:15:31.141Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data boxes --filter CLI-QA-S04 -v",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 140,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 1,
+        "studies": [
+          {
+            "name": "CLI-QA-S04 Pivot Zones",
+            "total_boxes": 5,
+            "zones": [
+              {
+                "high": 2694.61,
+                "low": 2691.06
+              },
+              {
+                "high": 2694.33,
+                "low": 2689.21
+              },
+              {
+                "high": 2689.14,
+                "low": 2684.17
+              },
+              {
+                "high": 2682.62,
+                "low": 2678.42
+              },
+              {
+                "high": 2682.3,
+                "low": 2678.54
+              }
+            ],
+            "all_boxes": {
+              "count": 5,
+              "sample": [
+                {
+                  "id": 14849,
+                  "high": 2682.62,
+                  "low": 2678.42,
+                  "x1": 0,
+                  "x2": 6,
+                  "borderColor": 4286683400,
+                  "bgColor": 646027528
+                },
+                {
+                  "id": 14854,
+                  "high": 2694.33,
+                  "low": 2689.21,
+                  "x1": 1,
+                  "x2": 5,
+                  "borderColor": 4287003512,
+                  "bgColor": 646347640
+                },
+                {
+                  "id": 14859,
+                  "high": 2682.3,
+                  "low": 2678.54,
+                  "x1": 2,
+                  "x2": 6,
+                  "borderColor": 4286683400,
+                  "bgColor": 646027528
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "tag": "125-lines-after-repeat",
+      "at": "2026-10-01T04:15:33.689Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data lines --filter CLI-QA-S04 -v",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 145,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 1,
+        "studies": [
+          {
+            "name": "CLI-QA-S04 Pivot Zones",
+            "total_lines": 5,
+            "horizontal_levels": [
+              2692.835,
+              2691.77,
+              2686.655,
+              2680.52,
+              2680.42
+            ],
+            "all_lines": {
+              "count": 5,
+              "sample": [
+                {
+                  "id": 14850,
+                  "y1": 2680.52,
+                  "y2": 2680.52,
+                  "x1": 0,
+                  "x2": 6,
+                  "horizontal": true,
+                  "style": "dsh",
+                  "width": 1,
+                  "color": 4286683400
+                },
+                {
+                  "id": 14855,
+                  "y1": 2691.77,
+                  "y2": 2691.77,
+                  "x1": 1,
+                  "x2": 5,
+                  "horizontal": true,
+                  "style": "dsh",
+                  "width": 1,
+                  "color": 4287003512
+                },
+                {
+                  "id": 14860,
+                  "y1": 2680.42,
+                  "y2": 2680.42,
+                  "x1": 2,
+                  "x2": 6,
+                  "horizontal": true,
+                  "style": "dsh",
+                  "width": 1,
+                  "color": 4286683400
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "tag": "126-labels-after-repeat",
+      "at": "2026-10-01T04:15:36.345Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data labels --filter CLI-QA-S04 -n 500 -v",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 135,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 1,
+        "studies": [
+          {
+            "name": "CLI-QA-S04 Pivot Zones",
+            "total_labels": 5,
+            "showing": 5,
+            "labels": {
+              "count": 5,
+              "sample": [
+                {
+                  "id": 14851,
+                  "text": "S 2678.42 INTACT",
+                  "price": 2678.42,
+                  "x": 0,
+                  "yloc": "pr",
+                  "size": "small",
+                  "textColor": 4294967295,
+                  "color": 4286683400
+                },
+                {
+                  "id": 14856,
+                  "text": "R 2694.33 BROKEN@2696.07",
+                  "price": 2694.33,
+                  "x": 1,
+                  "yloc": "pr",
+                  "size": "small",
+                  "textColor": 4294967295,
+                  "color": 4287003512
+                },
+                {
+                  "id": 14861,
+                  "text": "S 2678.54 INTACT",
+                  "price": 2678.54,
+                  "x": 2,
+                  "yloc": "pr",
+                  "size": "small",
+                  "textColor": 4294967295,
+                  "color": 4286683400
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "tag": "127-resolve-after-repeat",
+      "at": "2026-10-01T04:15:39.475Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 ui eval <read-only probe expression, see probe-expr.mjs / HANDOFF>",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 141,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "result": {
+          "chars": 20248,
+          "note": "resolver snapshot; see verify-*.json in ignored results"
+        }
+      }
+    },
+    {
+      "tag": "130-get-before-reopen",
+      "at": "2026-10-01T04:15:57.331Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine get",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 134,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "source": {
+          "chars": 6875,
+          "sha256": "674d36e7ff282655193a39bc035674068832018787d1c04508ac5a0d6bbf96b4"
+        },
+        "line_count": 137,
+        "char_count": 6875
+      }
+    },
+    {
+      "tag": "131-new-switch-away",
+      "at": "2026-10-01T04:15:59.984Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine new indicator",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 224,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": null,
+        "version": null,
+        "modified": true,
+        "title": "My script"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "type": "indicator",
+        "action": "new_script_created",
+        "template": "indicator"
+      }
+    },
+    {
+      "tag": "132-get-template-away",
+      "at": "2026-10-01T04:16:02.724Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine get",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 133,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": null,
+        "version": null,
+        "modified": true,
+        "title": "My script"
+      },
+      "fence_post": {
+        "id": null,
+        "version": null,
+        "modified": true,
+        "title": "My script"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "source": {
+          "chars": 47,
+          "sha256": "1f0fc5b36b487cf721c6dad8956174678ab95d3d82c6228769a8e718067a1045"
+        },
+        "line_count": 3,
+        "char_count": 47
+      }
+    },
+    {
+      "tag": "133-open-exact",
+      "at": "2026-10-01T04:16:05.329Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine open CLI-QA-S04 Pivot Zones",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 567,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": null,
+        "version": null,
+        "modified": true,
+        "title": "My script"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "name": "CLI-QA-S04 Pivot Zones",
+        "script_id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "lines": 137,
+        "source": {
+          "chars": 12,
+          "sha256": "edd69cf609067757576b2418a70658223d20e7c7cfc2067af0956789ccfb0249"
+        },
+        "opened": true
+      }
+    },
+    {
+      "tag": "134-get-reopened",
+      "at": "2026-10-01T04:16:08.615Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine get",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 160,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "source": {
+          "chars": 7011,
+          "sha256": "674d36e7ff282655193a39bc035674068832018787d1c04508ac5a0d6bbf96b4"
+        },
+        "line_count": 137,
+        "char_count": 7011
+      }
+    },
+    {
+      "tag": "135-list-final",
+      "at": "2026-10-01T04:16:11.219Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine list",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 269,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "scripts": [
+          {
+            "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+            "name": "CLI-QA-S04 Pivot Zones",
+            "title": "CLI-QA-S04 Pivot Zones",
+            "version": "6.0",
+            "modified": 1790828081
+          }
+        ],
+        "count": 25,
+        "source": {
+          "chars": 12,
+          "sha256": "edd69cf609067757576b2418a70658223d20e7c7cfc2067af0956789ccfb0249"
+        },
+        "scripts_total": 25
+      }
+    },
+    {
+      "tag": "136-state-after-reopen",
+      "at": "2026-10-01T04:16:13.960Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 state",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 141,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "symbol": "BINANCE:ETHUSDT",
+        "resolution": "15",
+        "chartType": 1,
+        "studies": [
+          {
+            "id": "7AVlth",
+            "name": "CLI-QA-S04 Pivot Zones"
+          },
+          {
+            "id": "iBDNo5",
+            "name": "Volume"
+          }
+        ]
+      }
+    },
+    {
+      "tag": "137-compile-after-reopen",
+      "at": "2026-10-01T04:16:16.596Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine compile",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 138,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "compiled": true,
+        "compile_performed": false,
+        "unchanged": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": []
+      }
+    },
+    {
+      "tag": "138-tables-after-reopen",
+      "at": "2026-10-01T04:16:19.355Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 data tables --filter CLI-QA-S04",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 132,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "study_count": 1,
+        "studies": [
+          {
+            "name": "CLI-QA-S04 Pivot Zones",
+            "tables": [
+              {
+                "rows": [
+                  "S04 | v4 keep=5 ttl=10",
+                  "created | 2665",
+                  "deletedLimit | 1219",
+                  "deletedTtl | 1441",
+                  "broken | 1554",
+                  "live | 5 expected=5",
+                  "all box/line/label | 5/5/5",
+                  "arraysAligned | true",
+                  "mismatch | 0"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "tag": "140-final-replay-status",
+      "at": "2026-10-01T04:16:58.371Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 replay status",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 135,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "is_replay_available": true,
+        "is_replay_started": false,
+        "is_autoplay_started": false,
+        "replay_mode": "ActiveChart",
+        "current_date": null,
+        "autoplay_delay": 300,
+        "position": null,
+        "realized_pnl": null
+      }
+    },
+    {
+      "tag": "141-final-ui",
+      "at": "2026-10-01T04:17:01.553Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 ui eval <read-only probe expression, see probe-expr.mjs / HANDOFF>",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 135,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "result": "{\"url\":\"https://kr.tradingview.com/chart/ofWK5ePT/\",\"dialogs\":0,\"yesButtons\":0,\"openMenus\":0,\"pineLogsVisible\":true,\"studies\":[\"7AVlth:CLI-QA-S04 Pivot Zones\",\"iBDNo5:Volume\"]}"
+      }
+    },
+    {
+      "tag": "142-final-state",
+      "at": "2026-10-01T04:17:04.111Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 state",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 138,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "symbol": "BINANCE:ETHUSDT",
+        "resolution": "15",
+        "chartType": 1,
+        "studies": [
+          {
+            "id": "7AVlth",
+            "name": "CLI-QA-S04 Pivot Zones"
+          },
+          {
+            "id": "iBDNo5",
+            "name": "Volume"
+          }
+        ]
+      }
+    },
+    {
+      "tag": "143-final-errors",
+      "at": "2026-10-01T04:17:06.772Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 pine errors",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 134,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "has_errors": false,
+        "error_count": 0,
+        "warning_count": 0,
+        "errors": [],
+        "warnings": []
+      }
+    },
+    {
+      "tag": "144-final-tabs",
+      "at": "2026-10-01T04:17:09.322Z",
+      "command": "node src/cli/index.js --target A80BFC8814BDE6007E9C57E8CB604788 tab list",
+      "expect_exit": 0,
+      "exit_code": 0,
+      "elapsed_ms": 236,
+      "harness_accepted": true,
+      "fence_pre": {
+        "url": "https://kr.tradingview.com/chart/ofWK5ePT/",
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "fence_post": {
+        "id": "USER;e4b6a39e8a79466bb3134287eb3713a0",
+        "version": "6.0",
+        "modified": false,
+        "title": "CLI-QA-S04 Pivot Zones"
+      },
+      "stderr": "",
+      "json": {
+        "success": true,
+        "tab_count": 7,
+        "tabs": [
+          {
+            "id": "D1AFFCCBC3A67669FD97D434AADFB942",
+            "chart_id": "KHbeIfLo",
+            "active": false
+          },
+          {
+            "id": "BACBB4E74A751DBFC2E3918B8E6B2B12",
+            "chart_id": "DgZswbBE",
+            "active": false
+          },
+          {
+            "id": "358BB580C74E309A605A52D3EDC6BDF9",
+            "chart_id": "kdn7wAFi",
+            "active": false
+          },
+          {
+            "id": "3D2E5C4CE6FF2209409B3094C7F0ABA2",
+            "chart_id": "XrSm3eti",
+            "active": false
+          },
+          {
+            "id": "7980FA5955C48DD48FF5EDBF9615BD45",
+            "chart_id": "nipHauoX",
+            "active": false
+          },
+          {
+            "id": "890408E3FA96D8076A7D49A8B3AF200A",
+            "chart_id": "8b3vQsAK",
+            "active": false
+          },
+          {
+            "id": "A80BFC8814BDE6007E9C57E8CB604788",
+            "chart_id": "ofWK5ePT",
+            "active": true
+          }
+        ]
+      }
+    }
+  ]
+}

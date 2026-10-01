@@ -70,7 +70,8 @@
       ],
       "thread_id": "01a0f584-b5e2-7332-b406-59e47a2fa9c1",
       "status": "reviewed",
-      "outcome": "Functionality PASS after workaround; corrected save/reopen compile FAIL; harness isolation incident restored S02 source with version change5to8"
+      "outcome": "Functionality PASS after workaround; corrected save/reopen compile FAIL; harness isolation incident restored S02 source with version change5to8",
+      "commit": "2e9a87c"
     },
     {
       "number": 4,
@@ -91,8 +92,9 @@
         "실제 drawing 추출 데이터 및 가능하면 화면과 가격/텍스트/개수 대조.",
         "오류 주입/수정·반복컴파일 후 기존 실행 객체 누적 없음; 소스 save/open 보존."
       ],
-      "thread_id": null,
-      "status": "queued"
+      "thread_id": "01a0f59d-535b-7b81-8a76-559c1029fef4",
+      "status": "reviewed",
+      "outcome": "Functional PASS; coordinate/log observability limits; inherited document fenced before mutation"
     },
     {
       "number": 5,

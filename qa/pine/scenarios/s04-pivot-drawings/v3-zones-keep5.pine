@@ -1,0 +1,118 @@
+//@version=6
+indicator("CLI-QA-S04 Pivot Zones", "S04PZ", overlay = true, max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500)
+
+// S04 zone management: confirmed pivot -> box + mid line + status label kept in parallel arrays.
+// All mutations run only on confirmed bars, so no object exists before its pivot is confirmed.
+leftLen   = input.int(5, "Pivot left bars", minval = 1)
+rightLen  = input.int(5, "Pivot right bars", minval = 1)
+keepZones = input.int(5, "Zones kept", minval = 1, maxval = 150)
+
+ph = ta.pivothigh(high, leftLen, rightLen)
+pl = ta.pivotlow(low, leftLen, rightLen)
+bodyHi = math.max(open[rightLen], close[rightLen])
+bodyLo = math.min(open[rightLen], close[rightLen])
+
+var array<box>   zBox   = array.new<box>()
+var array<line>  zMid   = array.new<line>()
+var array<label> zTag   = array.new<label>()
+var array<float> zTop   = array.new<float>()
+var array<float> zBot   = array.new<float>()
+var array<int>   zKind  = array.new<int>()
+var array<int>   zBar   = array.new<int>()
+var array<int>   zState = array.new<int>()
+var int created = 0
+var int deletedLimit = 0
+var int brokenCount = 0
+
+kindColor(int kind) => kind == 1 ? color.red : color.teal
+
+zoneText(int kind, float top, float bot, int state) =>
+    head = kind == 1 ? "R " + str.tostring(top, format.mintick) : "S " + str.tostring(bot, format.mintick)
+    state == 0 ? head + " INTACT" : head + " BROKEN"
+
+addZone(int kind, int pBar, float top, float bot) =>
+    mid = (top + bot) / 2
+    c = kindColor(kind)
+    array.push(zBox, box.new(pBar, top, bar_index, bot, border_color = c, bgcolor = color.new(c, 85)))
+    array.push(zMid, line.new(pBar, mid, bar_index, mid, color = c, style = line.style_dashed))
+    array.push(zTag, label.new(pBar, kind == 1 ? top : bot, zoneText(kind, top, bot, 0), style = kind == 1 ? label.style_label_down : label.style_label_up, color = c, textcolor = color.white, size = size.small))
+    array.push(zTop, top)
+    array.push(zBot, bot)
+    array.push(zKind, kind)
+    array.push(zBar, pBar)
+    array.push(zState, 0)
+    log.info("CREATE kind={0} pivotBar={1} confirmBar={2} top={3} bot={4}", kind, pBar, bar_index, top, bot)
+    1
+
+removeZone(int i) =>
+    box.delete(array.remove(zBox, i))
+    line.delete(array.remove(zMid, i))
+    label.delete(array.remove(zTag, i))
+    array.remove(zTop, i)
+    array.remove(zBot, i)
+    array.remove(zKind, i)
+    pBar = array.remove(zBar, i)
+    array.remove(zState, i)
+    pBar
+
+if barstate.isconfirmed
+    // 1) extend intact zones and detect a close beyond the zone
+    n0 = array.size(zBox)
+    if n0 > 0
+        for i = 0 to n0 - 1
+            if array.get(zState, i) == 0
+                kind = array.get(zKind, i)
+                top = array.get(zTop, i)
+                bot = array.get(zBot, i)
+                box.set_right(array.get(zBox, i), bar_index)
+                line.set_x2(array.get(zMid, i), bar_index)
+                if (kind == 1 and close > top) or (kind == -1 and close < bot)
+                    array.set(zState, i, 1)
+                    brokenCount += 1
+                    box.set_border_color(array.get(zBox, i), color.gray)
+                    box.set_bgcolor(array.get(zBox, i), color.new(color.gray, 85))
+                    line.set_color(array.get(zMid, i), color.gray)
+                    label.set_color(array.get(zTag, i), color.gray)
+                    label.set_text(array.get(zTag, i), zoneText(kind, top, bot, 1))
+                    log.info("BREAK kind={0} pivotBar={1} breakBar={2} close={3}", kind, array.get(zBar, i), bar_index, close)
+    // 2) create zones for pivots confirmed on this bar
+    if not na(ph)
+        created += addZone(1, bar_index - rightLen, ph, bodyHi)
+    if not na(pl)
+        created += addZone(-1, bar_index - rightLen, bodyLo, pl)
+    // 3) enforce the retention limit, oldest first
+    while array.size(zBox) > keepZones
+        pOld = removeZone(0)
+        deletedLimit += 1
+        log.info("DELETE limit pivotBar={0} bar={1}", pOld, bar_index)
+
+var table diag = table.new(position.top_right, 2, 9, bgcolor = color.new(color.black, 20))
+cellRow(int r, string k, string v) =>
+    table.cell(diag, 0, r, k, text_color = color.white, text_size = size.small)
+    table.cell(diag, 1, r, v, text_color = color.white, text_size = size.small)
+
+if barstate.islast
+    n = array.size(zBox)
+    sizesOk = n == array.size(zMid) and n == array.size(zTag) and n == array.size(zTop) and n == array.size(zBot) and n == array.size(zKind) and n == array.size(zBar) and n == array.size(zState)
+    mism = 0
+    if n > 0
+        for i = 0 to n - 1
+            top = array.get(zTop, i)
+            bot = array.get(zBot, i)
+            pBar = array.get(zBar, i)
+            mid = (top + bot) / 2
+            bx = array.get(zBox, i)
+            ln = array.get(zMid, i)
+            lb = array.get(zTag, i)
+            want = zoneText(array.get(zKind, i), top, bot, array.get(zState, i))
+            bad = box.get_top(bx) != top or box.get_bottom(bx) != bot or box.get_left(bx) != pBar or line.get_y1(ln) != mid or line.get_x1(ln) != pBar or label.get_x(lb) != pBar or label.get_text(lb) != want or (i > 0 and pBar < array.get(zBar, i - 1))
+            mism += bad ? 1 : 0
+    cellRow(0, "S04", "zones keep=" + str.tostring(keepZones))
+    cellRow(1, "created", str.tostring(created))
+    cellRow(2, "deletedLimit", str.tostring(deletedLimit))
+    cellRow(3, "deletedTtl", "n/a")
+    cellRow(4, "broken", str.tostring(brokenCount))
+    cellRow(5, "live", str.tostring(n) + " expected=" + str.tostring(created - deletedLimit))
+    cellRow(6, "all box/line/label", str.tostring(array.size(box.all)) + "/" + str.tostring(array.size(line.all)) + "/" + str.tostring(array.size(label.all)))
+    cellRow(7, "arraysAligned", sizesOk ? "true" : "false")
+    cellRow(8, "mismatch", str.tostring(mism))
