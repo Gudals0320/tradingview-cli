@@ -64,6 +64,13 @@ it('a pre-start CDP timeout retains an interrupted operation even before its pag
     abandonWorkspace(f.workspace.file,{workspaceId:f.workspace.id,operationId:status.interrupted?.operation_id});
   }
 });
+it('TTY pine set without a file refuses before operation admission or stdin consumption', async()=>{
+  const descriptor=Object.getOwnPropertyDescriptor(process.stdin,'isTTY');
+  Object.defineProperty(process.stdin,'isTTY',{configurable:true,value:true});
+  let calls=0;
+  try {await assert.rejects(()=>runWorkspace('unused-file','pine set',{},[],async()=>{calls++;}),{code:'PINE_SOURCE_REQUIRED'});assert.equal(calls,0);}
+  finally {if(descriptor)Object.defineProperty(process.stdin,'isTTY',descriptor);else delete process.stdin.isTTY;}
+});
 it('rejects rebind on the same page generation without adopting external state', async()=>{
   const f=fixture();try {
     await assert.rejects(()=>rebindWorkspace(f.workspace.file,f.workspace.id,{_deps:f.deps}),{code:'WORKSPACE_GENERATION_UNCHANGED'});

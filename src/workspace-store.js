@@ -55,6 +55,8 @@ function savePrivate(workspace, options) {
 function migrateWorkspace(workspace, options) {
   if (workspace.schema === 2) return;
   savePrivate(workspace, options); // Source and credential are retained before public replacement.
+  const legacy = join(dirname(workspace.file), '.tv-workspaces', workspace.id);
+  if (existsSync(legacy)) secureDirectory(legacy); // Keep interrupted journal paths valid, with private access.
   atomic(workspace.file, publicHandle(workspace));
   workspace.schema = 2;
 }

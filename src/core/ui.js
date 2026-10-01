@@ -1,5 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import { nativeCheckpoint } from '../session.js';
-import { layoutConfirmationVisible } from '../layout-state.js';
+import { LAYOUT_PAGE_CODE } from '../layout-state.js';
 /**
  * Core UI automation logic.
  */
@@ -128,7 +129,7 @@ export async function layoutList() {
   return { success: true, layout_count: layouts?.layouts?.length || 0, source: layouts?.source, layouts: layouts?.layouts || [], error: layouts?.error };
 }
 
-export function requestLayoutSwitch(window, name, timeout = 5000) {
+export function resolveSavedLayout(window, name, timeout = 5000) {
   return new Promise(resolve => {
     let active = true;
     let timer;
@@ -140,56 +141,66 @@ export function requestLayoutSwitch(window, name, timeout = 5000) {
         try {
           if (!Array.isArray(charts)) return finish({ success: false, error: 'Saved layouts unavailable.' });
           const q = String(name).toLowerCase();
-          const exact = charts.filter(chart => String(chart.id || chart.chartId) === String(name)
+          const exact = charts.filter(chart => [chart.id,chart.chartId,chart.url].some(id=>String(id)===String(name))
             || String(chart.name || chart.title || '').toLowerCase() === q);
           const matches = exact.length ? exact : charts.filter(chart => String(chart.name || chart.title || '').toLowerCase().includes(q));
           if (matches.length !== 1) return finish({ success: false,
             code: matches.length ? 'LAYOUT_AMBIGUOUS' : 'LAYOUT_NOT_FOUND',
             error: matches.length ? 'Ambiguous layout name; use an exact unique name or ID.' : 'Layout not found.' });
-          const chart = matches[0], id = chart.id || chart.chartId;
+          const chart = matches[0], id = chart.url || chart.chartId || chart.id;
           if (!id) return finish({ success: false, error: 'Saved layout has no stable ID.' });
-          const uid = window.TradingViewApi._chartWidgetCollection?.metaInfo?.uid;
-          const original = typeof uid?.value === 'function' ? uid.value() : uid;
-          const operation = window.__tvCliLayoutSwitch = { pending: true, expected_id: String(id), original_id: String(original), confirmation_seen: false };
-          try { window.TradingViewApi.loadChartFromServer(id); }
-          catch (error) { operation.pending = false; throw error; }
-          finish({ success: true, id: String(id), name: chart.name || chart.title });
+          finish({ success: true, id: String(id), chart, name: chart.name || chart.title });
         } catch (error) { finish({ success: false, error: error.message }); }
       });
     } catch (error) { finish({ success: false, error: error.message }); }
   });
 }
 
+export async function requestLayoutSwitch(window, name, timeout = 5000) {
+  const resolved = await resolveSavedLayout(window, name, timeout);
+  if (!resolved.success) return resolved;
+  try {
+    const result = window.TradingViewApi.loadChartFromServer(resolved.chart);
+    return { success: true, id: resolved.id, name: resolved.name, native_thenable: Boolean(result && typeof result.then === 'function') };
+  } catch (error) { return { success: false, error: error.message }; }
+}
+
 export async function layoutSwitch({ name, _deps } = {}) {
   const inspect = _deps?.evaluate || evaluate;
   const inspectAsync = _deps?.evaluateAsync || evaluateAsync;
   const sleep = _deps?.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
-  const existing = await inspect(`(${layoutConfirmationVisible.toString()})(document)`);
-  if (existing === true) return { success: false, confirmation_required: true, error: 'Resolve the existing layout confirmation before switching.' };
-  const result = await inspectAsync(`(${requestLayoutSwitch.toString()})(window,${JSON.stringify(name)})`, { mutation: true });
-  if (!result?.success) return { success: false, ...result };
-  nativeCheckpoint('layout switch', configuredTarget(), { expected_layout_id: result.id });
-  let actual;
-  for (let attempt = 0; attempt < 20; attempt++) {
+  if(await inspect(`(() => {${LAYOUT_PAGE_CODE};return layoutConfirmationVisible(document);})()`))return {success:false,confirmation_required:true,error:'Resolve the existing layout confirmation before switching.'};
+  // Lookup is observation. Its timeout or a rejected match must not create a
+  // native recovery journal; only the following dispatch is a mutation.
+  const selected = await inspectAsync(`(${resolveSavedLayout.toString()})(window,${JSON.stringify(name)})`);
+  if (!selected?.success) return { success: false, code: selected?.code, error: selected?.error || 'Saved layouts unavailable.' };
+  const token=randomUUID();
+  const before=await inspect(`(() => {window.__tvCliPageGeneration ||= ${JSON.stringify(randomUUID())};const uid=window.TradingViewApi?._chartWidgetCollection?.metaInfo?.uid;
+    return {generation:window.__tvCliPageGeneration,uid:String(typeof uid?.value==='function'?uid.value():uid),
+      supported:navigator.userAgent.includes('TradingView/3.4.1 ')&&typeof window.TradingViewApi?._loadChartService?.loadChart==='function'};})()`);
+  let loaderId=null;
+  if(!_deps){const client=await getClient();loaderId=(await client.Page.getFrameTree()).frameTree?.frame?.loaderId||null;}
+  const result=await inspectAsync(`(() => {${LAYOUT_PAGE_CODE};
+    if(window.__tvCliPageGeneration!==${JSON.stringify(before.generation)})throw new Error('LAYOUT_UNVERIFIED: Page changed before dispatch.');
+    const operation=startLayoutOperation(window,document,{token:${JSON.stringify(token)},generation:${JSON.stringify(before.generation)},expected:${JSON.stringify(selected.id)},supportedNative:${Boolean(before.supported)}});
+    try {const native=window.TradingViewApi.loadChartFromServer(${JSON.stringify(selected.chart)});observeLayoutPromise(window,operation,native);}
+    catch(error){operation.dispatch_observed=true;operation.promise_settled=true;operation.promise_rejected=true;operation.error=error.message;operation.update();}
+    return {success:true,id:${JSON.stringify(selected.id)},name:${JSON.stringify(selected.name||name)}};
+  })()`,{mutation:true,mutationDetails:{page_loader_id:loaderId,layout_generation:before.generation,layout_token:token,original_layout_id:before.uid,layout_page_local:before.supported}});
+  if(!result?.success)return {success:false,...result};
+  nativeCheckpoint('layout switch',configuredTarget(),{expected_layout_id:result.id});
+  let state;
+  for(let attempt=0;attempt<20;attempt++){
     await sleep(250);
-    actual = await inspect(`(() => {
-      const meta = window.TradingViewApi?._chartWidgetCollection?.metaInfo;
-      const uid = typeof meta?.uid?.value === 'function' ? meta.uid.value() : meta?.uid;
-      const dialog=(${layoutConfirmationVisible.toString()})(document);
-      const operation=window.__tvCliLayoutSwitch;
-      if(operation?.expected_id===${JSON.stringify(result.id)}) {
-        if(dialog)operation.confirmation_seen=true;
-        if(String(uid)===operation.expected_id)operation.pending=false;
-      }
-      return { id: uid ? String(uid) : null, dialog };
-    })()`);
-    if (actual?.id === result.id) return { success: true, layout: result.name || name, layout_id: result.id,
-      action: 'switched', layout_verified: true, unsaved_dialog_dismissed: false };
-    if (actual?.dialog) break;
+    state=await inspect(`(() => {${LAYOUT_PAGE_CODE};return layoutOperationDetails(window,document);})()`);
+    if(state&&!state.pending)return {success:state.state==='switched',layout:result.name||name,layout_id:result.id,
+      layout_verified:state.state==='switched',quiescent:true,action:state.state,layout_operation:state,
+      ...(state.state!=='switched'&&{error:state.error||'Layout switch completed without opening the requested layout.'})};
+    if(state?.dialog_visible)break;
   }
-  return { success: false, layout: result.name || name, layout_id: result.id, actual_layout_id: actual?.id || null,
-    action: 'switch_pending', layout_verified: false, confirmation_required: actual?.dialog === true, recovery_required: true,
-    error: 'Requested layout was not opened. Resolve the Desktop save/discard confirmation explicitly; no changes were discarded.' };
+  return {success:false,layout:result.name||name,layout_id:result.id,layout_verified:false,
+    confirmation_required:state?.dialog_visible===true,recovery_required:true,code:'LAYOUT_UNVERIFIED',layout_operation:state,
+    error:'Layout completion is not proven. Resolve the recorded confirmation, then run session recover. A nonsettling action requires explicit page recovery; no timeout clears it.'};
 }
 
 export async function keyboard({ key, modifiers }) {

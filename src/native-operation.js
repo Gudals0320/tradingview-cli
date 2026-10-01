@@ -6,6 +6,11 @@ export async function trackNativeOperation(window, token, action) {
   if (Object.keys(operations).length >= 1) throw new Error('NATIVE_BUSY: Native operation registry cap (1) reached; verify the prior action quiescence.');
   const operation = operations[token] = { pending: true };
   operation.promise = Promise.resolve().then(action);
-  try { return await operation.promise; }
-  finally { if (operations[token] === operation) delete operations[token]; }
+  let extended=false;
+  const retire=()=>{if(operations[token]===operation)delete operations[token];};
+  try {
+    const result=await operation.promise;
+    if(operation.tail_promise){extended=true;Promise.resolve(operation.tail_promise).then(retire,retire);}
+    return result;
+  } finally {if(!extended)retire();}
 }

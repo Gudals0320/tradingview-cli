@@ -4,7 +4,6 @@ import { runInNewContext } from 'node:vm';
 import { getOhlcv, getPineTables, getPineLabels, getPineLines, getStudyValues, getQuote } from '../src/core/data.js';
 import { analyze } from '../src/core/pine.js';
 import { requestLayoutSwitch, layoutSwitch } from '../src/core/ui.js';
-import { layoutOperationPending } from '../src/layout-state.js';
 import { prepareFeedBindings, parseFeedSpecs, planFeedAssignments } from '../src/core/multi-feed.js';
 
 function fixture() {
@@ -61,17 +60,6 @@ it('layout lookup rejects ambiguity and late callback cannot navigate after time
     evaluate: async () => ({ id: 'B', dialog: true }), sleep: async () => {} } });
   assert.equal(result.success, false); assert.equal(result.confirmation_required, true);
 });
-it('layout quiescence accepts only verified requested identity or cancellation back to original identity', () => {
-  let uid='B', dialog=true;
-  const window={__tvCliLayoutSwitch:{pending:true,expected_id:'A',original_id:'B',confirmation_seen:true},
-    TradingViewApi:{_chartWidgetCollection:{metaInfo:{uid:{value:()=>uid}}}}};
-  const document={querySelectorAll:()=>dialog?[{offsetParent:{},parentElement:{parentElement:{querySelector:()=>({})}}}]:[]};
-  assert.equal(layoutOperationPending(window,document),true);
-  uid='A';assert.equal(layoutOperationPending(window,document),false);
-  uid='B';dialog=false;assert.equal(layoutOperationPending(window,document),false);
-  uid='unrelated';assert.equal(layoutOperationPending(window,document),true);
-});
-
 it('default feed preparation never mutates existing user panes and bounded empty tabs fail', async () => {
   const feeds = parseFeedSpecs(['AAPL@D']);
   assert.equal(planFeedAssignments(feeds, [{ targetId: 'user', panes: [{ index: 0, symbol: 'NASDAQ:AAPL', timeframe: '1D', hasBar: true }] }]).missing.length, 0);

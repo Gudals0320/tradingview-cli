@@ -66,3 +66,31 @@ Phase and permit regression coverage: pine_compile, pine_lifecycle, pine_outcome
 pine_targets, strategy_state, workspace-page, workspace-runtime, lifetime and
 workspace-privacy tests. The dedicated Desktop smoke supplies native compatibility
 checks and protected-state hashes on the current build.
+
+
+## Legacy artifact cleanup after migration
+
+Migration deliberately keeps interrupted journal paths intact and restricts the
+old .tv-workspaces/WORKSPACE_ID directory as well as the new private store. Source
+bytes are not deleted during a recovery transaction. After successful recovery
+and release, archive that exact old directory into a private recovery location,
+verify the archive contents/hashes, and remove the old copy only after verification.
+Never run a blanket delete of .tv-workspaces or add its contents to Git. The original
+handle path and workspace ID identify the exact directory. This task preserved
+preexisting ignored results/i22 evidence and did not move or delete it.
+
+The layout service contract is based on local inspection of Desktop 3.4.1 only:
+public loadChartFromServer awaits the page-local load service, which awaits the
+warning decision, backend load and layout-state load. The complete saved-chart
+object is required; chart.id is the numeric record ID, chart.url is the visible
+layout UID. No proprietary service source or private saved-chart records are
+published. Promise completion is paired with stable identity/readiness; rejection
+is an ended action but still needs stable original/requested state. A captured
+Cancel can prove cancellation, whereas disappearance/accept cannot.
+
+A cap-one registry entry is extended across the underlying layout promise (or
+unknown API terminal watcher), not nested. Watchers retain a bounded amount of
+state and remove themselves on terminal outcome. Grace expiration exposes
+LAYOUT_UNVERIFIED; it never retires the fence. Explicit generation recovery uses
+CDP loaderId and repeated chart/controller/layout identity checks for the verified
+page-local path. Unknown external callback paths remain unsupported/fenced.

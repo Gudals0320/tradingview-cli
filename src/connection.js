@@ -163,10 +163,10 @@ export async function getTargetInfo() {
 
 export async function evaluate(expression, opts = {}) {
   const c = await getClient();
-  const { mutation = false, ...protocolOptions } = opts;
+  const { mutation = false, mutationDetails = {}, ...protocolOptions } = opts;
   opts = protocolOptions;
   if (mutation) {
-    nativeCheckpoint(null, configuredTarget());
+    nativeCheckpoint(null, configuredTarget(), mutationDetails);
     const token = randomUUID();
     expression = `(${trackNativeOperation.toString()})(window,${JSON.stringify(token)},async () => (${expression}))`;
     opts = { ...opts, awaitPromise: true };

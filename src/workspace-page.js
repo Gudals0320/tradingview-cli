@@ -1,6 +1,6 @@
 import { findPineEditor, findPineController } from './core/desktop-dom.js';
 import { readChartContext, normalizeTimeframe, symbolMatches } from './chart-context.js';
-import { layoutConfirmationVisible, layoutOperationPending } from './layout-state.js';
+import { layoutConfirmationRoot, layoutConfirmationVisible, layoutOperationPending } from './layout-state.js';
 import { trackNativeOperation } from './native-operation.js';
 
 /** Serialized page functions have no captured Node state. */
@@ -157,5 +157,5 @@ export function finishWorkspacePage(window, document, owner, operation) {
     report_verified: epoch.report_verified, inputs_fingerprint: epoch.inputs_fingerprint } : null };
 }
 
-export const WORKSPACE_PAGE_CODE = [findPineEditor, findPineController, readChartContext, normalizeTimeframe, symbolMatches, layoutConfirmationVisible, layoutOperationPending, trackNativeOperation,
+export const WORKSPACE_PAGE_CODE = [findPineEditor, findPineController, readChartContext, normalizeTimeframe, symbolMatches, layoutConfirmationRoot, layoutConfirmationVisible, layoutOperationPending, trackNativeOperation,
   readWorkspacePage, bindWorkspacePage, restoreWorkspaceDocument, guardWorkspacePage, startWorkspacePage, finishWorkspacePage].map(fn => fn.toString()).join('\n');

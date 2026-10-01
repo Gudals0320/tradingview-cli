@@ -345,6 +345,21 @@ OS 사용자와 TEMP/session 디렉터리입니다. 다른 사용자·별도 TEM
 `stream ohlcv --allow-reassign-target EXACT_TARGET`을 명시하세요. 복구 client는 교체 뒤
 즉시 닫고, 탭 생성·복구 재시도는 유한하게 제한합니다.
 
+레이아웃 전환은 getSavedCharts의 전체 객체(숫자 ID와 URL ID를 구분)를 native loader에
+전달합니다. Desktop 3.4.1의 page-local load service await 흐름을 직접 읽어 확인했습니다.
+완료 Promise와 여러 번 읽은 실제 URL ID가 함께 맞아야 성공합니다. 확인창 클릭은 하지 않습니다.
+확인창이 CLI 반환 뒤 늦게 나타나도 page watcher가 계속 관찰하며, 이 전환에서 생성된
+cancel-btn 동작만 취소로 기록합니다. Save/Don't save 후 지연된 전환은 계속 차단합니다.
+
+완료 신호 없는 opaque/void API는 시간이 지나도 LAYOUT_UNVERIFIED로 유지됩니다.
+`session recover`는 compile/save/registry/layout/pendingRequests/calculating 중 차단 원인을
+details에 표시합니다. 끝나지 않는 native 작업에는 사용자가 해당 확인창을 해결해야 합니다.
+마지막 수단은 사용자가 기록된 target만 명시적으로 reload하는 것입니다. reload는 해당 탭의
+미저장 차트·Pine 편집·일시 상태를 잃을 수 있으므로, 원문을 먼저 보관하고 개인 탭은 reload하지 마세요.
+CLI는 reload나 force 해제를 자동 수행하지 않습니다. 관측한 3.4.1 page-local 경로에서는
+새 CDP loaderId로 구세대 파기를 확인하고, layout/chart/controller가 여러 샘플에서 안정된 뒤
+복구합니다. 알 수 없는 외부/shell callback 구현에는 이 무효화를 일반화하지 않습니다.
+
 CDP 요청은 기본 15초로 제한되며 `TV_CDP_TIMEOUT_MS`는 100..120000 범위입니다.
 timeout은 native 작업 취소가 아닙니다. journal은 실제 변경 요청 직전에 정확한 target을
 기록합니다. 순수 조회·stream polling 강제 종료는 복구 journal을 만들지 않습니다.
