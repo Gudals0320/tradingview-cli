@@ -1,0 +1,158 @@
+{
+  "name": "CLI-QA Strategy Reopen 20261001",
+  "setup_cleanup_only": true,
+  "records": [
+    {
+      "label": "guard",
+      "args": [
+        "tab",
+        "list"
+      ],
+      "exit_code": 0,
+      "output": {
+        "success": true
+      }
+    },
+    {
+      "label": "open",
+      "args": [
+        "pine",
+        "open",
+        "CLI-QA Strategy Reopen 20261001"
+      ],
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "name": "CLI-QA Strategy Reopen 20261001",
+        "lines": 10,
+        "source": "internal_api",
+        "opened": true
+      }
+    },
+    {
+      "label": "before",
+      "args": [
+        "state"
+      ],
+      "exit_code": 0,
+      "output": {
+        "matching_study_count": 2
+      }
+    },
+    {
+      "label": "compile",
+      "args": [
+        "pine",
+        "compile"
+      ],
+      "exit_code": 1,
+      "output": {
+        "success": false,
+        "compiled": false,
+        "report_ready": false,
+        "code": "AMBIGUOUS_TARGET",
+        "error": "More than one chart study uses this Pine document.",
+        "target_count": 2
+      }
+    },
+    {
+      "label": "compile-state",
+      "args": [
+        "state"
+      ],
+      "exit_code": 0,
+      "output": {
+        "matching_study_count": 2
+      }
+    },
+    {
+      "label": "raw",
+      "args": [
+        "pine",
+        "raw-compile"
+      ],
+      "exit_code": 1,
+      "output": {
+        "success": false,
+        "compiled": false,
+        "report_ready": false,
+        "code": "AMBIGUOUS_TARGET",
+        "error": "More than one chart study uses this Pine document.",
+        "target_count": 2
+      }
+    },
+    {
+      "label": "raw-state",
+      "args": [
+        "state"
+      ],
+      "exit_code": 0,
+      "output": {
+        "matching_study_count": 2
+      }
+    },
+    {
+      "label": "save-compile",
+      "args": [
+        "pine",
+        "compile",
+        "--save"
+      ],
+      "exit_code": 1,
+      "output": {
+        "success": false,
+        "compiled": false,
+        "report_ready": false,
+        "code": "AMBIGUOUS_TARGET",
+        "error": "More than one chart study uses this Pine document.",
+        "target_count": 2
+      }
+    },
+    {
+      "label": "save-compile-state",
+      "args": [
+        "state"
+      ],
+      "exit_code": 0,
+      "output": {
+        "matching_study_count": 2
+      }
+    },
+    {
+      "label": "cleanup-0",
+      "args": [
+        "indicator",
+        "remove",
+        "QA-study-id"
+      ],
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "action": "remove"
+      }
+    },
+    {
+      "label": "cleanup-1",
+      "args": [
+        "indicator",
+        "remove",
+        "QA-study-id"
+      ],
+      "exit_code": 0,
+      "output": {
+        "success": true,
+        "action": "remove"
+      }
+    },
+    {
+      "label": "after-cleanup",
+      "args": [
+        "state"
+      ],
+      "exit_code": 0,
+      "output": {
+        "matching_study_count": 0
+      }
+    }
+  ]
+}

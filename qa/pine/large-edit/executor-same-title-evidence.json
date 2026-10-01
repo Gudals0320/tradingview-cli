@@ -1,0 +1,93 @@
+{
+  "primary": "CLI-QA Strategy Reopen 20261001",
+  "other": "CLI-QA Recovery Same Title Document 20261001",
+  "records": [
+    {
+      "label": "guard",
+      "args": [
+        "tab",
+        "list"
+      ],
+      "output": {
+        "success": true,
+        "tab_count": 3
+      }
+    },
+    {
+      "label": "reuse-other",
+      "args": [
+        "pine",
+        "open",
+        "CLI-QA Recovery Same Title Document 20261001"
+      ],
+      "output": {
+        "success": true,
+        "name": "CLI-QA Recovery Same Title Document 20261001",
+        "lines": 10,
+        "opened": true
+      }
+    },
+    {
+      "label": "open-primary",
+      "args": [
+        "pine",
+        "open",
+        "CLI-QA Strategy Reopen 20261001"
+      ],
+      "output": {
+        "success": true,
+        "name": "CLI-QA Strategy Reopen 20261001",
+        "lines": 10,
+        "opened": true
+      }
+    },
+    {
+      "label": "edit-primary",
+      "args": [
+        "pine",
+        "set"
+      ],
+      "output": {
+        "success": true,
+        "lines_set": 10
+      }
+    },
+    {
+      "label": "compile-primary",
+      "args": [
+        "pine",
+        "compile",
+        "--save"
+      ],
+      "output": {
+        "success": true,
+        "compiled": true,
+        "has_errors": false,
+        "errors": [],
+        "warnings": [],
+        "saved": true,
+        "button_clicked": "updateOnChart",
+        "report_ready": true
+      }
+    },
+    {
+      "label": "final-open-large",
+      "args": [
+        "pine",
+        "open",
+        "CLI-QA Large Edit 20261001"
+      ],
+      "output": {
+        "success": true,
+        "name": "CLI-QA Large Edit 20261001",
+        "lines": 319,
+        "opened": true
+      }
+    }
+  ],
+  "assertions": {
+    "primary_count": 1,
+    "other_count": 1,
+    "other_unchanged": true
+  }
+}

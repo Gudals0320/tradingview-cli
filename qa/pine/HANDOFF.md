@@ -148,6 +148,17 @@ Lead will stop polling and await an explicit question.
   updated afterward, with the reviewer's approval and no product changes.
   No merge, PR or push was requested or performed.
 
+## Large-edit follow-up — issue 12
+
+Lead discovered #12 in a 266→319-line concrete strategy edit, then isolated it in
+a tiny strategy. The later target planning/freshness fix and independent minimal,
+large, indicator, duplicate and same-title live checks are in
+`large-edit/EXECUTOR.md`. #4 exact saved-name resolution received an additional
+fix. The new total unit suite is 308 passing tests, including pine_targets.
+The final editor is the saved large edited QA strategy in split view. Existing
+Lead failure evidence remains historical; explicit setup cleanup and retained QA
+assets are documented separately from the successful recovery sequence.
+
 ## Lead large-edit follow-up — after 6e41546
 
 The human requested a concrete, large Pine editing exercise via Executor.

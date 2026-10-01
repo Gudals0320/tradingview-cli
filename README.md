@@ -150,6 +150,7 @@ tv stream quote --interval 500
 `--save`로 저장한 성공 응답에는 `saved:true`와 `script_id`가 포함됩니다. 새 draft 컴파일은 Desktop의 임시 draft 경로를 사용합니다.
 `pine save`는 새 문서의 이름 창에서 Desktop이 제안한 이름을 확인하고 서버 소스를 재조회해 저장을 검증합니다.
 `pine new/open`은 미저장 편집 내용을 요청한 문서로 교체합니다. 필요한 내용은 먼저 저장하세요.
+`pine open`은 정확한 저장 이름을 우선하며, 제목 또는 부분 이름이 여러 문서와 일치하면 열기를 거부합니다.
 경고 marker는 컴파일 응답 이후에 나타날 수 있으므로 `pine errors`로 다시 확인하세요.
 
 현재 옵션은 `tv --help`, `tv <명령> --help`, `tv <명령> <하위 명령> --help`로 확인할 수 있습니다.

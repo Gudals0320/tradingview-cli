@@ -119,3 +119,10 @@ User communication authorization and chat IDs remain in `../HANDOFF.md`.
 Lead checked script syntax, issue body readback, source hashes, and actual
 Desktop behavior. Product code was unchanged, so the existing 297-test suite was
 not rerun during this follow-up; that prior result is Executor's baseline.
+
+## Executor resolution
+
+The later implementation and verification are recorded in [EXECUTOR.md](EXECUTOR.md).
+The minimum and large error→correction sequences now preserve the existing study
+without the documented workaround. Original failed/workaround evidence above is
+kept as historical reproduction; executor evidence files contain the fixed runs.

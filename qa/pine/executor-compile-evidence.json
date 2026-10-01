@@ -1,13 +1,13 @@
 {
   "target_layout": "CLI-QA-Pine-20261001",
   "saved_indicator_study_count": {
-    "before": 17,
-    "after": 17
+    "before": 13,
+    "after": 13
   },
   "fresh_indicator_study_count": {
-    "before": 17,
-    "first_compile": 18,
-    "second_compile": 18
+    "before": 13,
+    "first_compile": 14,
+    "second_compile": 14
   },
   "records": [
     {
@@ -17,7 +17,7 @@
         "open",
         "CLI-QA-20261001 Indicator"
       ],
-      "elapsed_ms": 544,
+      "elapsed_ms": 571,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -32,7 +32,7 @@
         "pine",
         "get"
       ],
-      "elapsed_ms": 143,
+      "elapsed_ms": 130,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -46,7 +46,7 @@
         "pine",
         "compile"
       ],
-      "elapsed_ms": 135,
+      "elapsed_ms": 132,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -64,7 +64,7 @@
         "pine",
         "compile"
       ],
-      "elapsed_ms": 141,
+      "elapsed_ms": 146,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -82,7 +82,7 @@
         "pine",
         "set"
       ],
-      "elapsed_ms": 137,
+      "elapsed_ms": 130,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -95,7 +95,7 @@
         "pine",
         "compile"
       ],
-      "elapsed_ms": 129,
+      "elapsed_ms": 139,
       "exit_code": 1,
       "output": {
         "success": false,
@@ -111,7 +111,7 @@
         "compile",
         "--save"
       ],
-      "elapsed_ms": 778,
+      "elapsed_ms": 770,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -129,7 +129,7 @@
         "pine",
         "set"
       ],
-      "elapsed_ms": 132,
+      "elapsed_ms": 127,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -142,13 +142,13 @@
         "pine",
         "save"
       ],
-      "elapsed_ms": 702,
+      "elapsed_ms": 934,
       "exit_code": 0,
       "output": {
         "success": true,
         "saved": true,
         "action": "saved",
-        "version": "17.0"
+        "version": "19.0"
       }
     },
     {
@@ -158,7 +158,7 @@
         "new",
         "indicator"
       ],
-      "elapsed_ms": 182,
+      "elapsed_ms": 185,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -173,7 +173,7 @@
         "pine",
         "set"
       ],
-      "elapsed_ms": 137,
+      "elapsed_ms": 132,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -186,7 +186,7 @@
         "pine",
         "compile"
       ],
-      "elapsed_ms": 591,
+      "elapsed_ms": 777,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -203,7 +203,7 @@
         "pine",
         "compile"
       ],
-      "elapsed_ms": 139,
+      "elapsed_ms": 338,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -223,7 +223,7 @@
         "--file",
         "qa/pine/invalid.pine"
       ],
-      "elapsed_ms": 141,
+      "elapsed_ms": 129,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -236,7 +236,7 @@
         "pine",
         "compile"
       ],
-      "elapsed_ms": 787,
+      "elapsed_ms": 558,
       "exit_code": 1,
       "output": {
         "success": false,
@@ -259,11 +259,11 @@
         "pine",
         "console"
       ],
-      "elapsed_ms": 132,
+      "elapsed_ms": 126,
       "exit_code": 0,
       "output": {
         "success": true,
-        "entry_count": 6
+        "entry_count": 9
       }
     },
     {
@@ -274,7 +274,7 @@
         "--file",
         "qa/pine/warning.pine"
       ],
-      "elapsed_ms": 139,
+      "elapsed_ms": 126,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -287,7 +287,7 @@
         "pine",
         "compile"
       ],
-      "elapsed_ms": 566,
+      "elapsed_ms": 557,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -295,7 +295,7 @@
         "has_errors": false,
         "errors": [],
         "warnings": [],
-        "button_clicked": "addToChart"
+        "button_clicked": "updateOnChart"
       }
     },
     {
@@ -304,7 +304,7 @@
         "pine",
         "errors"
       ],
-      "elapsed_ms": 142,
+      "elapsed_ms": 131,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -321,7 +321,7 @@
         "pine",
         "errors"
       ],
-      "elapsed_ms": 135,
+      "elapsed_ms": 124,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -347,7 +347,7 @@
         "--file",
         "qa/pine/indicator.pine"
       ],
-      "elapsed_ms": 140,
+      "elapsed_ms": 131,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -360,7 +360,7 @@
         "pine",
         "compile"
       ],
-      "elapsed_ms": 596,
+      "elapsed_ms": 437,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -368,7 +368,7 @@
         "has_errors": false,
         "errors": [],
         "warnings": [],
-        "button_clicked": "addToChart"
+        "button_clicked": "updateOnChart"
       }
     },
     {
@@ -378,7 +378,7 @@
         "open",
         "CLI-QA-20261001 Copy"
       ],
-      "elapsed_ms": 801,
+      "elapsed_ms": 569,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -393,7 +393,7 @@
         "pine",
         "get"
       ],
-      "elapsed_ms": 132,
+      "elapsed_ms": 138,
       "exit_code": 0,
       "output": {
         "success": true,

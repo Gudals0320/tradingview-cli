@@ -7,7 +7,7 @@
         "tab",
         "list"
       ],
-      "elapsed_ms": 159,
+      "elapsed_ms": 160,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -21,7 +21,7 @@
         "open",
         "CLI-QA-20261001 Indicator"
       ],
-      "elapsed_ms": 554,
+      "elapsed_ms": 549,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -36,7 +36,7 @@
         "pine",
         "get"
       ],
-      "elapsed_ms": 148,
+      "elapsed_ms": 135,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -51,7 +51,7 @@
         "open",
         "CLI-QA-20261001 Copy"
       ],
-      "elapsed_ms": 680,
+      "elapsed_ms": 540,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -66,7 +66,7 @@
         "pine",
         "get"
       ],
-      "elapsed_ms": 137,
+      "elapsed_ms": 129,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -80,7 +80,7 @@
         "pine",
         "set"
       ],
-      "elapsed_ms": 145,
+      "elapsed_ms": 131,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -94,7 +94,7 @@
         "open",
         "CLI-QA-20261001 Indicator"
       ],
-      "elapsed_ms": 569,
+      "elapsed_ms": 617,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -109,7 +109,7 @@
         "pine",
         "get"
       ],
-      "elapsed_ms": 151,
+      "elapsed_ms": 133,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -123,7 +123,7 @@
         "pine",
         "set"
       ],
-      "elapsed_ms": 139,
+      "elapsed_ms": 134,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -137,7 +137,7 @@
         "new",
         "library"
       ],
-      "elapsed_ms": 185,
+      "elapsed_ms": 193,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -152,7 +152,7 @@
         "pine",
         "get"
       ],
-      "elapsed_ms": 141,
+      "elapsed_ms": 132,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -167,7 +167,7 @@
         "new",
         "indicator"
       ],
-      "elapsed_ms": 167,
+      "elapsed_ms": 179,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -182,7 +182,7 @@
         "pine",
         "set"
       ],
-      "elapsed_ms": 141,
+      "elapsed_ms": 132,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -195,7 +195,7 @@
         "pine",
         "save"
       ],
-      "elapsed_ms": 845,
+      "elapsed_ms": 1032,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -210,11 +210,11 @@
         "pine",
         "list"
       ],
-      "elapsed_ms": 273,
+      "elapsed_ms": 268,
       "exit_code": 0,
       "output": {
         "success": true,
-        "count": 12
+        "count": 20
       }
     },
     {
@@ -224,7 +224,7 @@
         "open",
         "CLI-QA-20261001 Executor New"
       ],
-      "elapsed_ms": 570,
+      "elapsed_ms": 553,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -239,7 +239,7 @@
         "pine",
         "get"
       ],
-      "elapsed_ms": 132,
+      "elapsed_ms": 144,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -254,7 +254,7 @@
         "open",
         "CLI-QA-20261001 Indicator"
       ],
-      "elapsed_ms": 545,
+      "elapsed_ms": 538,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -269,7 +269,7 @@
         "pine",
         "get"
       ],
-      "elapsed_ms": 144,
+      "elapsed_ms": 137,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -284,7 +284,7 @@
         "open",
         "CLI-QA-20261001 Copy"
       ],
-      "elapsed_ms": 559,
+      "elapsed_ms": 570,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -300,7 +300,7 @@
         "open",
         "CLI-QA-20261001 Indicator"
       ],
-      "elapsed_ms": 571,
+      "elapsed_ms": 550,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -315,7 +315,7 @@
         "pine",
         "set"
       ],
-      "elapsed_ms": 148,
+      "elapsed_ms": 144,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -328,13 +328,13 @@
         "pine",
         "save"
       ],
-      "elapsed_ms": 1069,
+      "elapsed_ms": 744,
       "exit_code": 0,
       "output": {
         "success": true,
         "saved": true,
         "action": "saved",
-        "version": "14.0"
+        "version": "20.0"
       }
     },
     {
@@ -344,7 +344,7 @@
         "open",
         "CLI-QA-20261001 Copy"
       ],
-      "elapsed_ms": 690,
+      "elapsed_ms": 578,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -359,7 +359,7 @@
         "pine",
         "get"
       ],
-      "elapsed_ms": 153,
+      "elapsed_ms": 143,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -374,7 +374,7 @@
         "open",
         "CLI-QA-20261001 Indicator"
       ],
-      "elapsed_ms": 570,
+      "elapsed_ms": 588,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -389,7 +389,7 @@
         "pine",
         "get"
       ],
-      "elapsed_ms": 151,
+      "elapsed_ms": 133,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -403,7 +403,7 @@
         "pine",
         "set"
       ],
-      "elapsed_ms": 143,
+      "elapsed_ms": 148,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -416,13 +416,13 @@
         "pine",
         "save"
       ],
-      "elapsed_ms": 1049,
+      "elapsed_ms": 830,
       "exit_code": 0,
       "output": {
         "success": true,
         "saved": true,
         "action": "saved",
-        "version": "15.0"
+        "version": "21.0"
       }
     },
     {
@@ -432,7 +432,7 @@
         "open",
         "CLI-QA-20261001 Copy"
       ],
-      "elapsed_ms": 583,
+      "elapsed_ms": 553,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -447,7 +447,7 @@
         "pine",
         "get"
       ],
-      "elapsed_ms": 152,
+      "elapsed_ms": 140,
       "exit_code": 0,
       "output": {
         "success": true,
@@ -461,11 +461,11 @@
         "pine",
         "list"
       ],
-      "elapsed_ms": 265,
+      "elapsed_ms": 259,
       "exit_code": 0,
       "output": {
         "success": true,
-        "count": 12
+        "count": 20
       }
     }
   ]
