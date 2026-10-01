@@ -9,10 +9,12 @@ const owned = new Map();
 const access = new AsyncLocalStorage();
 export function withReadOnlySession(action) { return access.run({ readOnly: true }, action); }
 export function isReadOnlySession() { return access.getStore()?.readOnly === true; }
+export function withWorkspaceSession(lease, action) { return access.run({ workspace: lease }, action); }
+export function currentWorkspaceSession() { return access.getStore()?.workspace || null; }
 export function sessionPaths({ host = CDP_HOST, port = CDP_PORT, directory = join(tmpdir(), 'tradingview-cli-sessions') } = {}) {
   const endpoint = `${host === 'localhost' ? '127.0.0.1' : host}:${port}`;
   const key = createHash('sha256').update(endpoint).digest('hex');
-  return { key, directory, lock: join(directory, `${key}.lock`), journal: join(directory, `${key}.journal.json`), gate: join(directory, `${key}.acquire`) };
+  return { key, directory, lock: join(directory, `${key}.lock`), journal: join(directory, `${key}.journal.json`), gate: join(directory, `${key}.acquire`), reservations: join(directory, `${key}.workspaces.json`) };
 }
 function failure(code, message) { const error = new Error(message); error.code = code; return error; }
 function alive(pid) {
@@ -20,6 +22,25 @@ function alive(pid) {
   try { process.kill(pid, 0); return true; } catch (error) { return error.code !== 'ESRCH'; }
 }
 function read(path) { return JSON.parse(readFileSync(path, 'utf8')); }
+
+export function readReservations(options = {}) {
+  const paths = sessionPaths(options);
+  if (!existsSync(paths.reservations)) return [];
+  const value = read(paths.reservations);
+  if (!Array.isArray(value)) throw failure('OWNERSHIP_UNREADABLE', 'Workspace reservation registry is malformed.');
+  return value;
+}
+
+/** Metadata transaction only. Never hold this gate during Desktop operations. */
+export function withAdmissionGate(options, action) {
+  const paths = sessionPaths(options);
+  mkdirSync(paths.directory, { recursive: true });
+  let gate;
+  try { gate = openSync(paths.gate, 'wx', 0o600); }
+  catch (error) { if (error.code === 'EEXIST') throw failure('SESSION_BUSY', `Admission metadata is busy. Inspect ${paths.gate} if its process was killed.`); throw error; }
+  try { writeFileSync(gate, JSON.stringify({ pid: process.pid })); closeSync(gate); gate = null; return action(paths); }
+  finally { if (gate !== null) closeSync(gate); unlinkSync(paths.gate); }
+}
 
 export function sessionStatus(options = {}) {
   const paths = sessionPaths(options);
@@ -37,7 +58,13 @@ export function sessionStatus(options = {}) {
 /** All cooperating CLI processes share one lock, including different layouts. */
 export function assertSessionAccess(options = {}) {
   const paths = sessionPaths(options);
+  const workspace = currentWorkspaceSession();
+  if (workspace) {
+    if (workspace.endpoint_key !== paths.key) throw failure('WORKSPACE_ENDPOINT_MISMATCH', 'Workspace endpoint changed.');
+    workspace.assertOwner(); return;
+  }
   if (owned.has(paths.key)) return;
+  if (readReservations(options).length) throw failure('WORKSPACE_RESERVED', 'This endpoint has reserved workspaces. Use --workspace FILE for supported commands.');
   const state = sessionStatus(options);
   if (state.locked && state.owner_alive) throw failure('SESSION_BUSY', 'Another TradingView CLI process owns this Desktop session.');
   if (state.recovery_required && !(options.readOnly || isReadOnlySession())) throw failure('RECOVERY_REQUIRED',
@@ -46,12 +73,8 @@ export function assertSessionAccess(options = {}) {
 
 export function acquireSession(options = {}) {
   const paths = sessionPaths(options);
-  mkdirSync(paths.directory, { recursive: true });
-  let gate;
-  try { gate = openSync(paths.gate, 'wx', 0o600); }
-  catch (error) { if (error.code === 'EEXIST') throw failure('SESSION_BUSY', `Session acquisition/recovery is already in progress. If its process was killed, inspect ${paths.gate} before removing it.`); throw error; }
-  writeFileSync(gate, JSON.stringify({ pid: process.pid })); closeSync(gate);
-  try {
+  return withAdmissionGate(options, () => {
+  if (readReservations(options).length) throw failure('WORKSPACE_RESERVED', 'Reserved workspaces prevent endpoint-wide access.');
   const status = sessionStatus(options);
   if (status.locked) {
     if (status.owner_alive) throw failure('SESSION_BUSY', 'Another batch owns this Desktop session.');
@@ -84,7 +107,7 @@ export function acquireSession(options = {}) {
       unlinkSync(paths.lock); owned.delete(paths.key); released = true;
     },
   };
-  } finally { unlinkSync(paths.gate); }
+  });
 }
 
 /** Explicitly abandon restoration; archive the draft for manual recovery. */
