@@ -113,5 +113,11 @@ explicit. Existing source-identity/ambiguity and target protection unit tests pa
 - Every source mutation is fenced by exact target URL/native document ID. New
   template/null ID is confirmed before source writes. Unexpected child exit,
   malformed JSON, failed open or inspection mismatch stops the harness.
-- No merge, PR or push. Reviewer has intermediate agreement on R1–R5; final
-  integration/evidence agreement is pending and will be recorded after review.
+- No merge, PR or push. Reviewer explicitly agreed **all R1–R5** at `103fc71`.
+  The reviewer independently reran 339 tests, lint and whitespace checks,
+  confirmed the original scenario directory is unchanged, and compared selected
+  ignored raw records against the committed outcomes. Live Desktop runs were
+  performed by Executor; Reviewer reviewed their evidence without taking GUI
+  execution ownership. All limits above are included in the agreement.
+  This later change only records that agreement, with the reviewer's permission
+  to finish after a documentation-only commit and clean status.
