@@ -118,6 +118,21 @@ it('open changes the document identity as well as source', async () => {
   assert.equal(f.read().id, 'A');
   assert.equal(f.read().source, 'saved A\r\n');
 });
+it('open prioritizes the exact saved name over another document with the same title', async () => {
+  const f=fixture();f.context.fetch=async url=>({json:async()=>url.includes('list/')
+    ? [{scriptIdPart:'Q',scriptName:'Q',scriptTitle:'A'},{scriptIdPart:'A',scriptName:'A',scriptTitle:'A'}]
+    : {source:'saved A\n'}});
+  await openScript({name:'A',_deps:f});assert.equal(f.read().id,'A');
+});
+it('open rejects ambiguous title and partial matches without changing the editor', async () => {
+  const f=fixture();f.context.fetch=async()=>({json:async()=>[
+    {scriptIdPart:'Q',scriptName:'QA-one',scriptTitle:'Same title'},
+    {scriptIdPart:'R',scriptName:'QA-two',scriptTitle:'Same title'},
+  ]});
+  await assert.rejects(openScript({name:'Same title',_deps:f}),/Ambiguous/);
+  await assert.rejects(openScript({name:'QA',_deps:f}),/Ambiguous/);
+  assert.equal(f.read().source,'original B');
+});
 it('open fails when the native controller silently opens a different document', async () => {
   const f = fixture(); f.controller.openScript = async () => {};
   await assert.rejects(openScript({ name: 'A', _deps: f }), /identity\/source/);

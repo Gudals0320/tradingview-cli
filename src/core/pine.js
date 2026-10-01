@@ -507,18 +507,16 @@ export async function openScript({ name, _deps }) {
         .then(function(r) { return r.json(); })
         .then(function(scripts) {
           if (!Array.isArray(scripts)) return {error: 'pine-facade returned unexpected data'};
-          var match = null;
-          for (var i = 0; i < scripts.length; i++) {
-            var sn = (scripts[i].scriptName || '').toLowerCase();
-            var st = (scripts[i].scriptTitle || '').toLowerCase();
-            if (sn === target || st === target) { match = scripts[i]; break; }
-          }
+          var exactNames = scripts.filter(function(s) {return (s.scriptName || '').toLowerCase() === target;});
+          if (exactNames.length > 1) return {error:'Ambiguous saved script name: ' + target};
+          var match = exactNames[0];
           if (!match) {
-            for (var j = 0; j < scripts.length; j++) {
-              var sn2 = (scripts[j].scriptName || '').toLowerCase();
-              var st2 = (scripts[j].scriptTitle || '').toLowerCase();
-              if (sn2.indexOf(target) !== -1 || st2.indexOf(target) !== -1) { match = scripts[j]; break; }
-            }
+            var exactTitles = scripts.filter(function(s) {return (s.scriptTitle || '').toLowerCase() === target;});
+            var candidates = exactTitles.length ? exactTitles : scripts.filter(function(s) {
+              return (s.scriptName || '').toLowerCase().includes(target) || (s.scriptTitle || '').toLowerCase().includes(target);
+            });
+            if (candidates.length > 1) return {error:'Ambiguous saved script title/partial name: ' + target + '. Use the exact saved name.'};
+            match = candidates[0];
           }
           if (!match) return {error: 'Script "' + target + '" not found. Use pine_list_scripts to see available scripts.'};
 
