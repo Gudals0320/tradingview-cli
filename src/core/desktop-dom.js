@@ -92,7 +92,9 @@ export function readPineConsole(document, controller) {
 export function confirmPineSaveDialog(document) {
   const buttons = document.querySelectorAll('button[data-qa-id="save-btn"][name="save"]');
   const button = Array.from(buttons).find(item => item.offsetParent !== null && !item.disabled
-    && item.getAttribute('aria-disabled') !== 'true');
+    && item.getAttribute('aria-disabled') !== 'true'
+    && item.parentElement?.parentElement?.querySelector('input[data-qa-id="ui-lib-Input-input"]')
+    && /스크립트 저장|save script/i.test(item.parentElement.parentElement.textContent || ''));
   if (!button) return false;
   button.click();
   return true;

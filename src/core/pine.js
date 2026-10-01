@@ -297,9 +297,14 @@ export async function save({ timeout = 15000, _deps } = {}) {
   await inspect(`(() => {
     const controller = ${FIND_CONTROLLER};
     const m = ${FIND_MONACO};
-    if (!controller || !m) throw new Error('Pine save controller unavailable.');
-    if (window.__tvCliSave?.pending) throw new Error('A Pine save is already pending.');
-    const operation = window.__tvCliSave = {token:${JSON.stringify(token)}, pending:true, source:m.editor.getValue()};
+    if (!controller || !m || typeof controller.saveScript !== 'function' || typeof controller.isModified !== 'function') {
+      throw new Error('Pine save controller unavailable.');
+    }
+    if (window.__tvCliSave?.pending && !window.__tvCliSave.abandoned && Date.now() < window.__tvCliSave.expiresAt) {
+      throw new Error('A Pine save is already pending.');
+    }
+    const operation = window.__tvCliSave = {token:${JSON.stringify(token)}, pending:true,
+      expiresAt:Date.now()+${Number(timeout)}, source:m.editor.getValue(), dialogConfirmed:false};
     if (controller.getScriptIdVersion()?.scriptIdPart && !controller.isModified()) {
       operation.pending = false; return true;
     }
@@ -315,7 +320,9 @@ export async function save({ timeout = 15000, _deps } = {}) {
       if (operation?.token !== ${JSON.stringify(token)}) return {error:'Pine save operation was replaced.'};
       const controller = ${FIND_CONTROLLER};
       if (!controller) return {error:'Pine save controller disappeared.'};
-      const clicked = (${confirmPineSaveDialog.toString()})(document);
+      const clicked = operation.pending && !operation.dialogConfirmed
+        ? (${confirmPineSaveDialog.toString()})(document) : false;
+      if (clicked) operation.dialogConfirmed = true;
       return {pending:operation.pending,error:operation.error,clicked,
         identity:controller.getScriptIdVersion(),modified:controller.isModified()};
     })()`);
@@ -341,6 +348,9 @@ export async function save({ timeout = 15000, _deps } = {}) {
         : {success:false,saved:false,error:'Persisted Pine source did not match the editor source.'};
     }
   } while (now() - start < timeout);
+  await inspect(`(() => { const operation=window.__tvCliSave;
+    if (operation?.token === ${JSON.stringify(token)}) { operation.abandoned=true;operation.pending=false; }
+    return true; })()`);
   return { success:false,saved:false,error:'Pine save did not complete before timeout.' };
 }
 export async function getConsole({ _deps } = {}) {

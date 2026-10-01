@@ -48,16 +48,19 @@ it('new reports a failed identity/template verification accurately', async () =>
 it('save confirms the Korean dialog using stable attributes', () => {
   let clicked = 0;
   const button = { offsetParent: {}, disabled: false, textContent: '저장',
+    parentElement: { parentElement: { querySelector: () => ({}), textContent: '스크립트 저장새 스크립트 이름' } },
     getAttribute: () => null, click: () => clicked++ };
   assert.equal(confirmPineSaveDialog({ querySelectorAll: selector => {
     assert.equal(selector, 'button[data-qa-id="save-btn"][name="save"]'); return [button];
   } }), true);
   assert.equal(clicked, 1);
   assert.equal(confirmPineSaveDialog({ querySelectorAll: () => [{ ...button, disabled: true }] }), false);
+  assert.equal(confirmPineSaveDialog({ querySelectorAll: () => [{ ...button, parentElement: null }] }), false);
 });
 function saveFixture() {
   const f = fixture(); let ticks = 0;
   f.controller.isModified = () => false;
+  f.controller.saveScript = async () => {};
   f.context.fetch = async () => ({ ok: true, json: async () => ({ source: 'original B' }) });
   f.sleep = async () => { ticks++; };
   f.now = () => ticks * 100;
@@ -82,6 +85,32 @@ it('save never reports success on persistence mismatch, rejection, or timeout', 
   const pending = saveFixture(); pending.controller.isModified = () => true;
   pending.controller.saveScript = () => new Promise(() => {});
   assert.match((await save({ timeout: 200, _deps: pending })).error, /timeout/);
+  pending.controller.isModified = () => false;
+  assert.equal((await save({ _deps: pending })).saved, true);
+});
+it('save recovers an expired page operation left by an interrupted CLI', async () => {
+  const f = saveFixture();
+  f.context.window.__tvCliSave = { pending: true, token: 'dead-process', expiresAt: Date.now() - 1 };
+  assert.equal((await save({ _deps: f })).saved, true);
+});
+it('save fails if a user cancels the native name dialog', async () => {
+  const f = saveFixture(); f.controller.isModified = () => true;
+  f.controller.saveScript = async () => { throw new Error('Save canceled'); };
+  const result = await save({ _deps: f });
+  assert.equal(result.success, false); assert.equal(result.saved, false);
+});
+it('save confirms its name dialog only once while the operation remains pending', async () => {
+  const f = saveFixture(); let clicks = 0;
+  f.controller.isModified = () => true;
+  f.controller.saveScript = () => new Promise(() => {});
+  const query = f.context.document.querySelectorAll;
+  f.context.document.querySelectorAll = selector => selector.startsWith('button') ? [{
+    offsetParent: {}, disabled: false, getAttribute: () => null,
+    parentElement: { parentElement: { querySelector: () => ({}), textContent: '스크립트 저장새 스크립트 이름' } },
+    click: () => clicks++,
+  }] : query(selector);
+  await save({ timeout: 500, _deps: f });
+  assert.equal(clicks, 1);
 });
 it('open changes the document identity as well as source', async () => {
   const f = fixture();
