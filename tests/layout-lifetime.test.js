@@ -8,7 +8,7 @@ import { runInNewContext } from 'node:vm';
 
 function fixture(supportedNative=false) {
   let uid='B',visible=false,listener,tick;
-  const root={querySelector:()=>({}),contains:()=>true,addEventListener:(_,fn)=>{listener=fn;},removeEventListener:()=>{listener=null;}};
+  const root={querySelector:()=>({}),contains:button=>!button?.outside,addEventListener:(_,fn)=>{listener=fn;},removeEventListener:()=>{listener=null;}};
   const button=(name,qa)=>({offsetParent:{},parentElement:{parentElement:root},getAttribute:key=>key==='name'?name:qa});
   const document={querySelectorAll:()=>visible?[button('dontSave','dontSave-btn')]:[]};
   const chart={_chartWidget:{model:()=>({mainSeries:()=>({isLoading:()=>false})})}};
@@ -16,7 +16,7 @@ function fixture(supportedNative=false) {
   const operation=startLayoutOperation(window,document,{token:'token',generation:'generation',expected:'A',supportedNative,samples:3,grace:10});
   const sample=(count=3)=>{for(let index=0;index<count;index++)tick();};
   operation.dispatch_observed=true;
-  return {window,document,operation,sample,uid:value=>{uid=value;},dialog:value=>{visible=value;},click:action=>{listener?.({target:button(action,action==='cancel'?'cancel-btn':action==='dontSave'?'dontSave-btn':'ok-btn')});visible=false;}};
+  return {window,document,operation,sample,uid:value=>{uid=value;},dialog:value=>{visible=value;},dispatch:event=>listener?.(event),click:action=>{listener?.({target:button(action,action==='cancel'?'cancel-btn':action==='dontSave'?'dontSave-btn':'ok-btn')});visible=false;}};
 }
 async function microtasks(){await Promise.resolve();await Promise.resolve();}
 
@@ -95,6 +95,34 @@ it('supported false/cancel, false/no capture and rejection settle only stable or
     assert.equal(f.operation.state,action==='cancel'?'cancelled':action==='reject'?'failed':'not_switched');
   }
   const foreign=fixture(true);observeLayoutPromise(foreign.window,foreign.operation,Promise.resolve(false));await microtasks();foreign.uid('foreign');foreign.sample();assert.equal(foreign.operation.pending,true);
+});
+it('supported other non-boolean settlement at original identity stays unverified even with captured cancel', async () => {
+  for(const result of [null,'false',1,{}]) {
+    const f=fixture(true);f.dialog(true);f.sample();f.click('cancel');
+    observeLayoutPromise(f.window,f.operation,Promise.resolve(result));await microtasks();f.sample(10);
+    assert.equal(f.operation.promise_settled,true);assert.equal(f.operation.pending,true);assert.equal(f.operation.state,'pending');
+  }
+});
+it('verified 3.4.1 undefined outcome requires captured scoped Cancel, settled chain and no other native work', async () => {
+  const cancelled=fixture(true);cancelled.dialog(true);cancelled.sample();cancelled.click('cancel');
+  observeLayoutPromise(cancelled.window,cancelled.operation,Promise.resolve(undefined));await microtasks();
+  cancelled.window.__tvCliSave={pending:true};cancelled.sample(10);assert.equal(cancelled.operation.pending,true);
+  cancelled.window.__tvCliSave.pending=false;cancelled.sample();assert.equal(cancelled.operation.state,'cancelled');
+  const missing=fixture(true);observeLayoutPromise(missing.window,missing.operation,Promise.resolve(undefined));await microtasks();missing.sample(10);
+  assert.equal(missing.operation.pending,true);
+  const unsettled=fixture(true);unsettled.dialog(true);unsettled.sample();unsettled.click('cancel');
+  observeLayoutPromise(unsettled.window,unsettled.operation,new Promise(()=>{}));unsettled.sample(10);assert.equal(unsettled.operation.pending,true);
+  for(const result of [undefined,false]) {
+    const accepted=fixture(true);accepted.dialog(true);accepted.sample();accepted.click('dontSave');
+    observeLayoutPromise(accepted.window,accepted.operation,Promise.resolve(result));await microtasks();accepted.sample(10);
+    assert.equal(accepted.operation.pending,true);
+  }
+});
+it('a Cancel from another dialog or a superseded operation cannot prove cancellation', async () => {
+  const f=fixture(true);f.dialog(true);f.sample();
+  f.dispatch({target:{outside:true,getAttribute:key=>key==='name'?'cancel':'cancel-btn'}});
+  assert.equal(f.operation.dialog_action,null);
+  f.window.__tvCliLayoutSwitch={token:'other',pending:true};f.click('cancel');assert.equal(f.operation.dialog_action,null);
 });
 it('saved-chart object and required URL reach the loader, including numeric ID lookup', async () => {
   const chart={id:123,url:'A',name:'QA'},window={TradingViewApi:{getSavedCharts:cb=>cb([chart]),loadChartFromServer:value=>{assert.equal(value,chart);return Promise.resolve(false);}}};

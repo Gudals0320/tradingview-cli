@@ -52,6 +52,7 @@ export function startLayoutOperation(window, document, options) {
         if (dialog && click) dialog.removeEventListener?.('click', click, true);
         dialog = root;
         click = event => {
+          if (window.__tvCliLayoutSwitch !== operation || !operation.pending || dialog !== root) return;
           const button = event.target?.closest?.('button') || event.target;
           if (!root.contains?.(button)) return;
           const name = button.getAttribute?.('name'), qa = button.getAttribute?.('data-qa-id');
@@ -72,9 +73,14 @@ export function startLayoutOperation(window, document, options) {
       finish(operation.promise_rejected ? 'failed' : 'switched'); return;
     }
     if (current === operation.original_id) {
-      if (operation.supported_native && operation.result === true && !operation.promise_rejected) return;
       if (operation.supported_native && operation.promise_settled) {
-        finish(operation.promise_rejected ? 'failed' : operation.dialog_action === 'cancel' ? 'cancelled' : 'not_switched');
+        if (operation.promise_rejected) finish('failed');
+        else if (operation.dialog_action === 'cancel' && (operation.result === false || operation.result === undefined)) {
+          const compile = window.__tvCliPineCompile;
+          const nativePending = Object.values(window.__tvCliNativeOperations || {}).some(entry => entry.pending)
+            || Boolean(compile && !compile.actionDone) || Boolean(window.__tvCliSave?.pending);
+          if (!nativePending) finish('cancelled');
+        } else if (operation.result === false && !operation.dialog_action) finish('not_switched');
         return;
       }
       if (operation.dialog_action === 'cancel') finish('cancelled');

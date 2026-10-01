@@ -88,6 +88,16 @@ published. Promise completion is paired with stable identity/readiness; rejectio
 is an ended action but still needs stable original/requested state. A captured
 Cancel can prove cancellation, whereas disappearance/accept cannot.
 
+Desktop 3.4.1's public loadChartFromServer awaits the complete service chain but
+does not return its boolean result: a real Korean Cancel fulfilled with undefined.
+On that verified path only, cancellation requires a captured Cancel on the exact
+operation's scoped dialog, a fulfilled false/undefined outcome, stable original
+UID, no loading/visible dialog and no outstanding tracked native work. Undefined
+without that captured action, any other non-boolean, or an accepted dialog with
+the original UID remains LAYOUT_UNVERIFIED. A false outcome with no captured
+dialog decision can prove not_switched. Unknown/void implementations retain the
+strict terminal-signal fence. No private service interception is performed.
+
 A cap-one registry entry is extended across the underlying layout promise (or
 unknown API terminal watcher), not nested. Watchers retain a bounded amount of
 state and remove themselves on terminal outcome. Grace expiration exposes
