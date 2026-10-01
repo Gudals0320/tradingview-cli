@@ -4,7 +4,7 @@
  * They throw on error (callers catch and format).
  */
 import { evaluate, evaluateAsync } from '../connection.js';
-import { findPineEditor, findPineController, readPineConsole, confirmPineSaveDialog, confirmPineCompileSaveDialog, requestPineEditor } from './desktop-dom.js';
+import { findPineEditor, findPineController, readPineConsole, confirmPineSaveDialog, confirmPineCompileSaveDialog, requestPineEditor,pinePanelState } from './desktop-dom.js';
 import { STRATEGY_PAGE_CODE, splitMarkers, formatDiagnostic } from '../strategy-state.js';
 import { sourceHash } from '../session.js';
 import { canonicalPineSource,pineDeclaration,libraryTitleDiagnostic } from '../pine-source.js';
@@ -19,14 +19,20 @@ const FIND_CONTROLLER = `(${findPineController.toString()})(document)`;
 export async function ensurePineEditorOpen({ _deps } = {}) {
   const evaluatePage = _deps?.evaluate || evaluate;
   const sleep = _deps?.sleep || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
-  const ready = () => evaluatePage(`${FIND_MONACO} !== null`);
+  const ready = () => evaluatePage(`(() => {const m=${FIND_MONACO},c=${FIND_CONTROLLER};return Boolean(m&&c&&(${pinePanelState.toString()})(document,window).panel_visible);})()`);
   if (await ready()) return true;
-  await evaluatePage(`(${requestPineEditor.toString()})(document, window.TradingView)`);
+  let requests=0,lastState;
   for (let attempt = 0; attempt < 150; attempt++) {
+    if(attempt%5===0&&requests<8){
+      lastState=await evaluatePage(`(${pinePanelState.toString()})(document,window)`);
+      if(lastState.viewport_width===0||lastState.viewport_height===0){const error=new Error('Pine target viewport is zero. Restore the TradingView window and make this tab visible, then retry.');error.code='PINE_VIEWPORT_UNAVAILABLE';error.details=lastState;throw error;}
+      await evaluatePage(`(${requestPineEditor.toString()})(document, window.TradingView)`);requests++;
+    }
     await sleep(200);
     if (await ready()) return true;
   }
-  return false;
+  const error=new Error('Visible Pine Editor did not initialize before timeout. Open its panel in TradingView and retry.');
+  error.code='PINE_EDITOR_NOT_READY';error.details={...lastState,requests,timeout_ms:30000};throw error;
 }
 
 // ── Pure / offline functions ──

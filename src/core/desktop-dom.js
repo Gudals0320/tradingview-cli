@@ -41,15 +41,29 @@ export function findPineEditor(document) {
 }
 
 export function requestPineEditor(document, tradingView) {
+  const visible=element=>element.offsetParent!==null&&(!element.getBoundingClientRect||
+    (element.getBoundingClientRect().width>0&&element.getBoundingClientRect().height>0));
   const containers = Array.from(document.querySelectorAll('.monaco-editor.pine-editor-monaco'));
-  if (containers.some((element) => element.offsetParent !== null)) return 'mounting';
+  if (containers.some(visible)) return 'mounting';
   const buttons = Array.from(document.querySelectorAll('[data-name="pine-dialog-button"], [aria-label="Pine"]'));
-  const button = buttons.find((element) => element.offsetParent !== null && !element.disabled);
-  if (button) { button.click(); return 'sidebar'; }
+  const button = buttons.find((element) => visible(element) && !element.disabled&&element.getAttribute?.('aria-disabled')!=='true');
+  if (button) {
+    if(button.getAttribute?.('aria-pressed')==='true'||button.getAttribute?.('aria-expanded')==='true')return 'mounting';
+    button.click(); return 'sidebar';
+  }
   const bar = tradingView?.bottomWidgetBar;
   if (typeof bar?.activateScriptEditorTab === 'function') { bar.activateScriptEditorTab(); return 'bottom-bar'; }
   if (typeof bar?.showWidget === 'function') { bar.showWidget('pine-editor'); return 'bottom-bar'; }
   return null;
+}
+
+export function pinePanelState(document, window) {
+  const containers=Array.from(document.querySelectorAll('.monaco-editor.pine-editor-monaco'));
+  const visible=containers.some(e=>e.offsetParent!==null&&(!e.getBoundingClientRect||
+    (e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0)));
+  return {viewport_width:typeof window.innerWidth==='number'?window.innerWidth:null,
+    viewport_height:typeof window.innerHeight==='number'?window.innerHeight:null,
+    document_ready:document.readyState||'unknown',panel_visible:visible};
 }
 
 /** Controller owns script identity; Monaco.setValue only changes its text. */
