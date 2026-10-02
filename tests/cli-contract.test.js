@@ -18,12 +18,14 @@ const CLI = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
 async function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'tv-cli-contract-'));
   const requests = [], sockets = new Set();
+  let connections = 0;
   const server = createServer((request, response) => {
     requests.push(request.url);
     response.setHeader('Content-Type', 'application/json');
     response.end('[]');
   });
   server.on('connection', socket => {
+    connections++;
     sockets.add(socket);
     socket.on('close', () => sockets.delete(socket));
   });
@@ -55,7 +57,7 @@ async function fixture(t) {
       child.stdin.end(input);
     });
   }
-  return { root, options, requests, run };
+  return { root, options, requests, run, get connections() { return connections; } };
 }
 
 function jsonResult(result, exitCode = 0) {
@@ -106,6 +108,7 @@ it('real help honors text/JSON contracts and global selectors without acquiring 
       jsonError(await f.run([...prefix, 'help', '--json', 'pine', 'not-a-command']), /Unknown command/, 'UNKNOWN_COMMAND');
     }
     assert.deepEqual(f.requests, []);
+    assert.equal(f.connections, 0);
     assert.deepEqual(snapshot(f.root), before);
   } finally { lease.release(); }
 });
@@ -133,6 +136,7 @@ it('offline result formats and exit codes agree with the catalog while another p
     assert.ok(strict.error_count > 0);
     jsonError(await f.run(['pine', 'analyze']), /No source provided/);
     assert.deepEqual(f.requests, []);
+    assert.equal(f.connections, 0);
     assert.deepEqual(snapshot(f.root), before);
   } finally { lease.release(); }
 });
@@ -157,6 +161,7 @@ it('invalid CLI options and positionals fail before touching a reserved workspac
   // Positive control: the child really sees this reservation, not another temp store.
   jsonError(await f.run(['symbol', 'X:FIXTURE']), /Reserved local workspaces/, 'WORKSPACE_RESERVED');
   assert.deepEqual(f.requests, []);
+  assert.equal(f.connections, 0);
   assert.deepEqual(snapshot(f.root), before);
 });
 
@@ -175,6 +180,7 @@ it('an interrupted native operation stays fenced across real CLI failures and of
   assert.equal(readFileSync(paths.journal, 'utf8'), before);
   assert.equal(sessionStatus(f.options).locked, false);
   assert.deepEqual(f.requests, []);
+  assert.equal(f.connections, 0);
 });
 
 it('catalog HTTP-only inventory behavior reaches the endpoint even while its lease is held', async t => {
@@ -190,6 +196,7 @@ it('catalog HTTP-only inventory behavior reaches the endpoint even while its lea
     assert.equal(result.success, true);
     assert.deepEqual(result.targets, []);
     assert.deepEqual(f.requests, ['/json/list']);
+    assert.equal(f.connections, 1);
     assert.deepEqual(snapshot(f.root), before);
   } finally { lease.release(); }
 });
