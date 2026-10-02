@@ -1,8 +1,24 @@
-# Command support matrix
+# Execution and ownership contracts
 
-| Scope | Commands |
-|---|---|
-| Workspace (also exclusive legacy) | `data equity`, `data ledger`, `data strategy`, `data trades`, `indicator get`, `indicator set`, `info`, `pine compile`, `pine console`, `pine errors`, `pine get`, `pine raw-compile`, `pine save`, `pine set`, `state`, `symbol`, `timeframe`, `type`, `workspace wait` |
-| Desktop Runtime independent | `help`, `pine analyze`, `pine check`, `search`, `session discard`, `session status`, `update`, `workspace abandon`, `workspace gate-clear`, `workspace gate-status`, `workspace interrupt`, `workspace inventory`, `workspace status` |
-| Workspace administration (reserved-target CDP) | `workspace init`, `workspace rebind`, `workspace recover`, `workspace release` |
-| Exclusive legacy only | `alert create`, `alert delete`, `alert list`, `data boxes`, `data depth`, `data indicator`, `data labels`, `data lines`, `data tables`, `discover`, `draw clear`, `draw get`, `draw list`, `draw remove`, `draw shape`, `indicator add`, `indicator remove`, `indicator toggle`, `launch`, `layout list`, `layout switch`, `ohlcv`, `pane focus`, `pane layout`, `pane list`, `pane symbol`, `pine list`, `pine new`, `pine open`, `quote`, `range`, `replay autoplay`, `replay start`, `replay status`, `replay step`, `replay stop`, `replay trade`, `screenshot`, `scroll`, `status`, `stream all`, `stream bars`, `stream labels`, `stream lines`, `stream ohlcv`, `stream quote`, `stream tables`, `stream values`, `tab close`, `tab list`, `tab new`, `tab switch`, `ui click`, `ui eval`, `ui find`, `ui fullscreen`, `ui hover`, `ui keyboard`, `ui mouse`, `ui panel`, `ui scroll`, `ui type`, `ui-state`, `values`, `watchlist add`, `watchlist add-bulk`, `watchlist get`, `watchlist remove` |
+Discover exact commands from `tv help --json COMMAND`. Catalog version 2 is built
+from registered adapters/policy; generated catalog output must not be committed.
+Policy coverage tests classify every adapter exactly once.
+
+| Scope | Commands | Selection/ownership |
+|---|---|---|
+| Preparation | status, layout list/create/open, tab list, pine list, workspace create/select | Available before selection; native layout/tab creation takes app and endpoint journal ownership |
+| Workspace | chart/state/info/quote/OHLCV/values, data, draw, indicator, pane, Pine, replay, stream, discover/ui-state, workspace wait | Named selection required; mutation owns layout/chart and document when compiling/saving; pure reads/streams observe |
+| App/account shared | alert, watchlist, ui, tab new/close/switch, layout switch, launch | Alert/watchlist/UI/tab close/switch require a workspace target; shared changes own app plus affected resources; UI requires selected target |
+| Offline/diagnostic | help/update/search, pine analyze/check, session status/recover/discard, workspace list/import/show/inventory/status/interrupt/abandon/locks/lock-clear/gate-status/gate-clear | Inventory/recovery/target-lost discard still contact CDP; recovery owns its operation |
+| Workspace management | init/rebind/recover/release/reconnect/attach/detach | Exact resource, token, generation and operation checks |
+
+`workspace_required`, `locks` and `foreground` publish selection, resource kinds
+and tab-selection requirements. Mixed reads depend on arguments. `endpoint_lease`
+now describes only the remaining shared native/session lease: workspace mutations
+use resource ownership even when it is false. Screenshot foreground depends on
+method (selected nonzero viewport for CDP, owned chart for API).
+
+Pine new/open and bound layout switch reject resource replacement. Attach a
+dedicated document or open/select another workspace. `stream ohlcv` reads prepared
+owned panes only. These restrictions prevent active-tab fallback and form the
+migration contract. See [workspaces.md](workspaces.md) for the full workflow.

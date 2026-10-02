@@ -18,13 +18,12 @@ register('tab', {
     }],
     ['close', {
       description: 'Close the current tab',
-      handler: () => core.closeTab(),
+      handler: opts => core.closeTab({ target_id: opts.workspaceTarget }),
     }],
     ['switch', {
-      description: 'Switch to a tab by index',
+      description: 'Select the owned workspace tab; an optional legacy index must match it',
       handler: (opts, positionals) => {
-        if (positionals[0] === undefined) throw new Error('Index required. Usage: tv tab switch 0');
-        return core.switchTab({ index: positionals[0] });
+        return core.switchTab({ index: positionals[0], target_id: opts.workspaceTarget });
       },
     }],
   ]),

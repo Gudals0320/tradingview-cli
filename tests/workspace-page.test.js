@@ -51,6 +51,8 @@ describe('atomic workspace page guards', () => {
     assert.equal(f.call('guardWorkspacePage', f.owner).studies.length, 0);
     assert.throws(() => f.call('finishWorkspacePage', f.owner, 'op'), /WORKSPACE_STUDY_MISSING/);
     assert.equal(f.window.__tvCliWorkspace.operation, 'op');
+    const failure=f.call('finishWorkspacePage',f.owner,'op',{allowIncomplete:true});
+    assert.equal(failure.snapshot.studies.length,0,'A known completed compile failure may retain an empty chart without fabricating a recovery fence.');
   });
   it('detects source, layout and nonce changes before any action', () => {
     for (const change of [f => f.editor.setValue('external'), f => { f.window.__tvCliWorkspace.nonce = 'other'; },

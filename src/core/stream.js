@@ -5,6 +5,8 @@
 import { readChartContext } from '../chart-context.js';
 import { getStudyValues, getPineLines, getPineLabels, getPineTables } from './data.js';
 import { evaluate, configuredTarget, KNOWN_PATHS, CDP_PORT, requireInteger } from '../connection.js';
+import { currentWorkspaceSession } from '../session.js';
+import { parseFeedSpecs, feedMatches } from './multi-feed.js';
 
 const CHART_API = KNOWN_PATHS.chartApi;
 const MODEL = `${CHART_API}._chartWidget.model()`;
@@ -21,7 +23,9 @@ export function streamExpression(expression, scope = 'active_chart') {
 }
 async function streamEvaluate(expression, scope) {
   const data=await evaluate(streamExpression(expression,scope));
-  if(data?.context)data.context.target_id=configuredTarget();
+  const workspace=currentWorkspaceSession()?.workspace;
+  if(data?.context) {data.context.target_id=configuredTarget();if(workspace)data.context.scope='workspace';}
+  if(data&&workspace)data.provenance={workspace_id:workspace.id,target:workspace.target,page_generation:workspace.binding?.nonce};
   return data;
 }
 
@@ -34,6 +38,7 @@ async function pollLoop(fetcher, { interval = 500, dedupe = true, label = 'strea
   interval = requireInteger(interval, 'interval', 100);
   let lastHash = null;
   let running = true;
+  let failure;
 
   const cleanup = () => { running = false; };
   process.on('SIGINT', cleanup);
@@ -51,8 +56,11 @@ async function pollLoop(fetcher, { interval = 500, dedupe = true, label = 'strea
 
   while (running) {
     try {
+      if(currentWorkspaceSession())await evaluate('true'); // Verify ownership/nonce before every sample, including null samples.
       const data = await fetcher();
       if (!data) { await sleep(interval); continue; }
+      const workspace=currentWorkspaceSession()?.workspace;
+      if(workspace)data.provenance={workspace_id:workspace.id,target:workspace.target,page_generation:workspace.binding?.nonce};
 
       const hash = dedupe ? JSON.stringify(data) : null;
       if (!dedupe || hash !== lastHash) {
@@ -63,8 +71,7 @@ async function pollLoop(fetcher, { interval = 500, dedupe = true, label = 'strea
     } catch (err) {
       if (err.code?.startsWith('WORKSPACE_') || ['TARGET_NOT_FOUND', 'CDP_CONNECTION', 'CDP_TIMEOUT'].includes(err.code)) {
         running = false;
-        process.stderr.write(JSON.stringify({ success: false, code: err.code, error: err.message }) + '\n');
-        process.exitCode = 1;
+        failure=err;
         break;
       }
       // Connection errors — retry silently
@@ -85,6 +92,7 @@ async function pollLoop(fetcher, { interval = 500, dedupe = true, label = 'strea
   process.removeListener('SIGINT', cleanup);
   process.removeListener('SIGTERM', cleanup);
   process.stdout.removeListener('error', stdoutError);
+  if(failure)throw failure;
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -232,4 +240,17 @@ async function fetchAllPanes() {
 
 export async function streamAllPanes({ interval } = {}) {
   return pollLoop(fetchAllPanes, { interval: interval ?? 500, label: 'all-panes' });
+}
+
+export async function streamOwnedFeeds({feedSpecs,interval=250}) {
+  const feeds=parseFeedSpecs(feedSpecs);
+  return pollLoop(async()=>{
+    const data=await fetchAllPanes();
+    const samples=feeds.map(feed=>{
+      const pane=data.panes.find(pane=>feedMatches(feed,{...pane,timeframe:pane.resolution}));
+      if(!pane)throw Object.assign(new Error(`Owned layout has no ready pane for ${feed.key}. Prepare its panes before streaming.`),{code:'WORKSPACE_FEED_MISSING'});
+      return {feed:feed.key,...pane};
+    });
+    return {success:true,scope:'workspace',feeds:samples};
+  },{interval:Number(interval),label:'ohlcv'});
 }

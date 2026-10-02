@@ -1,16 +1,20 @@
 import { register } from '../router.js';
-import { initWorkspace, recoverWorkspace, closeWorkspace, workspaceInventory, rebindWorkspace, createWorkspace, verifyWorkspaceSelection, reconnectWorkspace } from '../../workspace.js';
+import { initWorkspace, recoverWorkspace, closeWorkspace, workspaceInventory, rebindWorkspace, createWorkspace, verifyWorkspaceSelection, reconnectWorkspace,resetWorkspace } from '../../workspace.js';
 import { listWorkspaceNames, registerWorkspaceName, resolveWorkspace } from '../../workspace-registry.js';
 import { workspaceStatus, markInterrupted, abandonWorkspace } from '../../workspace-store.js';
 import { compilationState, STRATEGY_PAGE_CODE } from '../../strategy-state.js';
 import { evaluate } from '../../connection.js';
-import { admissionGateStatus, clearAdmissionGate } from '../../session.js';
+import { admissionGateStatus, clearAdmissionGate,currentWorkspaceSession } from '../../session.js';
+import { resourceLockStatus, clearDeadResource } from '../../resource-lock.js';
 
 const file = { type: 'string', description: 'Persistent workspace file' };
 const operation = { type: 'string', description: 'Exact interrupted operation ID' };
 register('workspace', {
   description: 'Independent target/layout/Pine ownership',
   subcommands: new Map([
+    ['reset',{description:'Explicitly release a quiescent/lost workspace and its name; preserve artifacts, never recreate or reset while disconnected',options:{id:{type:'string',description:'Exact workspace ID from list/show'},operation:{type:'string',description:'Exact dead/interrupted operation ID for a proven lost target'},'reservation-id':{type:'string',description:'Exact dead preparation reservation ID when no workspace exists'}},handler:(opts,args)=>resetWorkspace(args[0],{...opts,reservationId:opts['reservation-id']})}],
+    ['locks', {description:'Inspect resource holders and bounded wait tickets without Desktop access',handler:()=>({success:true,...resourceLockStatus()})}],
+    ['lock-clear', {description:'Clear an exact dead resource token only after its native journal is reconciled',options:{token:{type:'string',description:'Exact dead holder token from workspace locks'}},handler:opts=>clearDeadResource(opts.token)}],
     ['reconnect', { description: 'Explicitly bind the saved layout on an inspectable target; invalidate old results', options: {
       target: { type: 'string', description: 'Exact replacement CDP target already showing the dedicated layout' }, generation: { type: 'string', description: 'Exact recorded page generation from workspace show' },
     }, handler: (opts, args) => reconnectWorkspace(args[0], opts) }],
@@ -21,7 +25,7 @@ register('workspace', {
       generation: { type: 'string', description: 'Exact recorded page generation' },
     }, handler: (opts, args) => reconnectWorkspace(args[0], { ...opts, detach: true }) }],
     ['list', { description: 'List persistent workspace names (selection is terminal-local)', handler: () => listWorkspaceNames() }],
-    ['import', { description: 'Register a legacy schema 1/2 file handle under a persistent name', options: { file }, handler: (opts, args) => registerWorkspaceName(args[0], opts.file) }],
+    ['import', { description: 'Import a released legacy schema 1/2 handle; preserve its old private artifacts', options: { file,'legacy-state':{type:'string',description:'Optional exact old private state directory (default old temporary store)'} }, handler: (opts, args) => registerWorkspaceName(args[0], opts.file,{...(opts['legacy-state']?{legacyDirectory:opts['legacy-state']}:{})}) }],
     ['create', { description: 'Create a named workspace for one open dedicated saved layout; Pine is optional', options: {
       layout: { type: 'string', description: 'Exact saved layout ID (first use layout create/open)' },
       target: { type: 'string', description: 'Optional exact CDP target for migration' }, pine: { type: 'string', description: 'Optional dedicated saved Pine document ID' },
@@ -50,12 +54,16 @@ register('workspace', {
       const timeout = Number(opts.timeout || 30000), start = Date.now();
       if (!Number.isFinite(timeout) || timeout < 1 || timeout > 300000) throw new Error('timeout must be 1..300000 ms.');
       do {
+        const owned=currentWorkspaceSession()?.workspace;
+        const status=owned?workspaceStatus(owned.file):null;
         const state = await evaluate(`(() => {${STRATEGY_PAGE_CODE};return (${compilationState.toString()})(window);})()`);
-        if (state.phase === 'ready') return { success: true, ...state };
-        if (['failed', 'invalidated', 'not-strategy', 'unverified'].includes(state.phase)) return { success: false, ...state };
+        if(!status?.operation) {
+          if (state.phase === 'ready') return { success: true, ...state };
+          if (['failed', 'invalidated', 'not-strategy', 'unverified'].includes(state.phase)) return { success: false, ...state };
+        } else if(!status.owner_alive)return {success:false,code:'WORKSPACE_OWNER_DEAD',operation:status.operation,error:'Active operation owner terminated; inspect and reconcile it.'};
         await new Promise(resolve => setTimeout(resolve, 100));
       } while (Date.now() - start < timeout);
-      return { success: false, code: 'REPORT_TIMEOUT', error: 'Workspace calculation did not complete.' };
+      return { success: false, code: 'REPORT_TIMEOUT',calculation_pending:true, error: 'Workspace calculation did not complete.' };
     } }],
   ]),
 });

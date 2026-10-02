@@ -17,7 +17,7 @@ it('classifies every registered command/subcommand once and rejects future uncla
 });
 it('workspace observation has an explicit pure invocation contract', () => {
   for (const command of WORKSPACE_READS) assert.equal(pureRead(command, {}, []), true);
-  for (const command of ['pine compile', 'pine save', 'indicator set', 'layout switch', 'stream ohlcv', 'ui eval']) {
+  for (const command of ['pine compile', 'pine save', 'indicator set', 'layout switch', 'ui eval']) {
     assert.equal(WORKSPACE_READS.has(command), false);
     assert.equal(pureRead(command, {}, []), false);
   }

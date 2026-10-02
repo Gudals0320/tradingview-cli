@@ -1,5 +1,11 @@
 # 이슈 #26: 실제 백테스트 전 마지막 정적 검증
 
+> 이 문서는 #26 당시 v1 코드의 역사적 검증 기록입니다. 현재 v2의 실행·잠금·선택·배치
+> 계약은 [workspaces.md](workspaces.md)와 [operation-contracts.md](operation-contracts.md)를
+> 따릅니다. 아래 endpoint 독점/active-tab batch 서술은 당시 fixture 증거이며 현재 운영
+> 절차가 아닙니다. 현재 자동화는 이름 있는 workspace와 `examples/workspace-batch.mjs`를
+> 사용하고, 이 기록의 source/report 보호 검사는 회귀 테스트로 유지됩니다.
+
 검증 날짜: 2026-10-02 (Asia/Seoul). 대상은 로컬 및 fetch 후 원격 main 모두 `116cadf06211c0f7a3ed7730b413eefc5bd3ab9c`. 작업 브랜치는 `codex/issue-26-backtest-readiness`이며 main을 직접 수정하지 않았습니다. 이 기록의 “정적 검증”은 코드 검토와 offline native/DOM fixture 및 실제 CLI의 로컬 HTTP/CDP 계약 검증을 포함합니다. 내부 객체를 읽는 구현 방식과 검증 환경은 별개입니다. 실제 TradingView Desktop, 로그인, 개인 탭, 미저장 초안을 조작하지 않았습니다.
 
 ## 발견과 수정

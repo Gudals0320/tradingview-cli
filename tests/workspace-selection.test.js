@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { reserveWorkspace } from '../src/workspace-store.js';
+import { reserveWorkspace,acquireWorkspace,releaseWorkspace } from '../src/workspace-store.js';
 import { registerWorkspaceName, resolveWorkspace, selectWorkspace } from '../src/workspace-registry.js';
 import { acquireResources, resourceLockStatus, ownerAlive } from '../src/resource-lock.js';
 
@@ -45,4 +45,13 @@ it('bounded waits return owner details and cancellation removes only the waiting
   await assert.rejects(pending,{code:'LOCK_CANCELLED'});
   assert.equal(resourceLockStatus(options).queue.length,0);assert.equal(resourceLockStatus(options).holders.length,1);first.release();
   assert.equal(ownerAlive({pid:process.pid,process_started_at:'2000-01-01T00:00:00Z'}),false);
+});
+it('released schema-2 handles migrate idempotently from the old private store without deleting it',()=>{
+  const old=fixture(),next={...old,directory:mkdtempSync(join(tmpdir(),'tv-next-state-')),legacyDirectory:old.directory};
+  const workspace=reserveWorkspace({file:join(old.directory,'legacy.json'),target:'legacy-target',layout:'legacy-layout'},old);
+  const lease=acquireWorkspace(workspace.file,old);releaseWorkspace(lease,old);
+  const first=registerWorkspaceName('migrated',workspace.file,next);
+  const again=registerWorkspaceName('migrated',workspace.file,next);
+  assert.equal(first.workspace_id,again.workspace_id);assert.equal(resolveWorkspace('migrated',next),workspace.file);
+  assert.throws(()=>resolveWorkspace('constructor',next),{code:'WORKSPACE_NOT_FOUND'});
 });

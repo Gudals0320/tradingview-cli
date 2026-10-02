@@ -13,13 +13,14 @@ it('documented single-line CLI examples retain strict option and positional synt
     if (line.includes('→') || !/^tv\s/.test(line) || /\\$|\.\.\.|\[.*\]/.test(line)) continue;
     const tokens = (line.match(/"(?:\\.|[^"\\])*"|'[^']*'|[^\s]+/g) || []).map(token => /^['"]/.test(token) ? token.slice(1, -1) : token);
     tokens.shift();
+    if(['--version','-V','--help','-h'].includes(tokens[0])){checked++;continue;}
     if (['--target', '--workspace'].includes(tokens[0])) tokens.splice(0, 2);
     const command = tokens.shift(), parent = registeredCommands().get(command);
     assert.ok(parent, `${file}: ${line}`);
     const sub = parent.subcommands ? tokens.shift() : null;
     const adapter = sub ? parent.subcommands.get(sub) : parent;
     assert.ok(adapter, `${file}: ${line}`);
-    const parsed = parseArgs({ args: tokens, options: { help: { type: 'boolean', short: 'h' }, ...adapter.options }, strict: true, allowPositionals: true });
+    const parsed = parseArgs({ args: tokens, options: { help: { type: 'boolean', short: 'h' },'lock-timeout-ms':{type:'string'}, ...adapter.options }, strict: true, allowPositionals: true });
     const [min, max] = POSITIONALS.get(sub ? `${command} ${sub}` : command) || [0, 0];
     assert.ok(parsed.values.help || (parsed.positionals.length >= min && parsed.positionals.length <= max), `${file}: ${line}`);
     checked++;

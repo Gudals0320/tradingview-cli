@@ -32,6 +32,7 @@ export function sessionPageQuiescence(window, document, expectedGeneration, expe
     for (const index of expectedPanes) if (!Number.isInteger(index) || index < 0 || !panes?.[index]) unreadable.push(index);
   } else if (expectedPanes !== undefined && expectedPanes !== '*') unreadable.push('recorded_panes');
   for (const [index, pane] of (Array.isArray(panes) ? panes : []).entries()) {
+    if (Array.isArray(expectedPanes) && !expectedPanes.includes(index)) continue;
     try {
       const model = pane._chartWidget?.model?.() || pane.model?.();
       const series = model?.mainSeries?.();
@@ -44,7 +45,8 @@ export function sessionPageQuiescence(window, document, expectedGeneration, expe
       for (const source of sources) {
         let status = source.status?.();
         if (typeof status?.value === 'function') status = status.value();
-        if (status?.type === 0 || status?.type === 1) calculating.push({ pane_index: index, id: source.id?.() });
+        const info=source.metaInfo?.();
+        if ((info?.isTVScriptStrategy || info?.is_strategy) && (status?.type === 0 || status?.type === 1)) calculating.push({ pane_index: index, id: source.id?.() });
       }
     } catch { unreadable.push(index); }
   }
@@ -52,15 +54,15 @@ export function sessionPageQuiescence(window, document, expectedGeneration, expe
   const layout = layoutOperationDetails(window, document);
   const blockers = { compile: Boolean(compile && !compile.actionDone), save: Boolean(save?.pending), registry_tokens: registry,
     layout_switch_unverified: Boolean(layout?.pending || (expectedGeneration && window.__tvCliPageGeneration !== expectedGeneration)),
-    pending_requests: requests, calculating, context_loading: !context || Boolean(context.loading), pane_loading: loading, unreadable_panes: unreadable };
+    pending_requests: requests, calculating, context_loading: expectedPanes === undefined || expectedPanes === '*' ? !context || Boolean(context.loading) : false, pane_loading: loading, unreadable_panes: unreadable };
   const uid = collection?.metaInfo?.uid;
   return { ready: !Object.values(blockers).some(value => Array.isArray(value) ? value.length : value), blockers,
     layout_operation: layout, layout_id: String(typeof uid?.value === 'function' ? uid.value() : uid),
     pane_count: Array.isArray(panes) ? panes.length : 0, generation: window.__tvCliPageGeneration || null };
 }
 
-export async function recoverSession({ runId, targetId, _deps } = {}) {
-  const lease = (_deps?.acquireSession || acquireSession)({ recover: true, command: 'session recover' });
+export async function recoverSession({ runId, targetId, directory, _deps } = {}) {
+  const lease = (_deps?.acquireSession || acquireSession)({ recover: true, shared:true, command: 'session recover',...(directory?{directory}:{}) });
   const clients = [], remoteObjects = [];
   let primaryError;
   try {
@@ -73,6 +75,13 @@ export async function recoverSession({ runId, targetId, _deps } = {}) {
       throw Object.assign(new Error('Recovery requires the exact recorded target, or --target-id if dispatch did not identify it.'), { code: 'TARGET_REQUIRED' });
     }
     const targets = [...new Set([...(pending.targets || []), target])];
+    if (!_deps?.connect || _deps?.list) {
+      let inventory;
+      try { inventory=await (_deps?.list||CDP.List)({host:CDP_HOST,port:CDP_PORT}); }
+      catch(cause) {throw Object.assign(new Error('CDP is unreachable; recorded targets are not proven lost.'),{code:'WORKSPACE_DISCONNECTED',cause});}
+      const missing=targets.filter(id=>!inventory.some(row=>row.id===id));
+      if(missing.length)throw Object.assign(new Error('CDP is reachable but recorded targets are absent. Archive the exact journal using session discard --target-lost --run-id.'),{code:'RECOVERY_TARGET_LOST',details:{targets:missing,run_id:runId}});
+    }
     const states = [];
     let invalidated = false;
     for (const id of targets) {

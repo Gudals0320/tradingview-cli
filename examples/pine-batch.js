@@ -106,6 +106,7 @@ async function restoreSnapshot(snapshot, api, explicitTargetId) {
 }
 
 export async function runBatch(options, api = DEFAULT_API) {
+  if(api===DEFAULT_API)throw Object.assign(new Error('The active-tab batch runner is retired. Use examples/workspace-batch.mjs --workspace NAME with dedicated saved documents. Existing recovery journals remain available to the old installed CLI.'),{code:'LEGACY_BATCH_REMOVED'});
   if (!options.recover && !options.chartId && !options.targetId) throw new Error('An explicit --chart-id or --target-id is required; use a separate disposable layout');
   const lease = (api.session || session).acquireSession({ recover: Boolean(options.recover) });
   let snapshot = null, failure = null, restored = false, recoveryAttempted = Boolean(options.recover);

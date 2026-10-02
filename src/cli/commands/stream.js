@@ -1,6 +1,5 @@
 import { register } from '../router.js';
 import * as core from '../../core/stream.js';
-import { streamOhlcvFeeds } from '../../core/multi-feed.js';
 
 // Streams return without a result so router cleanup runs without an extra JSONL record.
 
@@ -71,13 +70,14 @@ register('stream', {
       },
     }],
     ['ohlcv', {
-      description: 'Stream multiple SYMBOL@TIMEFRAME feeds as JSONL',
+      description: 'Observe existing owned layout panes for SYMBOL@TIMEFRAME feeds as JSONL; prepare panes before streaming',
       options: {
         'allow-reassign-target': { type: 'string', multiple: true, description: 'Explicit target IDs whose existing panes may be reassigned' },
         interval: { type: 'string', short: 'i', description: 'Poll interval in ms (default 250, minimum 100)' },
       },
       handler: async (opts, positionals) => {
-        await streamOhlcvFeeds({ feedSpecs: positionals, interval: opts.interval, allowReassignTargets: opts['allow-reassign-target'] || [] });
+        if(opts['allow-reassign-target']?.length)throw Object.assign(new Error('Cross-target reassignment is removed. Select dedicated workspaces and prepare their panes explicitly.'),{code:'WORKSPACE_TARGET_MISMATCH'});
+        await core.streamOwnedFeeds({ feedSpecs: positionals, interval: opts.interval });
         return;
       },
     }],

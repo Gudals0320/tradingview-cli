@@ -1,93 +1,130 @@
 # AGENTS.md
 
-Guide for AI agents that use or modify `tv`, a CLI that drives a running TradingView Desktop over CDP and returns JSON. The human-facing documentation is [README.md](README.md) (Korean).
+Guide for agents using/modifying `tv`, a JSON CLI for a running TradingView Desktop
+over CDP. The human documentation is [README.md](README.md) (Korean).
 
-## Discover commands from the CLI, not from this file
+## Discover the installed contract
 
 ```bash
-tv help --json
-tv help --json pine
 tv help --json pine compile
+tv help --json workspace
 ```
 
-The catalog is generated from the registered commands, so it matches the installed code. Each entry lists `usage`, `positionals` (`min`/`max`, `null` = unbounded), `options`, `scope`, `invocation`, `desktop` (whether the call contacts Desktop), `endpoint_lease` (whether it holds the shared lease), `read_only` (`true` / `false` / `"conditional"` with `read_only_when`) and `output` (`json`, `jsonl`, or `"conditional"` with `output_when`). The legend for each field is in the same output. `tv help --json` with no filter is large (about 50 KB), so filter by command when you can.
+The runtime catalog classifies scope/invocation/Desktop access/read-only/output,
+workspace_required, resource locks and foreground requirements. Never commit
+generated catalog output. Install dependencies with `npm ci` first; in this repo
+use `node src/cli/index.js ...` without npm link.
 
-Inside the repository without `npm link`, run `node src/cli/index.js ...` instead of `tv ...`. Install dependencies first with `npm ci`; even `--help` fails without them.
+## Establish the workspace before execution
 
-## Preconditions
-
-- TradingView Desktop is running and logged in, with CDP at `127.0.0.1:9222`. Override with `TV_CDP_HOST` / `TV_CDP_PORT`.
-- Run `tv status` first. Exit code `2` means no CDP connection.
-- `tv launch` **kills running TradingView instances by default**, which can discard the user's unsaved work. Do not run it without the user's consent; `--no-kill` avoids the kill.
-- Commands with `desktop: "none"` need no Desktop, for example `help`, `pine analyze`, `pine check`, `search` and `session status`. Do not infer this from `scope: "offline"`: `session recover` and `workspace inventory` are routed offline but still contact Desktop.
-
-## Calling contract
-
-- stdout carries one JSON object per call. Stream commands (`output: "jsonl"`) emit one JSON object per line until killed.
-- Errors go to stderr as `{"success":false,"error":...,"code":...,"details":...}`.
-- Check **both** the exit code and `success`. A `success:false` result can appear on stdout with exit `1`.
-- Exit codes: `0` success; `1` invalid input, operation failure or compile failure; `2` CDP connection failure.
-- Run one lease-holding call (`endpoint_lease` other than `false`) at a time per Desktop endpoint. Overlapping lease holders fail with `SESSION_BUSY`. A running `stream` holds the lease until it is terminated, so always run streams with a timeout or terminate them yourself.
-- For parallel work, use workspaces (`tv --workspace FILE ...`); see [docs/workspaces.md](docs/workspaces.md) and [docs/workspace-commands.md](docs/workspace-commands.md).
-- Entity IDs (studies, drawings, CDP targets) are only valid for the current session. Re-read them after a reconnect.
-
-## Safety
-
-- Commands with `read_only: false` change the user's Desktop. Confirm destructive ones with the user first: `alert delete`, `draw clear`, `draw remove`, `indicator remove`, `watchlist remove`, `tab close`, `ui eval`, `pine new`, `pine open`. `pine new` and `pine open` replace unsaved editor content.
-- Do not edit strategy inputs in the GUI while `pine compile` or `indicator set` runs. The GUI does not take the CLI lock.
-- Never reload a tab or force-clear a lock to get unstuck. Reload loses unsaved chart and Pine state. The CLI never does this automatically, and neither should you.
-- Broker connections and order execution are out of scope for this project. Do not add or attempt them.
-
-## Pine and backtest workflow
+Desktop must be logged in and have CDP (default 127.0.0.1:9222; TV_CDP_HOST/PORT
+override). `tv status` is preparation and must run first; exit 2 means disconnected.
+Create/select a saved dedicated layout, then create/select a named workspace.
+Ordinary Desktop work without selection is WORKSPACE_REQUIRED. Never infer an
+active tab. Agents/scripts should use explicit names on every invocation:
 
 ```bash
+tv status
+tv layout list
+tv layout create "Agent Research"
+tv workspace inventory
+tv workspace create agent-research --layout EXACT_LAYOUT_ID
+tv --workspace agent-research state
+```
+
+PowerShell humans may import scripts/TradingViewCli.psm1 and select a workspace.
+Selection belongs only to that PowerShell process. Explicit --workspace NAME takes
+priority without changing selection. CLI children cannot select their parent shell.
+Help/version/offline diagnostics and layout/workspace preparation need no selection.
+See [docs/workspaces.md](docs/workspaces.md) for migration and lifetime policies.
+
+## Contract and safety
+
+- stdout: one JSON object per call; streams: JSONL. Errors: structured JSON on
+  stderr. Check exit code **and** success. Exit 0 success, 1 input/operation/compile
+  failure, 2 CDP connection failure.
+- Independent workspace resources run concurrently. Conflicting mutations queue
+  (30s default, max300s,64 tickets; --lock-timeout-ms). Observation/status/wait do
+  not take mutation leases. Limit/terminate streams; samples pin generation.
+- IDs for studies/drawings/targets are ephemeral. Re-read after reconnect and
+  compile before adopting new-generation results.
+- `tv launch` kills by default and may discard unsaved work. Do not use without
+  consent; --no-kill avoids killing. Never auto-launch, reload a tab or force-clear
+  live ownership to get unstuck.
+- Confirm destructive Desktop operations before execution: alert delete, draw
+  clear/remove, indicator remove, watchlist remove, tab close, ui eval and editor
+  replacement. Already authorized dedicated test resources may be used within the
+  agreed scope; never change/delete preexisting user resources.
+- UI and CDP capture require the owned tab selected. Mounted Pine can run in
+  background tabs; restore the window if PINE_VIEWPORT_UNAVAILABLE. Do not edit
+  GUI inputs while compile/input changes run: GUI does not take CLI locks.
+- Broker connections and order execution are out of scope; never add/attempt them.
+
+## Pine and result collection
+
+Pine is optional for chart-only workspaces. For Pine work, attach a dedicated saved
+document already mounted in the owned layout (or pass --pine on creation). Duplicate
+document reservations are refused. Bound pine new/open/layout switch cannot replace
+resources implicitly. Use attach or open/select a different workspace.
+
+```bash
+tv workspace show agent-research
+tv workspace attach agent-research --pine 'USER;DOCUMENT' --generation EXACT_GENERATION
 tv pine analyze --file strategy.pine
 tv pine check --file strategy.pine
-tv pine set --file strategy.pine
-tv pine compile
-tv pine errors
-tv data strategy
-tv data ledger --offset 0 --limit 100
+tv --workspace agent-research pine set --file strategy.pine
+tv --workspace agent-research pine compile --save
+tv --workspace agent-research pine errors
+tv --workspace agent-research data strategy
+tv --workspace agent-research data ledger --offset 0 --limit 100
 ```
 
-1. `pine analyze` is an offline heuristic, not a syntax validator. `pine check` compiles on the TradingView server without a chart.
-2. `pine compile` verifies completion. An already verified, unchanged source returns `unchanged:true, compile_performed:false`. That is success, not a skipped step.
-3. Warnings can appear after the compile response, so re-check with `pine errors`.
-4. Strategy results are returned only after a verified calculation. `data strategy` returns `REPORT_UNVERIFIED` until you compile the strategy source or change an input with `indicator set`. Read input IDs with `indicator get` first.
-
-## Error codes and next actions
-
-| Code | Next action |
-| --- | --- |
-| `SESSION_BUSY` | Another CLI call, stream or workspace owns the endpoint. Wait for it or stop it; do not force. |
-| `SAVE_REQUIRED` | The saved script has unsaved edits. Use `pine save` or `pine compile --save`. |
-| `PINE_COMPILE_ERROR` | Fix the source using the returned diagnostics and locations. |
-| `REPORT_UNVERIFIED` | Run `pine compile` for that strategy or change an input with `indicator set`. |
-| `REPORT_INVALIDATED` | CLI editor content or external compiled identity changed; compile the requested source again. |
-| `REPORT_CHANGED` | Discard collected ledger pages and restart at offset 0 with the new `report_revision`. |
-| `REPORT_PENDING` / `REPORT_TIMEOUT` | The report is not verified yet. Wait, then read again; `calculation_pending:true` means the calculation is still running. |
-| `PINE_EDITOR_REQUIRED` | Run `tv ui panel pine-editor open`, then retry. |
-| `WATCHLIST_PANEL_REQUIRED` | Run `tv ui panel watchlist open`, then retry. |
-| `STUDY_NOT_FOUND` | No study matches the filter. Check names with `tv state`. |
-| `CDP_TIMEOUT` | The timeout did not cancel native work. Run `tv session status`, then `tv session recover --run-id RUN_ID`. |
-| `LAYOUT_UNVERIFIED` | A layout switch could not be confirmed. Inspect with `tv state` before continuing. |
-
-The README lists more Pine failure codes under "빠른 시작".
+Analyze is heuristic, not syntax validation. Check compiles on the server without
+a chart. An already verified unchanged compile is success (unchanged:true,
+compile_performed:false). Read warnings again with pine errors. REPORT_UNVERIFIED
+requires compile or verified input change. Read indicator input IDs first. Ledger
+pages must pass the first report_revision; REPORT_CHANGED means restart at offset0.
 
 ## Recovery
 
+Only reachable CDP with an absent recorded target proves target_lost. Unreachable
+CDP is disconnected. No automatic recreation or infinite retry. Preserve incomplete
+journals/results, foreign modified drafts and unknown native outcomes.
+
 ```bash
+tv workspace show agent-research
+tv workspace locks
+tv --workspace agent-research workspace interrupt --operation EXACT_DEAD_OPERATION
+tv --workspace agent-research workspace recover --operation EXACT_INTERRUPTED_OPERATION
+tv workspace reconnect agent-research --target NEW_TARGET --generation OLD_GENERATION
 tv session status
-tv session recover --run-id RUN_ID
-tv session discard --run-id RUN_ID
+tv session recover --run-id EXACT_RUN
 ```
 
-`session status` shows ownership and recovery state without exposing the saved draft. `recover` verifies that native work finished. `incomplete:true` means the previous result is unknown: read the state again and retry. `discard` abandons restoration and leaves Desktop as it is. Ask the user before you discard.
+Recovery validates recorded resources/panes, not unrelated targets. Whole-layout
+effects retain broad validation. Reconnect requires saved layout/document identity
+and exact generation, invalidates old IDs/proofs, and cannot overwrite foreign drafts.
+Release preserves tabs/artifacts. Ask before abandoning/discarding: those preserve
+incomplete records but stop restoration. Exact dead gate/resource repair is permitted
+only after native work is reconciled; never treat a live/unverifiable PID as dead.
 
-## Changing this repository
+WORKSPACE_DISCONNECTED: restore CDP availability. WORKSPACE_TARGET_LOST: explicitly
+open the saved layout and reconnect. LOCK_TIMEOUT: inspect owner/wait or cancel.
+LOCK_HOLDER_DEAD: reconcile the exact interrupted native operation. ADMISSION_PERMISSION:
+inspect the state directory owner/permissions. REPORT_PENDING/TIMEOUT: wait; do not
+repeat an uncertain mutation. Expected validation/read errors alone do not imply
+manual recovery. WORKSPACE_EXTERNAL_CHANGE means inspect the affected workspace.
 
-- Run `npm run lint` and `npm test` before committing. Tests run offline and need no Desktop.
-- Lint covers JavaScript and `.mjs` files in `src/`, `tests/`, `examples/` and `scripts/`. CLI contract tests execute the real entry point against isolated ownership files and a local HTTP fixture; compare actual output, exit codes and side effects with the catalog when changing command behavior.
-- `tv help --json` is generated from the code at runtime; never write or commit catalog output. Its text comes from the `description` of each command and option, so when you change behavior, options or arguments, update those descriptions in the same change and check the result with `tv help --json <command>`. Tests fail if a description is missing, not if it is wrong.
-- A new command must be registered in `src/cli/commands/`, classified exactly once in `src/cli/policy.js` and given a positional range in `src/cli/arguments.js` if it takes arguments. `tests/command-policy.test.js` fails on unclassified commands. The `tv help --json` catalog picks up new commands automatically.
-- Every `tv ...` line in README.md, docs/workspaces.md and this file is syntax-checked against the real argument parser by `tests/documented-arguments.test.js`.
+## Repository changes
+
+- Run npm run lint and npm test before every commit. Unit/native/DOM/CLI HTTP
+  fixtures run offline; separate live Desktop evidence from fixture claims.
+- Register commands in src/cli/commands, classify exactly once in policy.js, add
+  positional ranges in arguments.js and update descriptions/help in the same change.
+- CLI contract tests execute the real entry point with isolated state/HTTP fixtures;
+  assert output/exit/side effects agree with the catalog.
+- README/docs/workspaces/this file tv examples are parsed by
+  tests/documented-arguments.test.js. Update examples/scripts/PowerShell/migration
+  alongside changed execution contracts.
+- Persistent private state uses LOCALAPPDATA/XDG (TV_STATE_DIR override), not TEMP.
+  Never commit owner tokens, private source/journals or live raw result blobs.

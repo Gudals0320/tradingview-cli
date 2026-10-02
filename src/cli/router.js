@@ -9,6 +9,7 @@ import { runWorkspace } from '../workspace.js';
 import { commandScope, pureRead, workspaceRequired, resourceKinds } from './policy.js';
 import { resolveWorkspace } from '../workspace-registry.js';
 import { acquireResources } from '../resource-lock.js';
+import { resolve } from 'node:path';
 import { validateArguments } from './arguments.js';
 
 /** @type {Map<string, { description: string, options?: object, handler: Function, subcommands?: Map<string, object> }>} */
@@ -168,19 +169,22 @@ async function execute(handler, values, positionals, offline = false, readOnly =
     const action = async () => {
       const scope = commandScope(command);
       readOnly = pureRead(command, values, positionals);
+      if (/^workspace (status|interrupt|recover|rebind|release|abandon)$/.test(command) && !values.file) values.file = resolveWorkspace(workspaceFile || process.env.TV_WORKSPACE);
       if (workspaceRequired(command)) {
         const reference = workspaceFile || process.env.TV_WORKSPACE;
         if (process.env.TV_CDP_TARGET || configuredTarget()) throw Object.assign(new Error('--target/TV_CDP_TARGET is a preparation-only migration option. Use a named workspace for Desktop work.'), { code: 'WORKSPACE_TARGET_MISMATCH' });
         const file = resolveWorkspace(reference);
-        return runWorkspace(file, command, values, positionals, handler);
+        if(!workspaceFile && process.env.TV_LAYOUT && process.env.TV_LAYOUT !== (await import('../workspace-store.js')).loadWorkspace(file).layout)throw Object.assign(new Error('Terminal layout and workspace selection differ; select the workspace again.'),{code:'WORKSPACE_SELECTION_MISMATCH'});
+        const output=await runWorkspace(file, command, values, positionals, handler);
+        return output && resolve(reference)===file ? {...output,warnings:[...(output.warnings||[]),'Legacy file reference: import this handle under a workspace name.']} : output;
       }
       if (scope === 'offline' || scope === 'workspace-admin') return handler(values, positionals);
-      if (command === 'launch') assertNoWorkspaceAnywhere();
+      if (command === 'launch' && !values['no-kill']) assertNoWorkspaceAnywhere();
       const kinds = resourceKinds(command, values, positionals);
       if (kinds.includes('app')) assertLegacyCompatibility({ shared: true });
       if (kinds.length) resourceLease = await acquireResources(kinds, { command, timeout: values['lock-timeout-ms'] });
       return withSharedSession(async () => {
-        if (scope === 'app-shared' && !readOnly) lease = acquireSession({ shared: true, command, desktopWide: command === 'launch' });
+        if (['app-shared','preparation'].includes(scope) && !readOnly && kinds.includes('app')) lease = acquireSession({ shared: true, command, desktopWide: command === 'launch' && !values['no-kill'] });
         return lease ? withLegacySession(lease, () => handler(values, positionals)) : handler(values, positionals);
       });
     };
@@ -188,7 +192,7 @@ async function execute(handler, values, positionals, offline = false, readOnly =
     retainRecovery = result?.recovery_required === true;
   } catch (err) {
     primaryError = err;
-    retainRecovery = err.code === 'CDP_TIMEOUT' || err.recovery_required === true;
+    retainRecovery = err.code === 'CDP_TIMEOUT' || err.recovery_required === true || lease?.pending()?.native_quiescence_required === true;
   } finally {
     if (lease && retainRecovery && lease.pending()?.native_quiescence_required) {
       try { lease.checkpoint({ ...lease.pending(), phase: 'recovery_required', command,
@@ -202,7 +206,7 @@ async function execute(handler, values, positionals, offline = false, readOnly =
       try { lease.release({ restored: !readOnly && !retainRecovery }); }
       catch (error) { cleanupWarnings.push(error.message); }
     }
-    try { resourceLease?.release(); } catch (error) { cleanupWarnings.push(error.message); }
+    try { resourceLease?.release(); } catch (error) { primaryError ||= error; }
   }
   if (primaryError) {
     if (cleanupWarnings.length) primaryError.details = { ...primaryError.details, cleanup_warnings: cleanupWarnings };
@@ -219,9 +223,9 @@ async function execute(handler, values, positionals, offline = false, readOnly =
 function handleError(err) {
   const message = err.message || String(err);
   // Connection failures get exit code 2
-  if (['CDP_CONNECTION', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND'].includes(err.code)
+  if (['CDP_CONNECTION', 'WORKSPACE_DISCONNECTED', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND'].includes(err.code)
     || ['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND'].includes(err.cause?.code)) {
-    console.error(JSON.stringify({ success: false, error: message }, null, 2));
+    console.error(JSON.stringify({ success: false, error: message,...(err.code?{code:err.code}:{}),...(err.details?{details:err.details}:{}) }, null, 2));
     process.exitCode = 2;
     return;
   }

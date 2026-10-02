@@ -41,7 +41,9 @@ const LEASES = {
 const OUTPUT_RULES = new Map([['help', 'JSON with --json; plain text otherwise.']]);
 
 function endpointLease(name, scope) {
+  if(workspaceRequired(name))return false;
   if (scope === 'app-shared') return invocationClass(name) !== 'pure';
+  if(scope==='preparation'&&invocationClass(name)==='native')return true;
   return OFFLINE_LEASE_COMMANDS.has(name);
 }
 
@@ -67,7 +69,8 @@ function describe(name, adapter) {
     endpoint_lease: endpointLease(name, scope),
     workspace_required: workspaceRequired(name),
     locks: resourceKinds(name),
-    foreground: FOREGROUND_COMMANDS.has(name) ? 'required' : ['layout create', 'layout open', 'tab new'].includes(name) ? 'changes' : 'background',
+    foreground: name==='screenshot'?'conditional':name==='tab switch'?'changes':FOREGROUND_COMMANDS.has(name) ? 'required' : ['layout create', 'layout open', 'tab new'].includes(name) ? 'changes' : 'background',
+    ...(name==='screenshot'?{foreground_when:'CDP capture requires the owned tab to be selected and a nonzero viewport; --method api targets the owned chart in the background.'}:{}),
     read_only: invocation === 'pure' ? true : invocation === 'mixed' ? 'conditional' : invocation === 'native' ? false : null,
     ...(MIXED_RULES.has(name) ? { read_only_when: MIXED_RULES.get(name) } : {}),
     output: OUTPUT_RULES.has(name) ? 'conditional' : name.startsWith('stream ') ? 'jsonl' : 'json',
