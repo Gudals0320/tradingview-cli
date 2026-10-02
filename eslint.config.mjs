@@ -9,7 +9,7 @@
 // Globals below are the runtime APIs used across src/ (Node + browser/CDP context).
 export default [
   {
-    files: ['**/*.js'],
+    files: ['**/*.{js,mjs}'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
