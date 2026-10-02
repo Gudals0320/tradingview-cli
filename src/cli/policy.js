@@ -9,6 +9,16 @@ export const PURE_READ_COMMANDS = new Set(['status', 'state', 'info', 'ohlcv', '
   'watchlist get', 'tab list', 'layout list', 'pane list', 'draw list', 'draw get', 'replay status', 'discover', 'ui-state', 'ui find', 'workspace wait',
   'stream quote', 'stream bars', 'stream values', 'stream lines', 'stream labels', 'stream tables', 'stream all']);
 export const MIXED_COMMANDS = new Set(['quote', 'symbol', 'timeframe', 'type', 'range', 'screenshot', 'stream ohlcv']);
+// When a mixed command stays a pure read; published by `tv help --json`.
+export const MIXED_RULES = new Map([
+  ['quote', 'Pure read without SYMBOL; with SYMBOL it temporarily switches the chart symbol and restores it.'],
+  ['symbol', 'Pure read without an argument; with one it changes the chart symbol.'],
+  ['timeframe', 'Pure read without an argument; with one it changes the chart timeframe.'],
+  ['type', 'Pure read without an argument; with one it changes the chart type.'],
+  ['range', 'Pure read without --from/--to; with them it changes the visible range.'],
+  ['screenshot', 'Pure read from the CLI (CDP capture); writes a PNG file locally.'],
+  ['stream ohlcv', 'Feed provisioning may split panes, open tabs or reassign CLI-created targets; polling is a pure read.'],
+]);
 export const WORKSPACE_READS = new Set(['state', 'info', 'ohlcv', 'values', 'quote', 'data lines', 'data labels',
   'data tables', 'data boxes', 'pine get', 'pine errors', 'pine console', 'indicator get']);
 export function pureRead(command, values = {}, positionals = []) {
@@ -18,7 +28,7 @@ export function pureRead(command, values = {}, positionals = []) {
   if (command === 'stream ohlcv') return values.phase === 'polling';
   return PURE_READ_COMMANDS.has(command);
 }
-export const OFFLINE_COMMANDS = new Set(['update', 'search', 'pine analyze', 'pine check', 'session status', 'session discard', 'session recover',
+export const OFFLINE_COMMANDS = new Set(['help', 'update', 'search', 'pine analyze', 'pine check', 'session status', 'session discard', 'session recover',
   'workspace inventory', 'workspace status', 'workspace interrupt', 'workspace abandon', 'workspace gate-status', 'workspace gate-clear']);
 export const ADMIN_COMMANDS = new Set(['workspace init', 'workspace recover', 'workspace rebind', 'workspace release']);
 // Only these commands dispatch native changes which may outlive the CLI.
