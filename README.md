@@ -174,6 +174,12 @@ tv stream quote --interval 500
 | `COMPILE_EXCEPTION` | native 거부로 분류할 수 없는 예외입니다. |
 | `SAVE_FAILED` | 저장/검증 실패; 전략의 준비 epoch를 종료합니다. |
 | `REPORT_TIMEOUT` | 제한 시간 내 report를 검증하지 못했습니다. `calculation_pending:true`인 기존 검증된 입력 재계산만 관찰을 유지합니다. |
+| `REPORT_INVALIDATED` | CLI 소스 교체 또는 외부 compiled identity 변경으로 검증이 해제되었습니다. 요청 소스를 다시 compile하세요. |
+| `REPORT_CHANGED` | ledger 페이지 사이 결과가 변경되었습니다. 수집한 페이지를 버리고 offset 0부터 새 revision으로 다시 수집하세요. |
+| `ORDERS_UNAVAILABLE` / `LEDGER_UNAVAILABLE` | 해당 native 배열을 읽을 수 없습니다. 빈 배열로 대체하지 말고 Desktop build/전략 가용성을 확인하세요. |
+| `EQUITY_UNAVAILABLE` | native equity 배열이 없습니다. buy-and-hold나 실현손익 곡선을 per-bar equity로 대체하지 마세요. |
+| `GRAPHICS_EXTRACTION_FAILED` / `VALUES_EXTRACTION_FAILED` | study 읽기 예외로 해당 추출 전체가 실패했습니다. `details.study_id`/`study_name`과 build 지원을 확인하세요. |
+| `OHLCV_EXTRACTION_FAILED` / `DATA_EXTRACTION_FAILED` | 요청 범위의 봉 누락 또는 추출 예외입니다. bar_index/context와 차트 가용성을 확인한 뒤 재조회하세요. |
 | `LIBRARY_NOT_APPLICABLE` / `INVALID_LIBRARY_TITLE` | library 적용 지원 범위 또는 제목 규칙을 확인하세요. |
 | `PINE_VIEWPORT_UNAVAILABLE` | 초기화가 필요한 대상 viewport가 0입니다. 창/탭을 보이게 하고 재시도하세요. |
 | `PINE_EDITOR_NOT_READY` | 보이는 Pine 패널이 제한 시간 내 초기화되지 않았습니다. |
@@ -237,6 +243,53 @@ Desktop의 활성 탭은 셸의 실제 탭 선택 상태를 기준으로 판단�
 **`pine compile` 또는 `indicator set` 실행 중에는 GUI에서 전략 입력값을 동시에 편집하지 마세요.** GUI 편집은 CLI 잠금에 참여하지 않습니다. 특히 컴파일이 첫 report를 채택하고 감시를 설치하기 전에 동시에 입력을 바꾸면 이전 계산이 현재 입력의 결과로 채택될 수 있습니다. 이 동시 편집 경로는 지원 범위에서 제외하며 [후속 이슈 #2](https://github.com/Gudals0320/tradingview-cli/issues/2)에서 추적합니다.
 
 전략 결과에는 실제 백테스트·거래·로드된 데이터 기간, 입력값, 단위 정보가 포함됩니다. `data trades`는 백테스트 주문 기록이며 `order_seq`는 시간이나 봉 번호가 아닌 주문 순번입니다. `time_index`는 같은 순번의 이전 이름으로 남아 있습니다. `data ledger`는 진입·청산 시각을 UTC로 변환한 거래 원장을 페이지 단위로 반환합니다. 비율 값은 단위 메타데이터를 확인하세요. 예를 들어 `0.01`은 1%를 의미합니다.
+
+`pine set`, `pine new`, `pine open`으로 실제 에디터 내용이 바뀌면 해당 페이지의 모든 이전 전략 검증과 캐시를 보수적으로 해제합니다. 컴파일 이전이나 `SAVE_REQUIRED` 등으로 컴파일이 거부된 뒤에는 이전 결과 대신 `REPORT_INVALIDATED`를 반환합니다. 같은 내용의 재주입은 검증을 유지하지만, 변경 후 원래 소스로 되돌리는 것은 재검증이 필요합니다. 저장된 같은 버전은 새 native 재계산을 관찰해야 하며, 관찰되지 않으면 timeout으로 실패합니다. 이 상태는 페이지에 보관되어 다음 CLI 프로세스에도 적용됩니다. GUI에서 소스만 직접 편집한 상태는 이 주입 감시의 범위에 포함되지 않습니다. 무효화 뒤 `indicator set`으로 현재 적용된 전략의 입력 재계산을 검증할 수 있으나 `source_hash:null`이면 CLI가 에디터 소스의 적용을 검증한 것은 아닙니다.
+
+`data strategy`, `data trades`, `data ledger`, `data equity`에 `--strategy-id ENTITY_ID`를 지정할 수 있습니다. 생략하면 현재 검증된 전략을 선택하며, 다른 전략의 ID를 지정해도 검증을 상속하지 않습니다. ID는 `state`에서 확인하고 재접속 뒤 다시 읽습니다. 지표·주문·ledger의 `strategy_id`, `compilation_token`, `source_hash`, `strategy_inputs`, `context`를 함께 보관하세요. 같은 compilation token도 입력·종목·시간봉 재계산 뒤 유지될 수 있어 token 하나만으로 실행 조건이나 결과 snapshot을 식별하지 않습니다.
+
+### 거래 원장의 페이지 수집
+
+첫 페이지의 `report_revision`과 `next_offset`을 읽고 다음 호출에 그대로 전달합니다.
+
+```bash
+tv data ledger --strategy-id ENTITY_ID --offset 0 --limit 100
+tv data ledger --strategy-id ENTITY_ID --offset 100 --limit 100 --report-revision FIRST_PAGE_REVISION
+```
+
+`trade_seq`는 native 배열의 0부터 시작하는 순번이며 페이지는 오름차순입니다. 시각으로 다시 정렬하지 않습니다. `has_more:false`, `next_offset:null`이면 종료합니다. 배열 끝 또는 그 이후 offset의 빈 페이지는 정상 종료이고, ledger 자체가 없으면 `LEDGER_UNAVAILABLE`로 실패합니다. 페이지당 기본 100건, 최대 500건입니다. 여러 페이지가 필요하면 반환된 `next_offset`을 사용하세요.
+
+revision은 전략 ID·token·source hash·inputs·종목·시간봉·차트 유형과 전체 native ledger·performance·settings의 SHA-256입니다. 내부 거래만 변경되어도 `REPORT_CHANGED`, `success:false`, 종료 코드 1로 해당 페이지 데이터를 거부합니다. 이때 지금까지 모은 페이지를 버리고 offset 0부터 다시 수집합니다. revision을 전달하지 않은 호출 간 일관성은 보장하지 않습니다. 페이지마다 전체 원장을 직렬화하여 CDP로 읽고 해시하므로 큰 원장에서는 비용과 timeout이 증가합니다. 서버 snapshot을 고정하지 않으며 실시간 열린 거래 갱신도 revision을 바꿀 수 있습니다. metrics와 주문 조회 자체에는 동일 revision이 없으므로 세 조회를 원자적 snapshot으로 취급하지 마세요.
+
+`raw.e.tm`/`raw.x.tm`을 보존하면서 `entry_time`/`exit_time`을 ISO-8601 UTC로 변환합니다. 숫자 절댓값이 `1e11` 미만이면 초, 그 이상이면 밀리초로 해석하며 ISO 문자열도 허용합니다. 이는 기존 native 필드의 크기에 따른 호환 해석으로 아주 오래된 밀리초 값에는 적용이 부정확할 수 있습니다. 실제 Desktop의 단위는 첫 실행에서 확인해야 합니다. 시각 누락은 null, 잘못되거나 범위를 벗어난 시각은 null과 `timestamp_errors`의 `e`/`x`로 표시합니다. `open:true`는 native 청산 객체 `x`가 없다는 뜻이며, `x`의 시각만 없다고 미청산을 추정하지 않습니다. Desktop이 미청산 거래를 native 배열에 포함하는지는 이번에 실측하지 않았습니다.
+
+### 결과 의미와 조회 범위
+
+| 필드/명령 | 의미와 한계 |
+| --- | --- |
+| `metrics` | native Strategy Tester 수치를 보존합니다. 돈 필드는 report currency, 비율 이름의 percent 필드는 기존 매핑상 fraction(0.01=1%)입니다. `profit_factor`·Sharpe·Sortino는 비율, 거래 수는 건수입니다. 손실·낙폭 부호를 임의로 바꾸지 않습니다. 필드별 native 단위·부호를 이번 Desktop에서 실측하지 않았습니다. |
+| `missing_metrics` | native 누락·비수치·비유한 값의 필드 이름입니다. `metrics`에서는 제외하며 0으로 채우지 않습니다. 실제 0은 유지합니다. `total_trades`는 native `totalTrades` 우선, 없으면 양쪽 winning/losing count가 모두 있을 때 합산합니다. fallback에는 별도 breakeven count가 없습니다. |
+| `backtest_window` | native report settings의 backtest dateRange입니다. 사용자가 요청한 entry-signal 구간이나 모든 거래소 히스토리를 보장하지 않습니다. |
+| `loaded_window` | 현재 차트 메모리에 로드된 첫/마지막 봉의 시각입니다. report의 계산 구간과 다를 수 있습니다. |
+| `trade_window` | native 거래 배열 첫 진입부터 마지막 거래의 청산(없으면 진입)까지입니다. 전체 거래 시각의 min/max나 미청산 거래의 현재 평가시각을 계산하지 않습니다. 원장/시각이 없으면 null입니다. |
+| `data trades --max N` | 최근 백테스트 주문 이벤트 배열의 tail입니다. 기본·상한 20건, 요청이 더 크면 20으로 제한하고 `requested`·`limit`·`applied`·`total_orders`·`truncated`를 표시합니다. timestamp 또는 완전한 거래 원장이 아닙니다. 지원하지 않으면 `ORDERS_UNAVAILABLE`입니다. |
+| `ohlcv --count N` | 현재 로드된 최신 N봉, 기본 100·상한 500봉입니다. 501 이상은 입력 오류이며 히스토리를 자동 로드하지 않습니다. 오래된 로드 봉이 반환에서 제외되면 `truncated:true`; N봉을 채우지 못하면 `insufficient_history:true`입니다. summary도 같은 범위입니다. 없는 volume은 null, 범위 내부 봉 누락/추출 예외는 실패입니다. time 원본은 unix seconds입니다. |
+| `values` | 현재 data-window 값의 표시 문자열입니다. 전체 indicator 시계열이나 native 숫자 의미를 보장하지 않습니다. 읽기 예외는 실패하고, 표시값이 없는 study는 제외됩니다. |
+| `data lines/labels/tables/boxes` | 현재 메모리의 Pine graphics입니다. 전체 과거 출력이 아니며 Pine/구독 상한의 영향을 받습니다. labels 기본 최대 50건, `--max`로 변경하며 잘림을 표시합니다. 그래픽의 `x`/봉 좌표를 timestamp로 해석하지 마세요. tables는 빈 셀/행을 보존합니다. filter 불일치는 `STUDY_NOT_FOUND`, 실제 읽기 예외는 실패입니다. 없는 collection은 검출된 출력 없음이며 역사 전체가 비었다는 보장이 아닙니다. |
+
+핵심 결과는 chart model의 `reportData`/`ordersData`/bars/graphics와 native 계산 이벤트를 읽으며 metrics·ledger·OHLCV에 DOM 텍스트 fallback을 사용하지 않습니다. `values`는 내부 data-window view를 읽습니다. 내부 객체/API는 문서화되지 않았고 Desktop 버전에 따라 달라질 수 있으므로 이 방식만으로 버전 독립성이나 안정성을 보장하지 않습니다. 지원하지 않는 report/equity와 정상적인 빈 원장·0거래 결과는 구분합니다.
+
+`values`/Pine graphics는 study 하나라도 실제 읽기 예외가 발생하면 전체 호출을 실패시킵니다. 부분 출력이나 성공 빈 배열로 숨기지 않고 stderr JSON에 오류 코드와 `details.study_id`/`study_name`을 반환합니다. 실제 Desktop에서 내장 study가 예외를 내어 전체 조회를 계속 실패시킬 가능성은 미검증입니다. 첫 실행에서 내장 지표를 포함한 차트로 확인하고 실패 study 정보를 보존하세요. `missing_metrics`에는 누락과 비유한값이 함께 포함되므로, 예를 들어 손실 거래가 없어 native profit_factor가 Infinity인 경우도 이름이 포함될 수 있습니다.
+
+### Experimental 데이터와 비용·equity 한계
+
+`quote`의 last/OHLCV는 최신 차트 봉 snapshot이며 현재 bid/ask는 DOM 텍스트에서 선택적으로 읽는 experimental 필드입니다. bid/ask 누락은 0으로 보정하지 않습니다. `data depth`는 현재 표시된 DOM 패널을 휴리스틱으로 읽는 experimental snapshot이고, 패널·데이터 공급·UI 구조에 따라 실패하거나 bid/ask 분류가 부정확할 수 있습니다. 이 두 기능의 가용성은 핵심 백테스트 준비 여부와 별개입니다. 과거 bid/ask·spread·L2, 거래소 raw executions, 완전한 tick/order-book 이벤트 스트림을 제공하지 않습니다.
+
+Strategy Tester의 비용은 Pine에서 설정한 commission과 고정 tick slippage 범위입니다. 별도 동적 spread·funding 보정, maker/taker·queue·부분체결 모델은 CLI가 추가하지 않습니다. indicator/table로 funding 값을 읽는 것과 Strategy Tester 손익에 비용을 반영하는 것은 별개입니다. funding 전용 추출기나 손익 주입 기능은 없습니다.
+
+`data equity`는 검증된 native report의 `equity`/`equityChart` 배열이 있을 때만 반환합니다. 없으면 `EQUITY_UNAVAILABLE`로 실패하며 buy-and-hold로 대체하지 않습니다. 배열의 per-bar 밀도·열 의미는 실제 Desktop에서 확인해야 합니다. ledger의 청산 실현손익을 누적하여 만든 곡선은 미실현손익을 포함한 per-bar equity와 같지 않습니다.
+
+이번 준비 검증은 코드·fixture·CLI 계약 검증입니다. 기능별 구현/검증 근거와 첫 실제 Desktop 백테스트 확인 항목은 [이슈 #26 검증 기록](docs/backtest-readiness.md)에 구분했습니다. 이번 작업에서 실제 Desktop/UI를 변경하거나 실전 전략을 평가하지 않았습니다.
 
 ## 배치 실행과 중단 복구
 
