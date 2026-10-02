@@ -21,7 +21,7 @@ export function createStrategy({ fast, slow, start, end, runId }) {
   if (!Number.isFinite(begin) || !Number.isFinite(finish) || begin >= finish) throw new Error('Require a valid start before end');
   const title = `${PREFIX}${fast}-${slow}`;
   const reportTitle = runId ? `${title} [${runId.slice(0, 12)}]` : title;
-  return { title, reportTitle,
+  return { title, reportTitle, parameters: { fast, slow, start, end },
     source: template.replace('"TV CLI Example SMA"', JSON.stringify(reportTitle))
       .replace('input.int(10,', `input.int(${fast},`).replace('input.int(30,', `input.int(${slow},`)
       .replace('input.time(0,', `input.time(${begin},`)
@@ -110,6 +110,7 @@ export async function runBatch(options, api = DEFAULT_API) {
   const lease = (api.session || session).acquireSession({ recover: Boolean(options.recover) });
   let snapshot = null, failure = null, restored = false, recoveryAttempted = Boolean(options.recover);
   const results = [];
+  let attempt = null;
   const stop = () => { if (options.signal?.aborted) throw new Error('Batch interrupted; restoring the saved snapshot.'); };
   try {
     if (options.recover) {
@@ -167,11 +168,12 @@ export async function runBatch(options, api = DEFAULT_API) {
     const inspectContext = async () => {
       stop();
       const current = await api.connection.evaluate(`(${readChartContext.toString()})(window)`);
-      if (!contextMatches(options, current) || current.chart_type !== 1 || !current.bar_count) throw new Error('Experiment symbol/timeframe/type/feed changed; refusing mixed results.');
+      if (!contextMatches(options, current) || current.chart_type !== 1 || !current.bar_count || current.loading || current.feed_error) throw new Error('Experiment symbol/timeframe/type/feed changed; refusing mixed results.');
       if (session.sourceHash((await api.pine.getSource()).source) !== snapshot.last_source_hash) throw new Error('Experiment source changed; refusing mixed results.');
       return current;
     };
     for (const variant of variants) {
+      attempt = { strategy: variant.title, parameters: variant.parameters, phase: 'source' };
       stop(); await inspectContext();
       const current = await api.chart.getState();
       for (const study of current.studies.filter(item => item.name.startsWith(PREFIX))) await api.chart.manageIndicator({ action: 'remove', entity_id: study.id });
@@ -179,29 +181,44 @@ export async function runBatch(options, api = DEFAULT_API) {
       snapshot.owned_source_hashes.push(snapshot.last_source_hash);
       lease.checkpoint({ phase: 'writing-source', snapshot });
       await api.pine.setSource({ source: variant.source }); await inspectContext();
+      attempt.phase = 'compile';
       const compile = await api.pine.smartCompile();
-      if (!compile.success || compile.has_errors || compile.runtime_error) throw new Error(`Pine compilation failed: ${compile.error || JSON.stringify(compile.errors)}`);
+      if (!compile.success || compile.has_errors || compile.runtime_error) throw Object.assign(new Error(`Pine compilation failed: ${compile.error || JSON.stringify(compile.errors)}`), { code: compile.code || 'PINE_COMPILE_ERROR' });
       stop();
+      attempt.phase = 'report';
       const report = await api.data.getStrategyResults({ strategy_id: compile.strategy_id, strategy: variant.reportTitle });
       if (!report.success || report.strategy !== variant.reportTitle || report.compilation_token !== compile.compilation_token
         || report.source_hash !== snapshot.last_source_hash || !contextMatches(options, report.context) || report.context.chart_type !== 1
-        || JSON.stringify(report.strategy_inputs || []) !== JSON.stringify(compile.strategy_inputs || [])) throw new Error('Requested fresh strategy report was not verified; refusing stale results');
+        || JSON.stringify(report.strategy_inputs || []) !== JSON.stringify(compile.strategy_inputs || [])) throw Object.assign(new Error('Requested fresh strategy report was not verified; refusing stale results'), { code: report.code || 'REPORT_UNVERIFIED' });
       const history = verifyHistory(report, options);
+      attempt.phase = 'orders';
       const orders = await api.data.getTrades({ max_trades: 10, strategy_id: report.strategy_id });
+      if (!orders.success || orders.strategy_id !== report.strategy_id || orders.compilation_token !== report.compilation_token
+        || orders.source_hash !== report.source_hash || !contextMatches(options, orders.context)
+        || orders.context.chart_type !== 1 || JSON.stringify(orders.strategy_inputs) !== JSON.stringify(report.strategy_inputs)) {
+        throw Object.assign(new Error('Order collection failed or its run identity changed; refusing mixed results.'), { code: orders.code || 'ORDERS_UNVERIFIED' });
+      }
       await inspectContext();
       results.push({ strategy: variant.title, report_strategy: variant.reportTitle, run_id: lease.run_id,
+        strategy_id: report.strategy_id, compilation_token: report.compilation_token, source_hash: report.source_hash,
+        strategy_inputs: report.strategy_inputs, parameters: variant.parameters, context: report.context,
         symbol: report.context.symbol, timeframe: report.context.resolution, currency: report.currency,
         metrics: report.metrics, units: report.units, backtest_window: report.backtest_window,
         trade_window: report.trade_window, history_coverage: history, warnings: compile.warnings || [],
-        recentOrders: orders.trades, totalOrders: orders.total_orders });
+        recentOrders: orders.trades, totalOrders: orders.total_orders, orders_truncated: orders.truncated,
+        orders_requested: orders.requested, orders_limit: orders.limit });
     }
   } catch (error) { failure = error; }
   finally {
     try { if (!recoveryAttempted) { if (snapshot) await restoreSnapshot(snapshot, api); restored = true; } }
-    catch (error) { failure = new Error([failure?.message, `Recovery failed: ${error.message}. Inspect tv session status / tv tab list before retrying --recover.`].filter(Boolean).join('; ')); }
+    catch (error) { failure = Object.assign(new Error([failure?.message, `Recovery failed: ${error.message}. Inspect tv session status / tv tab list before retrying --recover.`].filter(Boolean).join('; ')), { code: failure?.code || 'RECOVERY_FAILED' }); }
     lease.release({ restored });
   }
-  if (failure) throw failure;
+  if (failure) {
+    failure.code ||= 'BATCH_RUN_FAILED';
+    failure.details = { run_id: lease.run_id, failed_run: attempt, restored, completed_results: results };
+    throw failure;
+  }
   return { symbol: options.symbol, timeframe: options.timeframe, start: options.start, endExclusive: options.end,
     results, run_id: lease.run_id, restored };
 }
@@ -225,6 +242,6 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const output = resolve(values.out); mkdirSync(dirname(output), { recursive: true });
     writeFileSync(output, JSON.stringify(result, null, 2) + '\n');
     console.log(JSON.stringify({ success: true, experiments: result.results.length, output, restored: result.restored, recovered: result.recovered || false }));
-  } catch (error) { console.error(JSON.stringify({ success: false, code: error.code, error: error.message })); process.exitCode = 1; }
+  } catch (error) { console.error(JSON.stringify({ success: false, code: error.code, error: error.message, details: error.details })); process.exitCode = 1; }
   finally { process.removeListener('SIGINT', interrupted); process.removeListener('SIGTERM', interrupted); await connection.disconnect(); }
 }

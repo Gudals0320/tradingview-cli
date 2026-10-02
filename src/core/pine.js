@@ -272,17 +272,20 @@ export async function getSource() {
   return { success: true, source, line_count: source.split('\n').length, char_count: source.length };
 }
 
-export async function setSource({ source }) {
-  const editorReady = await ensurePineEditorOpen();
+export async function setSource({ source, _deps }) {
+  const editorReady = await ensurePineEditorOpen({ _deps });
   if (!editorReady) throw new Error('Could not open Pine Editor.');
 
   const escaped = JSON.stringify(source);
-  const set = await evaluate(`
+  const set = await (_deps?.evaluate || evaluate)(`
     (function() {
+      ${STRATEGY_PAGE_CODE};
       var m = ${FIND_MONACO};
       if (!m) return false;
-      m.editor.setValue(${escaped});
-      return true;
+      const before = m.editor.getValue();
+      try { m.editor.setValue(${escaped}); }
+      finally { if (m.editor.getValue() !== before) invalidateEditedSource(window); }
+      return m.editor.getValue() === ${escaped};
     })()
   `, { mutation: true });
 

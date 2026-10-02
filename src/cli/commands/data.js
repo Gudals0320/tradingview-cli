@@ -2,12 +2,12 @@ import { register } from '../router.js';
 import * as core from '../../core/data.js';
 
 register('quote', {
-  description: 'Get real-time price quote',
+  description: 'Get latest chart bar snapshot; current DOM bid/ask fields are experimental',
   handler: (opts, positionals) => core.getQuote({ symbol: positionals[0] }),
 });
 
 register('ohlcv', {
-  description: 'Get OHLCV bar data',
+  description: 'Get latest loaded OHLCV bars, with truncation and insufficient-history flags',
   options: {
     count: { type: 'string', short: 'n', description: 'Number of bars (default 100, max 500)' },
     summary: { type: 'boolean', short: 's', description: 'Return summary stats instead of all bars' },
@@ -59,30 +59,35 @@ register('data', {
       handler: (opts) => core.getPineBoxes({ study_filter: opts.filter, verbose: opts.verbose }),
     }],
     ['strategy', {
-      description: 'Get strategy performance metrics',
-      handler: () => core.getStrategyResults(),
+      description: 'Get verified native Strategy Tester metrics; missing metrics are omitted',
+      options: { 'strategy-id': { type: 'string', description: 'Exact current-session strategy study ID' } },
+      handler: (opts) => core.getStrategyResults({ strategy_id: opts['strategy-id'] }),
     }],
     ['trades', {
-      description: 'Get strategy trade list',
+      description: 'Get recent backtest order events (not the closed/open trade ledger)',
       options: {
-        max: { type: 'string', short: 'n', description: 'Max trades to return' },
+        max: { type: 'string', short: 'n', description: 'Requested order count (default 20, capped at 20)' },
+        'strategy-id': { type: 'string', description: 'Exact current-session strategy study ID' },
       },
-      handler: (opts) => core.getTrades({ max_trades: opts.max ? Number(opts.max) : undefined }),
+      handler: (opts) => core.getTrades({ max_trades: opts.max ? Number(opts.max) : undefined, strategy_id: opts['strategy-id'] }),
     }],
     ['ledger', {
-      description: 'Get paginated closed/open trade ledger with UTC entry/exit times',
+      description: 'Get verified closed/open native trade ledger; use report revision across pages',
       options: {
         offset: { type: 'string', description: 'First trade ordinal (default 0)' },
         limit: { type: 'string', description: 'Page size (default 100, max 500)' },
+        'strategy-id': { type: 'string', description: 'Exact current-session strategy study ID' },
+        'report-revision': { type: 'string', description: 'Revision from first page; reject changed reports with REPORT_CHANGED' },
       },
-      handler: (opts) => core.getTradeLedger({ offset: Number(opts.offset || 0), limit: Number(opts.limit || 100) }),
+      handler: (opts) => core.getTradeLedger({ offset: Number(opts.offset || 0), limit: Number(opts.limit || 100), strategy_id: opts['strategy-id'], report_revision: opts['report-revision'] }),
     }],
     ['equity', {
-      description: 'Get strategy equity curve',
-      handler: () => core.getEquity(),
+      description: 'Get native strategy equity if available; otherwise fail with EQUITY_UNAVAILABLE',
+      options: { 'strategy-id': { type: 'string', description: 'Exact current-session strategy study ID' } },
+      handler: (opts) => core.getEquity({ strategy_id: opts['strategy-id'] }),
     }],
     ['depth', {
-      description: 'Get order book / DOM data',
+      description: 'Experimental current DOM/depth panel snapshot; no historical order book',
       handler: () => core.getDepth(),
     }],
     ['indicator', {

@@ -5,7 +5,7 @@ import { sourceHash } from '../src/session.js';
 
 const options = { chartId: 'fixture-layout', symbol: 'BINANCE:BTCUSDT', timeframe: '60', start: '2026-08-01T00:00:00Z', end: '2026-09-30T00:00:00Z' };
 
-function fixture({ compileError = false, staleReport = false, foreign = [], restoreError = false } = {}) {
+function fixture({ compileError = false, staleReport = false, foreign = [], restoreError = false, ordersError = false } = {}) {
   const state = { symbol: 'NASDAQ:AAPL', resolution: '1D', chartType: 2, studies: [{ id: 'volume', name: 'Volume' }] };
   const initial = structuredClone(state);
   let source = 'original editor draft';
@@ -43,7 +43,10 @@ function fixture({ compileError = false, staleReport = false, foreign = [], rest
           context: { symbol: state.symbol, resolution: state.resolution, chart_type: state.chartType, aliases: [], bar_count: 100 },
           backtest_window: { from: options.start, to: options.end }, currency: 'USDT', metrics: { total_trades: 0 } };
       },
-      getTrades: async () => ({ trades: [], total_orders: 0 }),
+      getTrades: async () => ordersError ? { success: false, code: 'REPORT_PENDING' } : ({ success: true,
+        strategy_id: 'example', compilation_token: 'fixture-token', source_hash: sourceHash(source), strategy_inputs: [],
+        context: { symbol: state.symbol, resolution: state.resolution, chart_type: state.chartType },
+        trades: [], total_orders: 0, truncated: false, requested: 10, limit: 10 }),
     },
   };
   return { api, state, initial, source: () => source, writes: () => writes, reports: () => reports };
@@ -76,12 +79,35 @@ describe('Pine batch example', () => {
     assert.equal(result.restored, true);
     assert.equal(f.source(), 'original editor draft');
     assert.deepEqual(f.state, f.initial);
+    assert.equal(result.results[0].source_hash.length, 64);
+    assert.equal(result.results[0].compilation_token, 'fixture-token');
+    assert.deepEqual(result.results[0].parameters.fast, 10);
   });
 
   it('restores the draft and chart settings after compilation fails', async () => {
     const f = fixture({ compileError: true });
     await assert.rejects(runBatch(options, f.api), /compilation failed/);
     assert.equal(f.source(), 'original editor draft');
+    assert.deepEqual(f.state, f.initial);
+  });
+
+  it('fails on order collection errors and preserves the completed variant plus failed run identity', async () => {
+    const f = fixture(); const collect = f.api.data.getTrades; let reads = 0;
+    f.api.data.getTrades = async () => ++reads === 1 ? collect() : { success: false, code: 'REPORT_PENDING' };
+    await assert.rejects(runBatch(options, f.api), error => {
+      assert.equal(error.code, 'REPORT_PENDING'); assert.equal(error.details.restored, true);
+      assert.equal(error.details.failed_run.phase, 'orders');
+      assert.equal(error.details.failed_run.parameters.fast, 20);
+      assert.equal(error.details.completed_results.length, 1);
+      return true;
+    });
+    assert.deepEqual(f.state, f.initial); assert.equal(f.source(), 'original editor draft');
+  });
+
+  it('rejects order records from another run instead of storing them as a success', async () => {
+    const f = fixture(); const collect = f.api.data.getTrades;
+    f.api.data.getTrades = async () => ({ ...await collect(), source_hash: 'foreign' });
+    await assert.rejects(runBatch(options, f.api), { code: 'ORDERS_UNVERIFIED' });
     assert.deepEqual(f.state, f.initial);
   });
 

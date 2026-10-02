@@ -21,8 +21,30 @@ function fixture() {
   const window = { TradingViewApi: { _activeChartWidgetWV: { value: () => chart } } };
   const document = { querySelector: () => null };
   const evaluate = expression => runInNewContext(expression, { window, document });
-  return { window, chart, _deps: { evaluate, evaluateAsync: evaluate, waitForChartReady: async () => true, targetId: 'qa' } };
+  return { window, chart, bars, source, _deps: { evaluate, evaluateAsync: evaluate, waitForChartReady: async () => true, targetId: 'qa' } };
 }
+
+it('OHLCV reports a loaded tail separately from insufficient history and never invents missing volume', async () => {
+  const f = fixture();
+  const tail = await getOhlcv({ count: 1, _deps: f._deps });
+  assert.equal(tail.total_available, 2); assert.equal(tail.truncated, true); assert.equal(tail.insufficient_history, false);
+  const short = await getOhlcv({ count: 5, summary: true, _deps: f._deps });
+  assert.equal(short.truncated, false); assert.equal(short.insufficient_history, true); assert.equal(short.limit, 500);
+  f.bars.valueAt = i => [100 + i, 1, 3, 1, 2];
+  assert.equal((await getOhlcv({ count: 1, _deps: f._deps })).bars[0].volume, null);
+  assert.equal((await getOhlcv({ summary: true, _deps: f._deps })).avg_volume, null);
+  f.bars.valueAt = i => i === 0 ? [100, 1, 3, 1, 2, 0] : null;
+  await assert.rejects(getOhlcv({ count: 2, _deps: f._deps }), /OHLCV_EXTRACTION_FAILED/);
+  await assert.rejects(getOhlcv({ count: 501, _deps: f._deps }), /500/);
+});
+
+it('graphics extraction failures are errors rather than successful empty collections', async () => {
+  const f = fixture();
+  f.source._graphics._primitivesCollection.dwglabels.get = () => { throw new Error('incompatible API'); };
+  await assert.rejects(getPineLabels({ _deps: f._deps }), /GRAPHICS_EXTRACTION_FAILED.*incompatible API/);
+  f.source.dataWindowView = () => { throw new Error('incompatible view'); };
+  await assert.rejects(getStudyValues({ _deps: f._deps }), /VALUES_EXTRACTION_FAILED.*incompatible view/);
+});
 
 it('collection reads expose their exact context and preserve empty table cells/rows', async () => {
   const f = fixture();

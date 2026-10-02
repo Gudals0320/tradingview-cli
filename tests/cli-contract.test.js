@@ -7,6 +7,8 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import WebSocket from 'ws';
+import CDP from 'chrome-remote-interface';
 import { acquireSession, sessionPaths, sessionStatus } from '../src/session.js';
 import { reserveWorkspace } from '../src/workspace-store.js';
 
@@ -15,21 +17,31 @@ const CLI = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
 // Exercise the real entry point, parser, router and filesystem ownership code.
 // An isolated HTTP endpoint counts unexpected Desktop access; no real Desktop,
 // external API, user target, or user workspace is used by these tests.
-async function fixture(t) {
+async function fixture(t, pageResult) {
   const root = mkdtempSync(join(tmpdir(), 'tv-cli-contract-'));
   const requests = [], sockets = new Set();
   let connections = 0;
+  const protocol = pageResult ? await CDP.Protocol({ local: true }) : null;
   const server = createServer((request, response) => {
     requests.push(request.url);
     response.setHeader('Content-Type', 'application/json');
-    response.end('[]');
+    response.end(JSON.stringify(pageResult ? request.url === '/json/protocol' ? protocol
+      : [{ id: 'fixture-target', type: 'page', webSocketDebuggerUrl: `ws://127.0.0.1:${server.address().port}/fixture-target` }] : []));
   });
+  const ws = pageResult ? new WebSocket.Server({ server }) : null;
+  ws?.on('connection', socket => socket.on('message', raw => {
+    const message = JSON.parse(raw);
+    const result = message.method === 'Runtime.evaluate' ? { result: { type: 'object', value: message.params.expression === '1' ? 1 : pageResult(message.params.expression) } } : {};
+    socket.send(JSON.stringify({ id: message.id, result }));
+  }));
   server.on('connection', socket => {
     connections++;
     sockets.add(socket);
     socket.on('close', () => sockets.delete(socket));
   });
   t.after(async () => {
+    for (const socket of ws?.clients || []) socket.terminate();
+    if (ws) await new Promise(resolve => ws.close(resolve));
     for (const socket of sockets) socket.destroy();
     await new Promise(resolve => server.close(resolve));
     rmSync(root, { recursive: true, force: true });
@@ -59,6 +71,27 @@ async function fixture(t) {
   }
   return { root, options, requests, run, get connections() { return connections; } };
 }
+
+it('real ledger CLI carries selectors and revisions, fails changed pages with exit 1 and leaves no recovery journal', async t => {
+  let snapshot = 'first-native-ledger';
+  const expressions = [];
+  const f = await fixture(t, expression => {
+    expressions.push(expression);
+    return { success: true, strategy_id: 'chosen-study', offset: 0, limit: 1, trades: [], has_more: false, next_offset: null, _snapshot: snapshot };
+  });
+  const args = ['--target', 'fixture-target', 'data', 'ledger', '--strategy-id', 'chosen-study', '--limit', '1'];
+  const first = jsonResult(await f.run(args));
+  assert.equal(first.report_revision.length, 64); assert.equal(first._snapshot, undefined);
+  assert.ok(expressions.some(expression => expression.includes('"strategy_id":"chosen-study"')));
+  jsonResult(await f.run([...args, '--report-revision', first.report_revision]));
+  snapshot = 'changed-native-ledger';
+  const changed = jsonResult(await f.run([...args, '--offset', '1', '--report-revision', first.report_revision]), 1);
+  assert.equal(changed.success, false); assert.equal(changed.code, 'REPORT_CHANGED'); assert.equal(changed.trades, undefined);
+  assert.equal(sessionStatus(f.options).recovery_required, false); assert.equal(sessionStatus(f.options).locked, false);
+  const catalog = jsonResult(await f.run(['help', '--json', 'data', 'ledger'])).commands[0];
+  assert.equal(catalog.read_only, true); assert.equal(catalog.output, 'json');
+  assert.ok(catalog.options.some(option => option.name === '--report-revision'));
+});
 
 function jsonResult(result, exitCode = 0) {
   assert.equal(result.exitCode, exitCode, result.stderr);

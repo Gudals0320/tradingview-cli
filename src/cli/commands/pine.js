@@ -17,7 +17,7 @@ register('pine', {
       handler: () => core.getSource(),
     }],
     ['set', {
-      description: 'Set Pine Script source (reads stdin or --file)',
+      description: 'Set Pine source from stdin or --file; changed drafts invalidate prior report verification',
       options: {
         file: { type: 'string', short: 'f', description: 'Read source from file' },
       },

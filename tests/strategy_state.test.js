@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { runInNewContext } from 'node:vm';
 import { beginCompilation, compilationState, readStrategyReport, splitMarkers, reportExpression, formatDiagnostic, prepareInputChange } from '../src/strategy-state.js';
 import { getStrategyResults, getTrades, getTradeLedger, getEquity } from '../src/core/data.js';
-import { smartCompile } from '../src/core/pine.js';
+import { smartCompile, setSource } from '../src/core/pine.js';
 import { normalizeTimeframe, symbolMatches } from '../src/chart-context.js';
 import { failCompilation } from '../src/strategy-state.js';
 import { canonicalPineSource } from '../src/pine-source.js';
@@ -39,6 +39,104 @@ function fixture() {
 }
 
 describe('Strategy report identity and metadata', () => {
+  it('changed source injection invalidates cached results even if compilation is refused before dispatch', async () => {
+    const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
+    assert.equal(readStrategyReport(f.window).success, true);
+    let draft = 'original';
+    const editor = { getValue: () => draft, setValue: value => { draft = value; }, getModel: () => ({}) };
+    const container = { offsetParent: {}, __reactFiber$fixture: { memoizedProps: { value: {
+      _editorRef: { current: { _editor: editor, _monaco: { editor: {} } } },
+    } } } };
+    const document = { querySelectorAll: () => [container] };
+    const evaluate = expression => expression.startsWith('(() => {const m=') ? true : runInNewContext(expression, { window: f.window, document });
+    await setSource({ source: 'original', _deps: { evaluate } });
+    assert.equal(readStrategyReport(f.window).success, true);
+    editor.setValue = () => { throw new Error('set rejected'); };
+    await assert.rejects(setSource({ source: 'changed', _deps: { evaluate } }), /set rejected/);
+    assert.equal(readStrategyReport(f.window).success, true);
+    editor.setValue = value => { draft = value; };
+    await setSource({ source: 'strategy("changed")', _deps: { evaluate } });
+    assert.equal(readStrategyReport(f.window).code, 'REPORT_INVALIDATED');
+    assert.equal(runInNewContext(reportExpression(), { window: f.window }).code, 'REPORT_INVALIDATED');
+    assert.equal(f.window.__tvCliVerifiedStrategies.has('strategy'), false);
+    const rejected = await smartCompile({ _deps: { source: draft, stages: { context: () => ({ save_required: true }) }, evaluate: expression => runInNewContext(expression, { window: f.window }) } });
+    assert.equal(rejected.success, false);
+    assert.equal(rejected.code, 'SAVE_REQUIRED');
+    assert.equal(readStrategyReport(f.window).code, 'REPORT_INVALIDATED');
+    beginCompilation(f.window, 'repair', 'changed-hash', true); f.compile('new'); f.update();
+    assert.equal(readStrategyReport(f.window).success, true);
+  });
+
+  it('returning a changed draft to its original source needs a newly observed same-version refresh', async () => {
+    const { invalidateEditedSource } = await import('../src/strategy-state.js');
+    const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
+    assert.equal(readStrategyReport(f.window).success, true);
+    invalidateEditedSource(f.window);
+    const begun = beginCompilation(f.window, 'restored', 'hash', true, null, null, 'strategy', true);
+    assert.equal(begun.phase, 'pending');
+    f.tick(); assert.equal(readStrategyReport(f.window).code, 'REPORT_PENDING');
+    f.status(1); f.status(2); f.tick();
+    assert.equal(readStrategyReport(f.window).compilation_token, 'restored');
+  });
+
+  for (const condition of ['symbol', 'resolution', 'chartType']) {
+    it(`waits for native recalculation after a ${condition} change rather than adopting old ticks`, () => {
+      const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
+      assert.equal(readStrategyReport(f.window).success, true);
+      const chart = f.window.TradingViewApi._activeChartWidgetWV.value();
+      chart[condition] = () => ({ symbol: 'NASDAQ:AAPL', resolution: '60', chartType: 8 })[condition];
+      f.tick(); assert.equal(readStrategyReport(f.window).code, 'REPORT_PENDING');
+      f.status(1); f.status(2); f.update();
+      assert.equal(readStrategyReport(f.window).success, true);
+    });
+  }
+
+  it('ledger pagination detects even interior trade edits and preserves boundaries, missing and open timestamps', async () => {
+    const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
+    const report = f.source.reportData().value();
+    report.trades = [{ e: { tm: 1704067200 }, x: { tm: 1704153600000 } },
+      { e: { tm: 'invalid' }, x: { tm: 1e25 } }, { e: { tm: null } }];
+    const _deps = { evaluate: expression => runInNewContext(expression, { window: f.window }) };
+    const first = await getTradeLedger({ offset: 0, limit: 1, _deps });
+    assert.equal(first.next_offset, 1); assert.equal(first.has_more, true);
+    assert.equal(first.entry_time, undefined);
+    assert.equal(first.trades[0].entry_time, '2024-01-01T00:00:00.000Z');
+    assert.equal(first.trades[0].exit_time, '2024-01-02T00:00:00.000Z');
+    assert.equal(first.compilation_token, 'run'); assert.equal(first.source_hash, 'hash');
+    assert.equal(first._snapshot, undefined);
+    const second = await getTradeLedger({ offset: 1, limit: 1, report_revision: first.report_revision, _deps });
+    assert.equal(second.success, true); assert.deepEqual(Array.from(second.trades[0].timestamp_errors), ['e', 'x']);
+    assert.equal(second.trades[0].entry_time, null); assert.equal(second.trades[0].exit_time, null);
+    const last = await getTradeLedger({ offset: 2, limit: 1, report_revision: first.report_revision, _deps });
+    assert.equal(last.trades[0].open, true); assert.equal(last.has_more, false); assert.equal(last.next_offset, null);
+    const beyond = await getTradeLedger({ offset: 3, limit: 1, _deps });
+    assert.equal(beyond.trades.length, 0); assert.equal(beyond.has_more, false);
+    report.trades[1].profit = 20;
+    const changed = await getTradeLedger({ offset: 1, report_revision: first.report_revision, _deps });
+    assert.equal(changed.code, 'REPORT_CHANGED'); assert.equal(changed.trades, undefined);
+    await assert.rejects(getTradeLedger({ offset: Number.MAX_SAFE_INTEGER, _deps }), /safe offset/);
+    delete report.trades;
+    assert.equal((await getTradeLedger({ _deps })).code, 'LEDGER_UNAVAILABLE');
+  });
+
+  it('order caps, unavailable orders, equity and missing metrics are explicit', async () => {
+    const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
+    const report = f.source.reportData().value();
+    report.performance.all.grossLoss = -7; report.performance.all.profitFactor = Infinity;
+    const summary = readStrategyReport(f.window);
+    assert.equal(summary.metrics.gross_loss, -7); assert.equal(summary.metrics.profit_factor, undefined);
+    assert.ok(summary.missing_metrics.includes('profit_factor'));
+    const _deps = { evaluate: expression => runInNewContext(expression, { window: f.window }) };
+    assert.equal((await getTrades({ _deps })).code, 'ORDERS_UNAVAILABLE');
+    f.source.ordersData = () => Array.from({ length: 30 }, (_, tm) => ({ tm, b: true }));
+    const orders = await getTrades({ max_trades: 100, _deps });
+    assert.equal(orders.limit, 20); assert.equal(orders.requested, 100); assert.equal(orders.truncated, true);
+    assert.equal(orders.trades[0].order_seq, 10); assert.equal(orders.trades.at(-1).time_index, 29);
+    assert.equal((await getEquity({ _deps })).code, 'EQUITY_UNAVAILABLE');
+    report.equity = [[1704067200, 10000]];
+    assert.equal((await getEquity({ _deps })).data_points, 1);
+  });
+
   it('rejects overlapping input changes and rebases a completed A-B-A sequence before the next setter', () => {
     const f=fixture();prepareInputChange(f.window,'strategy');f.input(21);f.status(1);
     assert.throws(()=>prepareInputChange(f.window,'strategy'),{code:'STRATEGY_CALCULATION_PENDING'});

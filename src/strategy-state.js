@@ -67,6 +67,26 @@ export function failCompilation(window, token, error, code = 'COMPILATION_FAILED
   return true;
 }
 
+/** A changed editor draft must never retain the last run's report identity. */
+export function invalidateEditedSource(window) {
+  const epochs = new Set([window.__tvCliCompilation, ...(window.__tvCliVerifiedStrategies?.values() || [])]);
+  for (const epoch of epochs) {
+    if (!epoch?.strategy_mode) continue;
+    forgetVerifiedCompilation(window, epoch);
+    epoch.phase = 'invalidated'; epoch.report_verified = false;
+    epoch.error = 'Pine editor source changed; compile the requested source before collecting results.';
+  }
+}
+
+export function strategyTime(value) {
+  if (value == null || value === '') return null;
+  const numeric = typeof value === 'number' || /^-?\d+(\.\d+)?$/.test(String(value));
+  const number = numeric ? Number(value) : Date.parse(value);
+  const millis = numeric && Math.abs(number) < 1e11 ? number * 1000 : number;
+  const date = new Date(millis);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
 /** Keep native calculation transitions across separate CLI processes. */
 export function observeCalculation(window, epoch, item) {
   if (epoch.observer_source === item.source) return;
@@ -295,7 +315,7 @@ export function readStrategyReport(window, options = {}) {
     net_profit: all.netProfit, net_profit_percent: all.netProfitPercent, gross_profit: all.grossProfit,
     gross_loss: all.grossLoss, profit_factor: all.profitFactor, max_drawdown: perf.maxStrategyDrawDown,
     max_drawdown_percent: perf.maxStrategyDrawDownPercent,
-    total_trades: all.totalTrades ?? ((all.numberOfWiningTrades || 0) + (all.numberOfLosingTrades || 0)),
+    total_trades: all.totalTrades ?? (all.numberOfWiningTrades + all.numberOfLosingTrades),
     winning_trades: all.numberOfWiningTrades, losing_trades: all.numberOfLosingTrades,
     percent_profitable: all.percentProfitable, avg_trade: all.avgTrade, largest_win: all.largestWinTrade,
     largest_loss: all.largestLosTrade, commission_paid: all.commissionPaid, sharpe_ratio: perf.sharpeRatio,
@@ -303,20 +323,17 @@ export function readStrategyReport(window, options = {}) {
     buy_hold_return_percent: perf.buyHoldReturnPercent, open_pl: perf.openPL,
   };
   const context = readChartContext(window);
-  const iso = (value) => {
-    if (value == null) return null;
-    const number = typeof value === 'number' ? value : /^\d+$/.test(String(value)) ? Number(value) : Date.parse(value);
-    const millis = typeof value === 'number' || /^\d+$/.test(String(value)) ? (number < 1e11 ? number * 1000 : number) : number;
-    return Number.isFinite(millis) ? new Date(millis).toISOString() : null;
-  };
+  if (!context || context.loading || context.feed_error) return { success: false, code: 'REPORT_PENDING', error: 'Chart feed is not ready for report extraction.' };
+  const iso = strategyTime;
   const range = report.settings?.dateRange?.backtest || {};
   const trades = Array.isArray(report.trades) ? report.trades : [];
   return { success: true, strategy: found.name, strategy_id: found.id, currency: report.currency || null,
     source: 'internal_api', compilation_token: compile.phase === 'ready' && found.id === compile.strategy_id ? compile.token : null,
     source_hash: compile.phase === 'ready' && found.id === compile.strategy_id ? window.__tvCliCompilation?.source_hash || null : null,
     strategy_inputs: found.inputs,
-    metric_count: Object.values(metrics).filter((value) => value != null).length,
-    metrics: Object.fromEntries(Object.entries(metrics).filter(([, value]) => value != null)),
+    metric_count: Object.values(metrics).filter(Number.isFinite).length,
+    metrics: Object.fromEntries(Object.entries(metrics).filter(([, value]) => Number.isFinite(value))),
+    missing_metrics: Object.keys(metrics).filter(key => !Number.isFinite(metrics[key])),
     context, backtest_window: { from: iso(range.from), to: iso(range.to) },
     loaded_window: { from: iso(context?.first_bar_time), to: iso(context?.last_bar_time) },
     trade_window: { from: iso(trades[0]?.e?.tm), to: iso(trades.at(-1)?.x?.tm ?? trades.at(-1)?.e?.tm) },
@@ -326,7 +343,7 @@ export function readStrategyReport(window, options = {}) {
 }
 
 export const STRATEGY_PAGE_CODE = [readChartContext, formatDiagnostic, pageStrategies, reportFingerprint, reportIsComplete, compiledIdentity,
-  calculationKey, rememberVerifiedCompilation, forgetVerifiedCompilation, failCompilation, observeCalculation, prepareInputChange, beginCompilation, compilationState, readStrategyReport].map(fn => fn.toString()).join('\n');
+  calculationKey, rememberVerifiedCompilation, forgetVerifiedCompilation, failCompilation, invalidateEditedSource, strategyTime, observeCalculation, prepareInputChange, beginCompilation, compilationState, readStrategyReport].map(fn => fn.toString()).join('\n');
 
 export function reportExpression(options = {}) {
   return `(() => { ${STRATEGY_PAGE_CODE}; return readStrategyReport(window, ${JSON.stringify(options)}); })()`;
