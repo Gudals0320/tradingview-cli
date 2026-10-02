@@ -15,11 +15,18 @@ const CONDITION_TYPE_MAP = {
   less_than: 'less', less: 'less', below: 'less', '<': 'less',
 };
 
-export async function create({ condition, price, message }) {
-  const p = requireFinite(price, 'price');
-  const condType = CONDITION_TYPE_MAP[String(condition || 'crossing').trim().toLowerCase()] || 'cross';
+export function alertCondition(condition) {
+  const type = CONDITION_TYPE_MAP[String(condition === undefined ? 'crossing' : condition).trim().toLowerCase()];
+  if (!type) throw new Error(`Unknown alert condition: ${condition}`);
+  return type;
+}
 
-  return evaluate(`
+export async function create({ condition, price, message, _deps = {} }) {
+  const p = requireFinite(price, 'price');
+  const condType = alertCondition(condition);
+  const inspect = _deps.evaluate || evaluate;
+
+  return inspect(`
     (function() {
       try {
         var ms = window.TradingViewApi._activeChartWidgetWV.value()._chartWidget.model().mainSeries();
@@ -35,7 +42,7 @@ export async function create({ condition, price, message }) {
         var cond = { type: condType, frequency: 'on_first_fire', series: [{ type: 'barset' }, { type: 'value', value: price }], resolution: '1' };
         var payload = {
           conditions: [cond],
-          symbol: '={"symbol":"' + sym + '"}',
+          symbol: '=' + JSON.stringify({ symbol: sym }),
           resolution: '1',
           message: msg,
           sound_file: 'alert/fired', sound_duration: 0,
@@ -60,7 +67,7 @@ export async function create({ condition, price, message }) {
         return { success: false, source: 'internal_api', error: e.message };
       }
     })()
-  `);
+  `, { mutation: true });
 }
 
 export async function list() {
@@ -91,7 +98,7 @@ export async function list() {
       })
       .catch(function(e) { return { alerts: [], error: e.message }; })
   `);
-  return { success: true, alert_count: result?.alerts?.length || 0, source: 'internal_api', alerts: result?.alerts || [], error: result?.error };
+  return { success: Boolean(result && !result.error), alert_count: result?.alerts?.length || 0, source: 'internal_api', alerts: result?.alerts || [], error: result?.error || (!result ? 'No response from alert service.' : undefined) };
 }
 
 export async function deleteAlerts({ delete_all, alert_ids, alert_id } = {}) {
@@ -101,6 +108,7 @@ export async function deleteAlerts({ delete_all, alert_ids, alert_id } = {}) {
   if (alert_id != null) ids.push(alert_id);
   if (delete_all) {
     const listed = await list();
+    if (!listed.success) return listed;
     ids = (listed.alerts || []).map((a) => a.alert_id);
   }
   ids = ids.filter((x) => x != null);
@@ -120,7 +128,7 @@ export async function deleteAlerts({ delete_all, alert_ids, alert_id } = {}) {
         return { ok: data.s === 'ok', status: x.status, response: (x.responseText || '').slice(0, 200) };
       } catch (e) { return { ok: false, error: e.message }; }
     })()
-  `);
+  `, { mutation: true });
   if (result && result.ok) {
     return { success: true, source: 'internal_api', deleted_count: ids.length, alert_ids: ids };
   }

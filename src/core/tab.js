@@ -7,13 +7,13 @@
  * not drive it (Electron accelerators don't fire from CDP input), so tab
  * switching/creation/closing click the shell window's DOM directly:
  * `.tabs-container .tab`, its close button, and `create-new-tab-button`.
- * (Approach from issue #155 and PR #163, verified on Desktop 3.1.0.)
+ * (Approach from issue upstream#155 and PR upstream#163, verified on Desktop 3.1.0.)
  */
-import CDP from 'chrome-remote-interface';
+import CDP from '../cdp.js';
 import { getDesktopInventory, inspectTarget, bindShellTab, readShellState } from '../desktop.js';
 import { isLandingTarget, clickNewTabButton, landingTabResult } from './desktop-dom.js';
-import { getClient, getTargetInfo, reconnectTo, CDP_HOST, CDP_PORT } from '../connection.js';
-import { assertSessionAccess } from '../session.js';
+import { getClient, getTargetInfo, reconnectTo, CDP_HOST, CDP_PORT, configuredTarget } from '../connection.js';
+import { assertSessionAccess, nativeCheckpoint } from '../session.js';
 
 /**
  * List all open chart tabs (CDP page targets).
@@ -40,17 +40,18 @@ async function withShell(fn) {
   if (candidates.length !== 1) throw new Error('Desktop shell window is unavailable or ambiguous; select an explicit --target.');
   const client = await CDP({ host: CDP_HOST, port: CDP_PORT, target: candidates[0].id });
   try {
-    return await fn(async expression => {
+    return await fn(async (expression, { mutation = false } = {}) => {
+      if (mutation) nativeCheckpoint(null, configuredTarget() || inventory.tabs.find(tab => tab.active)?.id);
       const result = await client.Runtime.evaluate({ expression, returnByValue: true, awaitPromise: true });
       if (result.exceptionDetails) throw new Error(result.exceptionDetails.text || 'Shell operation failed');
       return result.result?.value;
     });
-  } finally { await client.close(); }
+  } finally { try { await client.close(); } catch { /* Preserve the primary shell result/error. */ } }
 }
 
 /** Find an open new-tab landing page target (shows the layout picker). */
 async function findLandingTarget() {
-  const resp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`);
+  const resp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`, { signal: globalThis.AbortSignal.timeout(15000) });
   const targets = await resp.json();
   return targets.find(isLandingTarget) || null;
 }
@@ -72,9 +73,11 @@ async function withTarget(targetId, fn) {
   let c = null;
   try {
     c = await CDP({ host: CDP_HOST, port: CDP_PORT, target: targetId });
-    return await fn(async (expression) => {
-      const { result } = await c.Runtime.evaluate({ expression, returnByValue: true });
-      return result?.value;
+    return await fn(async (expression, { mutation = false } = {}) => {
+      if (mutation) nativeCheckpoint(null, targetId);
+      const response = await c.Runtime.evaluate({ expression, returnByValue: true });
+      if (response.exceptionDetails) throw new Error(response.exceptionDetails.exception?.description || response.exceptionDetails.text || 'Target evaluation failed');
+      return response.result?.value;
     });
   } finally {
     try { if (c) await c.close(); } catch { /* already gone */ }
@@ -92,7 +95,7 @@ export async function newTab({ layout, name, reconnect = true } = {}) {
   let landing = await findLandingTarget();
   if (!landing) {
     await withShell(async (evalIn) => {
-      const clicked = await evalIn(`(${clickNewTabButton.toString()})(document)`);
+      const clicked = await evalIn(`(${clickNewTabButton.toString()})(document)`, { mutation: true });
       if (!clicked) throw new Error('New-tab button not found in shell window.');
       await new Promise(r => setTimeout(r, 1500));
     });
@@ -103,7 +106,7 @@ export async function newTab({ layout, name, reconnect = true } = {}) {
   if (!landing) throw new Error('New tab opened but its landing page target was not found.');
 
   // Snapshot existing chart targets so we can spot the one the pick creates.
-  const beforeResp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`);
+  const beforeResp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`, { signal: globalThis.AbortSignal.timeout(15000) });
   const chartIdsBefore = new Set(
     (await beforeResp.json())
       .filter(t => t.type === 'page' && /tradingview\.com\/chart/i.test(t.url))
@@ -117,7 +120,7 @@ export async function newTab({ layout, name, reconnect = true } = {}) {
       // "Create new layout" opens a naming dialog; the Create button stays
       // disabled until the name input is filled (React controlled input, so
       // the native value setter + input event are required).
-      await evalIn(`(function(){ var b = document.querySelector('.create-new-layout-button'); if (b) b.click(); })()`);
+      await evalIn(`(function(){ var b = document.querySelector('.create-new-layout-button'); if (b) b.click(); })()`, { mutation: true });
       for (let wait = 0; wait < 30; wait++) {
         const ready = await evalIn(`Boolean(document.querySelector('input[placeholder="My layout"], input[placeholder="나의 레이아웃"]'))`);
         if (ready) break;
@@ -150,7 +153,7 @@ export async function newTab({ layout, name, reconnect = true } = {}) {
           }
           return false;
         })()
-      `);
+      `, { mutation: true });
       if (!created) throw new Error('Create button not found or still disabled in the layout dialog.');
       return layoutName;
     }
@@ -158,22 +161,20 @@ export async function newTab({ layout, name, reconnect = true } = {}) {
       (function() {
         var q = ${JSON.stringify(String(layout).toLowerCase())};
         var items = document.querySelectorAll('.layout-list-item');
-        for (var i = 0; i < items.length; i++) {
-          var t = items[i].querySelector('.layout-list-item-title');
-          if (t && t.textContent.trim().toLowerCase().indexOf(q) !== -1) {
-            items[i].click();
-            return t.textContent.trim();
-          }
-        }
+        var rows = Array.from(items).map(item => ({ item, title: item.querySelector('.layout-list-item-title')?.textContent.trim() || '' }));
+        var exact = rows.filter(row => row.title.toLowerCase() === q);
+        var matches = exact.length ? exact : rows.filter(row => row.title.toLowerCase().includes(q));
+        if (matches.length > 1) throw new Error('Ambiguous layout name: ' + q + '. Use the exact unique name.');
+        if (matches.length === 1) { matches[0].item.click(); return matches[0].title; }
         return null;
       })()
     `;
-    let foundTitle = await evalIn(clickByTitle);
+    let foundTitle = await evalIn(clickByTitle, { mutation: true });
     if (!foundTitle) {
       // Not in the recents — expand the full layout list and retry.
-      await evalIn(`(function(){ var b = document.querySelector('.layout-list-expand-button'); if (b) b.click(); })()`);
+      await evalIn(`(function(){ var b = document.querySelector('.layout-list-expand-button'); if (b) b.click(); })()`, { mutation: true });
       await new Promise(r => setTimeout(r, 800));
-      foundTitle = await evalIn(clickByTitle);
+      foundTitle = await evalIn(clickByTitle, { mutation: true });
     }
     return foundTitle;
   });
@@ -186,7 +187,7 @@ export async function newTab({ layout, name, reconnect = true } = {}) {
   let chartTarget = null;
   for (let i = 0; i < 30; i++) {
     await new Promise(r => setTimeout(r, 500));
-    const resp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`);
+    const resp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`, { signal: globalThis.AbortSignal.timeout(15000) });
     const targets = await resp.json();
     chartTarget = targets.find(x =>
       x.type === 'page' && /tradingview\.com\/chart/i.test(x.url) && !chartIdsBefore.has(x.id)
@@ -228,7 +229,7 @@ export async function closeTab() {
   const result = await withShell(async (evalIn) => {
     const clicked = await evalIn(`
       (function() {
-        var active = document.querySelector('.tabs-container .tab.active') || document.querySelectorAll('.tabs-container .tab')[0];
+        var active = document.querySelector('.tabs-container .tab.active');
         if (!active) return false;
         // The close container div has no handler — the real clickable is the button inside it.
         var close = active.querySelector('[class*="close"] button') || active.querySelector('button[class*="close"]') || active.querySelector('[class*="close"]');
@@ -236,7 +237,7 @@ export async function closeTab() {
         close.click();
         return true;
       })()
-    `);
+    `, { mutation: true });
     if (!clicked) throw new Error('Close button not found on the active tab.');
     await new Promise(r => setTimeout(r, 1000));
     return evalIn(`document.querySelectorAll('.tabs-container .tab').length`);
@@ -287,7 +288,7 @@ export async function switchTab({ index, target_id, _deps } = {}) {
       const tab = document.getElementById(${JSON.stringify(target.shell_tab_id)});
       if (!tab || !tab.classList.contains('tab')) return false;
       tab.click(); return true;
-    })()`);
+    })()`, { mutation: true, mutationTarget: target.id });
     if (!clicked) throw new Error('The selected shell tab disappeared.');
     let shell;
     for (let attempt = 0; attempt < 20; attempt++) {

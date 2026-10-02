@@ -1,7 +1,10 @@
+import { randomUUID } from 'node:crypto';
+import { nativeCheckpoint } from '../session.js';
+import { LAYOUT_PAGE_CODE } from '../layout-state.js';
 /**
  * Core UI automation logic.
  */
-import { evaluate, evaluateAsync, getClient } from '../connection.js';
+import { evaluate, evaluateAsync, getClient, configuredTarget } from '../connection.js';
 
 export async function click({ by, value }) {
   const escaped = JSON.stringify(value);
@@ -23,7 +26,7 @@ export async function click({ by, value }) {
       el.click();
       return { found: true, tag: el.tagName.toLowerCase(), text: (el.textContent || '').trim().substring(0, 80), aria_label: el.getAttribute('aria-label') || null, data_name: el.getAttribute('data-name') || null };
     })()
-  `);
+  `, { mutation: true });
   if (!result || !result.found) throw new Error('No matching element found for ' + by + '="' + value + '"');
   return { success: true, clicked: result };
 }
@@ -58,7 +61,7 @@ export async function openPanel({ panel, action }) {
         }
         return { was_open: isOpen, performed: performed };
       })()
-    `);
+    `, { mutation: true });
     if (result && result.error) throw new Error(result.error);
     return { success: true, panel, action, was_open: result?.was_open ?? false, performed: result?.performed ?? 'unknown' };
   } else {
@@ -91,7 +94,7 @@ export async function openPanel({ panel, action }) {
         else { performed = isOpen ? 'already_open' : 'already_closed'; }
         return { was_open: isOpen, performed: performed };
       })()
-    `);
+    `, { mutation: true });
     if (result && result.error) throw new Error(result.error);
     return { success: true, panel, action, was_open: result?.was_open ?? false, performed: result?.performed ?? 'unknown' };
   }
@@ -105,7 +108,7 @@ export async function fullscreen() {
       btn.click();
       return { found: true };
     })()
-  `);
+  `, { mutation: true });
   if (!result || !result.found) throw new Error('Fullscreen button not found');
   return { success: true, action: 'fullscreen_toggled' };
 }
@@ -126,51 +129,83 @@ export async function layoutList() {
   return { success: true, layout_count: layouts?.layouts?.length || 0, source: layouts?.source, layouts: layouts?.layouts || [], error: layouts?.error };
 }
 
-export async function layoutSwitch({ name }) {
-  const escaped = JSON.stringify(name);
-  const result = await evaluateAsync(`
-    new Promise(function(resolve) {
-      try {
-        var target = ${escaped};
-        if (/^\\d+$/.test(target)) { window.TradingViewApi.loadChartFromServer(target); resolve({success: true, method: 'loadChartFromServer', id: target, source: 'internal_api'}); return; }
-        window.TradingViewApi.getSavedCharts(function(charts) {
-          if (!charts || !Array.isArray(charts)) { resolve({success: false, error: 'getSavedCharts returned no data', source: 'internal_api'}); return; }
-          var match = null;
-          for (var i = 0; i < charts.length; i++) { var cname = charts[i].name || charts[i].title || ''; if (cname === target || cname.toLowerCase() === target.toLowerCase()) { match = charts[i]; break; } }
-          if (!match) { for (var j = 0; j < charts.length; j++) { var cn = (charts[j].name || charts[j].title || '').toLowerCase(); if (cn.indexOf(target.toLowerCase()) !== -1) { match = charts[j]; break; } } }
-          if (!match) { resolve({success: false, error: 'Layout "' + target + '" not found.', source: 'internal_api'}); return; }
-          var chartId = match.id || match.chartId;
-          window.TradingViewApi.loadChartFromServer(chartId);
-          resolve({success: true, method: 'loadChartFromServer', id: chartId, name: match.name || match.title, source: 'internal_api'});
-        });
-        setTimeout(function() { resolve({success: false, error: 'getSavedCharts timed out', source: 'internal_api'}); }, 5000);
-      } catch(e) { resolve({success: false, error: e.message, source: 'internal_api'}); }
-    })
-  `);
-  if (!result?.success) throw new Error(result?.error || 'Unknown error switching layout');
+export function resolveSavedLayout(window, name, timeout = 5000) {
+  return new Promise(resolve => {
+    let active = true;
+    let timer;
+    const finish = result => { if (!active) return; active = false; clearTimeout(timer); resolve(result); };
+    timer = setTimeout(() => finish({ success: false, code: 'LAYOUT_LOOKUP_TIMEOUT', error: 'getSavedCharts timed out' }), timeout);
+    try {
+      window.TradingViewApi.getSavedCharts(charts => {
+        if (!active) return; // A timed-out lookup cannot start navigation later.
+        try {
+          if (!Array.isArray(charts)) return finish({ success: false, error: 'Saved layouts unavailable.' });
+          const q = String(name).toLowerCase();
+          const exact = charts.filter(chart => [chart.id,chart.chartId,chart.url].some(id=>String(id)===String(name))
+            || String(chart.name || chart.title || '').toLowerCase() === q);
+          const matches = exact.length ? exact : charts.filter(chart => String(chart.name || chart.title || '').toLowerCase().includes(q));
+          if (matches.length !== 1) return finish({ success: false,
+            code: matches.length ? 'LAYOUT_AMBIGUOUS' : 'LAYOUT_NOT_FOUND',
+            error: matches.length ? 'Ambiguous layout name; use an exact unique name or ID.' : 'Layout not found.' });
+          const chart = matches[0], id = chart.url || chart.chartId || chart.id;
+          if (!id) return finish({ success: false, error: 'Saved layout has no stable ID.' });
+          finish({ success: true, id: String(id), chart, name: chart.name || chart.title });
+        } catch (error) { finish({ success: false, error: error.message }); }
+      });
+    } catch (error) { finish({ success: false, error: error.message }); }
+  });
+}
 
-  // Handle "unsaved changes" confirmation dialog
-  await new Promise(r => setTimeout(r, 500));
-  const dismissed = await evaluate(`
-    (function() {
-      var btns = document.querySelectorAll('button');
-      for (var i = 0; i < btns.length; i++) {
-        var text = btns[i].textContent.trim();
-        if (/open anyway|don't save|discard/i.test(text)) {
-          btns[i].click();
-          return true;
-        }
-      }
-      return false;
-    })()
-  `);
+export async function requestLayoutSwitch(window, name, timeout = 5000) {
+  const resolved = await resolveSavedLayout(window, name, timeout);
+  if (!resolved.success) return resolved;
+  try {
+    const result = window.TradingViewApi.loadChartFromServer(resolved.chart);
+    return { success: true, id: resolved.id, name: resolved.name, native_thenable: Boolean(result && typeof result.then === 'function') };
+  } catch (error) { return { success: false, error: error.message }; }
+}
 
-  if (dismissed) await new Promise(r => setTimeout(r, 1000));
-  return { success: true, layout: result.name || name, layout_id: result.id, source: result.source, action: 'switched', unsaved_dialog_dismissed: dismissed };
+export async function layoutSwitch({ name, _deps } = {}) {
+  const inspect = _deps?.evaluate || evaluate;
+  const inspectAsync = _deps?.evaluateAsync || evaluateAsync;
+  const sleep = _deps?.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
+  if(await inspect(`(() => {${LAYOUT_PAGE_CODE};return layoutConfirmationVisible(document);})()`))return {success:false,confirmation_required:true,error:'Resolve the existing layout confirmation before switching.'};
+  // Lookup is observation. Its timeout or a rejected match must not create a
+  // native recovery journal; only the following dispatch is a mutation.
+  const selected = await inspectAsync(`(${resolveSavedLayout.toString()})(window,${JSON.stringify(name)})`);
+  if (!selected?.success) return { success: false, code: selected?.code, error: selected?.error || 'Saved layouts unavailable.' };
+  const token=randomUUID();
+  const before=await inspect(`(() => {window.__tvCliPageGeneration ||= ${JSON.stringify(randomUUID())};const uid=window.TradingViewApi?._chartWidgetCollection?.metaInfo?.uid;
+    return {generation:window.__tvCliPageGeneration,uid:String(typeof uid?.value==='function'?uid.value():uid),
+      supported:navigator.userAgent.includes('TradingView/3.4.1 ')&&typeof window.TradingViewApi?._loadChartService?.loadChart==='function'};})()`);
+  let loaderId=null;
+  if(!_deps){const client=await getClient();loaderId=(await client.Page.getFrameTree()).frameTree?.frame?.loaderId||null;}
+  const result=await inspectAsync(`(() => {${LAYOUT_PAGE_CODE};
+    if(window.__tvCliPageGeneration!==${JSON.stringify(before.generation)})throw new Error('LAYOUT_UNVERIFIED: Page changed before dispatch.');
+    const operation=startLayoutOperation(window,document,{token:${JSON.stringify(token)},generation:${JSON.stringify(before.generation)},expected:${JSON.stringify(selected.id)},supportedNative:${Boolean(before.supported)}});
+    try {const native=window.TradingViewApi.loadChartFromServer(${JSON.stringify(selected.chart)});observeLayoutPromise(window,operation,native);}
+    catch(error){operation.dispatch_observed=true;operation.promise_settled=true;operation.promise_rejected=true;operation.error=error.message;operation.update();}
+    return {success:true,id:${JSON.stringify(selected.id)},name:${JSON.stringify(selected.name||name)}};
+  })()`,{mutation:true,mutationDetails:{page_loader_id:loaderId,layout_generation:before.generation,layout_token:token,original_layout_id:before.uid,layout_page_local:before.supported}});
+  if(!result?.success)return {success:false,...result};
+  nativeCheckpoint('layout switch',configuredTarget(),{expected_layout_id:result.id});
+  let state;
+  for(let attempt=0;attempt<20;attempt++){
+    await sleep(250);
+    state=await inspect(`(() => {${LAYOUT_PAGE_CODE};return layoutOperationDetails(window,document);})()`);
+    if(state&&!state.pending)return {success:state.state==='switched',layout:result.name||name,layout_id:result.id,
+      layout_verified:state.state==='switched',quiescent:true,action:state.state,layout_operation:state,
+      ...(state.state!=='switched'&&{error:state.error||'Layout switch completed without opening the requested layout.'})};
+    if(state?.dialog_visible)break;
+  }
+  return {success:false,layout:result.name||name,layout_id:result.id,layout_verified:false,
+    confirmation_required:state?.dialog_visible===true,recovery_required:true,code:'LAYOUT_UNVERIFIED',layout_operation:state,
+    error:'Layout completion is not proven. Resolve the recorded confirmation, then run session recover. A nonsettling action requires explicit page recovery; no timeout clears it.'};
 }
 
 export async function keyboard({ key, modifiers }) {
   const c = await getClient();
+  nativeCheckpoint(null, configuredTarget());
   let mod = 0;
   if (modifiers) {
     if (modifiers.includes('alt')) mod |= 1;
@@ -195,6 +230,7 @@ export async function keyboard({ key, modifiers }) {
 
 export async function typeText({ text }) {
   const c = await getClient();
+  nativeCheckpoint(null, configuredTarget());
   await c.Input.insertText({ text });
   return { success: true, typed: text.substring(0, 100), length: text.length };
 }
@@ -221,12 +257,14 @@ export async function hover({ by, value }) {
   `);
   if (!coords) throw new Error('Element not found for ' + by + '="' + value + '"');
   const c = await getClient();
+  nativeCheckpoint(null, configuredTarget());
   await c.Input.dispatchMouseEvent({ type: 'mouseMoved', x: coords.x, y: coords.y });
   return { success: true, hovered: { by, value, tag: coords.tag, x: coords.x, y: coords.y } };
 }
 
 export async function scroll({ direction, amount }) {
   const c = await getClient();
+  nativeCheckpoint(null, configuredTarget());
   const px = amount || 300;
   const center = await evaluate(`
     (function() {
@@ -245,6 +283,7 @@ export async function scroll({ direction, amount }) {
 
 export async function mouseClick({ x, y, button, double_click }) {
   const c = await getClient();
+  nativeCheckpoint(null, configuredTarget());
   const btn = button === 'right' ? 'right' : button === 'middle' ? 'middle' : 'left';
   const btnNum = btn === 'right' ? 2 : btn === 'middle' ? 1 : 0;
   await c.Input.dispatchMouseEvent({ type: 'mouseMoved', x, y });
@@ -297,6 +336,6 @@ export async function findElement({ query, strategy }) {
 }
 
 export async function uiEvaluate({ expression }) {
-  const result = await evaluate(expression);
+  const result = await evaluate(expression, { mutation: true });
   return { success: true, result };
 }

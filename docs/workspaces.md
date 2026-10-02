@@ -16,17 +16,17 @@ blocked by any registered workspace even if another port is configured.
 
 ```powershell
 tv workspace inventory
-tv workspace init --file worker-a.json --target TARGET_A --layout LAYOUT_A --pine 'USER;DOCUMENT_A'
-tv workspace init --file worker-b.json --target TARGET_B --layout LAYOUT_B --pine 'USER;DOCUMENT_B'
-tv --workspace worker-a.json symbol BITSTAMP:BTCUSD
-tv --workspace worker-a.json timeframe 60
-tv --workspace worker-a.json pine set --file strategy.pine
-tv --workspace worker-a.json pine compile --save
-tv --workspace worker-a.json indicator set STUDY_A --inputs '{"in_0":21}'
-tv --workspace worker-a.json workspace wait
-tv --workspace worker-a.json data strategy
-tv --workspace worker-a.json data ledger --offset 0 --limit 100
-tv workspace release --file worker-a.json
+tv workspace init --file worker-a.tvws.json --target TARGET_A --layout LAYOUT_A --pine 'USER;DOCUMENT_A'
+tv workspace init --file worker-b.tvws.json --target TARGET_B --layout LAYOUT_B --pine 'USER;DOCUMENT_B'
+tv --workspace worker-a.tvws.json symbol BITSTAMP:BTCUSD
+tv --workspace worker-a.tvws.json timeframe 60
+tv --workspace worker-a.tvws.json pine set --file strategy.pine
+tv --workspace worker-a.tvws.json pine compile --save
+tv --workspace worker-a.tvws.json indicator set STUDY_A --inputs '{"in_0":21}'
+tv --workspace worker-a.tvws.json workspace wait
+tv --workspace worker-a.tvws.json data strategy
+tv --workspace worker-a.tvws.json data ledger --offset 0 --limit 100
+tv workspace release --file worker-a.tvws.json
 ```
 
 Run the corresponding B calls from another OS process concurrently. There is no
@@ -60,12 +60,12 @@ commands on that workspace. Other workspaces can continue. Recovery explicitly
 accepts the current isolated state; it does not restore shared Desktop state.
 
 ```powershell
-tv workspace status --file worker-a.json
+tv workspace status --file worker-a.tvws.json
 # Only after the recorded process has died:
-tv workspace interrupt --file worker-a.json --operation EXACT_ACTIVE_OPERATION
-tv workspace recover --file worker-a.json --operation EXACT_INTERRUPTED_OPERATION
+tv workspace interrupt --file worker-a.tvws.json --operation EXACT_ACTIVE_OPERATION
+tv workspace recover --file worker-a.tvws.json --operation EXACT_INTERRUPTED_OPERATION
 # Same resources, new page generation; acknowledge the reload explicitly:
-tv workspace recover --file worker-a.json --operation EXACT_INTERRUPTED_OPERATION --rebind
+tv workspace recover --file worker-a.tvws.json --operation EXACT_INTERRUPTED_OPERATION --rebind
 ```
 
 Recovery requires the exact interrupted operation, resource identity and native
@@ -85,8 +85,9 @@ tv workspace gate-clear --token EXACT_GATE_TOKEN
 ```
 
 A live/unverifiable PID or malformed gate is not cleared. Lost/copied/deleted
-handles do not release their centralized reservations. Keep the original private
-handle safe; resource IDs and owner tokens must not be edited by hand.
+handles do not release their centralized reservations. Keep the original handle path and private session store safe; credentials and
+resource bindings must not be edited by hand. Schema-2 handles carry no token or
+source; schema-1 handles migrate on their next authorized operation.
 
 If a reload happens between commands, use `workspace rebind --file FILE --id
 EXACT_WORKSPACE_ID` to acknowledge the same idle resources in a new generation.
@@ -144,3 +145,16 @@ the dedicated tab during preparation. Prepare before registration and keep the
 same emulation on both targets; alternating tab focus during execution is not an
 independent workflow. Validation must disclose preparation, saving and cleanup
 costs as well as warmed calculation throughput.
+
+
+Safe collection reads (`ohlcv`, `values`, bare `quote`, `data lines/labels/tables/boxes`)
+can observe an owned target while its operation is active. They use an observation
+check that never consumes the operation's baseline or permits. Source/context/input
+instability fails closed; provenance identifies the captured target/context/source.
+A workspace quote cannot switch symbols. Pine and watchlist reads require their
+panels to be explicitly prepared before registration.
+
+`workspace status` remains offline and read-only and now prints exact next_commands
+for dead-owner interruption, recovery or idle release. Live/unverifiable owner PIDs
+remain protected. See [operation-contracts.md](operation-contracts.md) for storage,
+Windows ACL, migration, phases, permit rules and raw-evidence retention.

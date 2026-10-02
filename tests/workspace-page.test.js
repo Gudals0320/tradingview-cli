@@ -23,6 +23,23 @@ function fixture() {
   return { resource, window, chart, inputs, editor, controller, call, owner: { ...resource, nonce: 'nonce' } };
 }
 describe('atomic workspace page guards', () => {
+  it('observation preserves an active operation baseline and pending permits byte for byte', () => {
+    const f = fixture(); f.call('startWorkspacePage', f.owner, 'op', { source: 'requested', inputs: { in_0: 21 } });
+    f.editor.setValue('requested'); f.inputs[2].value = 21;
+    const before = JSON.stringify({ baseline: f.window.__tvCliWorkspace.baseline, permit: f.window.__tvCliWorkspace.permit });
+    assert.equal(f.call('guardWorkspacePage', f.owner, { observe: true }).source, 'requested');
+    assert.equal(f.call('guardWorkspacePage', f.owner, { observe: true }).studies[0].inputs[2].value, 21);
+    assert.equal(JSON.stringify({ baseline: f.window.__tvCliWorkspace.baseline, permit: f.window.__tvCliWorkspace.permit }), before);
+    const finished = f.call('finishWorkspacePage', f.owner, 'op');
+    assert.equal(finished.snapshot.source, 'requested'); assert.equal(f.window.__tvCliWorkspace.operation, null);
+  });
+  it('permits transient compile absence but rejects an absent owned study at final completion', () => {
+    const f = fixture(); f.call('startWorkspacePage', f.owner, 'op', { compile: true });
+    f.chart._chartWidget.model = () => ({ mainSeries: () => ({ bars: () => ({ firstIndex: () => 0, lastIndex: () => 0, valueAt: () => [1] }) }), model: () => ({ dataSources: () => [] }) });
+    assert.equal(f.call('guardWorkspacePage', f.owner).studies.length, 0);
+    assert.throws(() => f.call('finishWorkspacePage', f.owner, 'op'), /WORKSPACE_STUDY_MISSING/);
+    assert.equal(f.window.__tvCliWorkspace.operation, 'op');
+  });
   it('detects source, layout and nonce changes before any action', () => {
     for (const change of [f => f.editor.setValue('external'), f => { f.window.__tvCliWorkspace.nonce = 'other'; },
       f => { f.window.TradingViewApi._chartWidgetCollection.metaInfo.uid.value = () => 'other'; }]) {
@@ -71,6 +88,16 @@ describe('atomic workspace page guards', () => {
       const resource={...f.resource,binding:{snapshot:{version:1}}};
       if(modified){await assert.rejects(()=>f.call('restoreWorkspaceDocument',resource),/FOREIGN_DRAFT/);assert.equal(opened,0);}
       else{assert.equal((await f.call('restoreWorkspaceDocument',resource)).restored_document,true);assert.equal(opened,1);}
+    }
+  });
+  it('explicit document restore recovers the exact private unsaved source without saving or overwriting foreign edits', async () => {
+    for (const modified of [false, true]) {
+      const f = fixture(); f.controller.isModified = () => modified;
+      let writes = 0;
+      f.controller.setScript = async source => { writes++; f.editor.setValue(source); };
+      const resource = { ...f.resource, binding: { snapshot: { version: 1, modified: true, source: 'private recorded draft' } } };
+      if (modified) { await assert.rejects(f.call('restoreWorkspaceDocument', resource), /FOREIGN_DRAFT/); assert.equal(writes, 0); }
+      else { assert.equal((await f.call('restoreWorkspaceDocument', resource)).restored_draft, true); assert.equal(f.editor.getValue(), 'private recorded draft'); assert.equal(writes, 1); }
     }
   });
 });

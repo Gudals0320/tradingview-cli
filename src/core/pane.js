@@ -1,10 +1,11 @@
+import { symbolMatches } from '../chart-context.js';
 /**
  * Core pane/layout management logic.
  * Controls multi-chart layouts (split panes) in TradingView.
  */
-import { evaluate, evaluateAsync, safeString } from '../connection.js';
+import { evaluate, evaluateAsync, safeString, KNOWN_PATHS } from '../connection.js';
 
-const CWC = 'window.TradingViewApi._chartWidgetCollection';
+const CWC = KNOWN_PATHS.chartWidgetCollection;
 
 const LAYOUT_NAMES = {
   's': '1 chart',
@@ -96,7 +97,7 @@ export async function setLayout({ layout }) {
     throw new Error(`Unknown layout "${layout}". Available layouts:\n${available}`);
   }
 
-  await evaluateAsync(`${CWC}.setLayout(${safeString(resolved)})`);
+  await evaluateAsync(`${CWC}.setLayout(${safeString(resolved)})`, { mutation: true });
   await new Promise(r => setTimeout(r, 500));
 
   const state = await list();
@@ -114,6 +115,7 @@ export async function setLayout({ layout }) {
  */
 export async function focus({ index }) {
   const idx = Number(index);
+  if (!Number.isInteger(idx) || idx < 0) throw new Error('Pane index must be a non-negative integer.');
   const result = await evaluate(`
     (function() {
       var cwc = ${CWC};
@@ -122,9 +124,11 @@ export async function focus({ index }) {
       var chart = all[${idx}];
       // Click the main div to activate it
       if (chart._mainDiv) chart._mainDiv.click();
+      var active = window.TradingViewApi._activeChartWidgetWV.value();
+      if (active?._chartWidget !== chart && active !== chart) return { error: 'Requested pane did not become active; no symbol change was dispatched.' };
       return { focused: ${idx}, total: all.length };
     })()
-  `);
+  `, { mutation: true });
 
   if (result?.error) throw new Error(result.error);
   return { success: true, focused_index: result.focused, total_panes: result.total };
@@ -136,21 +140,25 @@ export async function focus({ index }) {
  */
 export async function setSymbol({ index, symbol }) {
   const idx = Number(index);
-
-  // Focus the target pane first
+  if (!Number.isInteger(idx) || idx < 0) throw new Error('Pane index must be a non-negative integer.');
+  if (typeof symbol !== 'string' || !symbol.trim()) throw new Error('A nonempty symbol is required.');
   await focus({ index: idx });
-  await new Promise(r => setTimeout(r, 300));
-
-  // Now set symbol on the now-active chart
-  await evaluateAsync(`
-    (function() {
-      var chart = window.TradingViewApi._activeChartWidgetWV.value();
-      return new Promise(function(resolve) {
-        chart.setSymbol(${safeString(symbol)}, {});
-        setTimeout(resolve, 500);
-      });
-    })()
-  `);
-
-  return { success: true, index: idx, symbol };
+  await evaluateAsync(`(() => {
+    const pane=${CWC}.getAll()[${idx}];
+    if(!pane)throw new Error('Requested pane disappeared.');
+    return pane.setSymbol(${safeString(symbol)},{});
+  })()`,{mutation:true});
+  let actual;
+  for(let attempt=0;attempt<60;attempt++) {
+    actual=await evaluate(`(() => {
+      const pane=${CWC}.getAll()[${idx}];if(!pane)return null;
+      const series=pane.model().mainSeries(),bars=series.bars(),info=series.symbolInfo?.()||{};
+      let loading=series.isLoading?.();if(loading?.value)loading=loading.value();
+      return {symbol:series.symbol(),aliases:[series.proSymbol?.(),info.full_name,info.pro_name,info.original_name].filter(Boolean),
+        loading:Boolean(loading),has_bar:Boolean(bars.valueAt(bars.lastIndex()))};
+    })()`);
+    if(actual&&!actual.loading&&actual.has_bar&&symbolMatches(symbol,actual))return {success:true,index:idx,symbol,actual_symbol:actual.symbol,pane_verified:true};
+    await new Promise(resolve=>setTimeout(resolve,200));
+  }
+  return {success:false,index:idx,symbol,actual_symbol:actual?.symbol||null,pane_verified:false,recovery_required:true,error:'Requested pane symbol/readiness was not verified before timeout.'};
 }

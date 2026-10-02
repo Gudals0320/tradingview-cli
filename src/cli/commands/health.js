@@ -21,5 +21,6 @@ register('launch', {
 
 register('update', {
   description: 'Update to the latest version (git fast-forward + npm ci if deps changed)',
-  handler: () => update({}),
+  options: { 'allow-install-scripts': { type: 'boolean', description: 'Explicitly permit dependency lifecycle scripts during update' } },
+  handler: opts => update({ allow_install_scripts: opts['allow-install-scripts'] }),
 });

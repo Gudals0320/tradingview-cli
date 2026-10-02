@@ -36,17 +36,18 @@ register('pine', {
     }],
     ['compile', {
       description: 'Smart compile and verify completion; --save permits saving edits to a saved script',
-      options: { save: { type: 'boolean', description: 'Allow saving changes to the current saved script' } },
-      handler: (opts = {}) => core.smartCompile({ save: opts.save || false }),
+      options: { save: { type: 'boolean', description: 'Allow saving changes to the current saved script' }, 'expect-script-id': { type: 'string', description: 'Require this exact document before native changes' } },
+      handler: (opts = {}) => core.smartCompile({ save: opts.save || false, expect_script_id: opts['expect-script-id'] }),
     }],
     ['raw-compile', {
       description: 'Deprecated alias of compile: smart verification; unchanged scripts may skip dispatch',
-      options: { save: { type: 'boolean', description: 'Allow saving changes to the current saved script' } },
-      handler: (opts = {}) => core.smartCompile({ save: opts.save || false }),
+      options: { save: { type: 'boolean', description: 'Allow saving changes to the current saved script' }, 'expect-script-id': { type: 'string', description: 'Require this exact document before native changes' } },
+      handler: (opts = {}) => core.smartCompile({ save: opts.save || false, expect_script_id: opts['expect-script-id'] }),
     }],
     ['analyze', {
       description: 'Offline static analysis (no TradingView needed)',
       options: {
+        'fail-on-error': { type: 'boolean', description: 'Exit 1 when definite error diagnostics are found (CI)' },
         file: { type: 'string', short: 'f', description: 'Read source from file' },
       },
       handler: async (opts) => {
@@ -57,7 +58,7 @@ register('pine', {
           source = await readStdin();
         }
         if (!source) throw new Error('No source provided. Pipe source via stdin or use --file.');
-        return core.analyze({ source });
+        return core.analyze({ source, fail_on_error: opts['fail-on-error'] });
       },
     }],
     ['check', {
@@ -78,7 +79,8 @@ register('pine', {
     }],
     ['save', {
       description: 'Save the current Pine Script (Ctrl+S)',
-      handler: () => core.save(),
+      options: { 'expect-script-id': { type: 'string', description: 'Require this exact saved document' } },
+      handler: opts => core.save({ expect_script_id: opts['expect-script-id'] }),
     }],
     ['new', {
       description: 'Create a new blank Pine Script (indicator, strategy, library)',

@@ -115,6 +115,16 @@ export function prepareInputChange(window, strategyId) {
   const item = pageStrategies(window).find(value => value.id === strategyId);
   if (!item) return false; // Ordinary indicator, not a Strategy Tester report.
   let epoch = window.__tvCliCompilation;
+  const pending = () => { throw Object.assign(new Error('STRATEGY_CALCULATION_PENDING: Wait for the prior native calculation before changing inputs. Inspect with data strategy or workspace wait; a feed with no data may remain unavailable.'), {
+    code: 'STRATEGY_CALCULATION_PENDING', details: { prior_token: epoch?.token || null },
+  }); };
+  if (item.status_type === 0 || item.status_type === 1 || (epoch?.calculation?.active && item.status_type !== 3)) {
+    pending();
+  }
+  if (epoch?.strategy_id === strategyId && ['ready', 'pending'].includes(epoch.phase)) {
+    const state = compilationState(window);
+    if (state.phase === 'pending') pending();
+  }
   if (!epoch || epoch.strategy_id !== strategyId || epoch.phase !== 'ready') {
     epoch?.dispose?.();
     epoch = window.__tvCliCompilation = { strategy_mode: true, strategy_id: strategyId, strategy_name: item.name,

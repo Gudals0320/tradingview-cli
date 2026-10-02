@@ -1,5 +1,8 @@
 /** Observe Redux request transitions so a fast compile cannot be missed by polling. */
 export function observePineCompilation(window, controller, token) {
+  if ((window.__tvCliPineCompile && !window.__tvCliPineCompile.actionDone) || window.__tvCliSave?.pending) {
+    throw new Error('PINE_NATIVE_BUSY: Previous native action may still be running; verify quiescence before retrying.');
+  }
   const store = controller?._editorStore?.getStore?.();
   if (!store?.subscribe || !store?.getState) return false;
   if (Object.keys(store.getState()?.ui?.pendingRequests || {}).length) {
@@ -36,6 +39,16 @@ export function pineCompilationStatus(window, token, finish = false) {
     diagnostics: operation.diagnostics, identity: operation.controller?.getScriptIdVersion?.(),
     modified: operation.controller?.isModified?.(),
     validation: operation.actionDone ? operation.check?.() : null };
+}
+
+export function abortPineObservation(window, token, error) {
+  const operation = window.__tvCliPineCompile;
+  if (operation?.token !== token || operation.dispatched) return false;
+  operation.cancelled = true;
+  operation.actionDone = true;
+  operation.error = error;
+  operation.dispose?.();
+  return true;
 }
 
 export function pineStudySnapshot(window) {
@@ -130,18 +143,28 @@ export function verifyPineCompilation(window, operation) {
 export function dispatchPineCompilation(window, controller, token) {
   const operation = window.__tvCliPineCompile;
   if (operation?.token !== token) throw new Error('Pine compile observer was replaced.');
-  const plan = planPineCompilation(window, controller);
+  if (operation.cancelled) throw new Error('PINE_DISPATCH_CANCELLED: This undispatched observer was cancelled; native action was not started.');
+  let plan, refresh, saveRefresh, method;
+  try {
+  plan = planPineCompilation(window, controller);
   if (plan.error) throw new Error(plan.code + ': ' + plan.error);
-  const refresh=plan.method==='updateOnChart'&&controller.isModified?.()===false;
-  const saveRefresh=plan.method==='updateOnChart'&&controller.isModified?.()===true&&controller.isDraft?.()===false
+  refresh=plan.method==='updateOnChart'&&controller.isModified?.()===false;
+  saveRefresh=plan.method==='updateOnChart'&&controller.isModified?.()===true&&controller.isDraft?.()===false
     && String(controller.getScriptIdVersion()?.version)!==String(plan.target_version);
-  const method = refresh?'refreshSavedOnChart':saveRefresh?'saveThenRefreshOnChart':plan.method;
+  method = refresh?'refreshSavedOnChart':saveRefresh?'saveThenRefreshOnChart':plan.method;
   if (saveRefresh && (typeof controller.saveScript!=='function'||typeof controller._replaceStubByStudy!=='function')) throw new Error('Pine saved-version reconciliation action unavailable.');
   if (!refresh && !saveRefresh && typeof controller?.[method] !== 'function') throw new Error('Pine native compilation action unavailable.');
   operation.controller = controller;
   operation.plan = plan;
   operation.check = () => verifyPineCompilation(window, operation);
-  Promise.resolve().then(async () => {
+  } catch (error) {
+    operation.error = error.message;
+    operation.actionDone = true;
+    operation.dispose?.();
+    throw error;
+  }
+  operation.dispatched = true;
+  operation.promise = Promise.resolve().then(async () => {
     if(saveRefresh){
       // A reloaded layout can retain an older study than the saved editor.
       // Save the requested edits once, then target the actual applied version.
@@ -159,6 +182,9 @@ export function dispatchPineCompilation(window, controller, token) {
 }
 
 export function pineCompileContext(window, controller) {
+  if ((window.__tvCliPineCompile && !window.__tvCliPineCompile.actionDone) || window.__tvCliSave?.pending) {
+    return { code: 'PINE_NATIVE_BUSY', error: 'A previous native action is still pending; wait for quiescence and recover.' };
+  }
   const plan = planPineCompilation(window, controller);
   if (plan.error) return {...plan,identity:controller?.getScriptIdVersion?.(),draft:controller?.isDraft?.(),modified:controller?.isModified?.()};
   const identity = controller?.getScriptIdVersion?.();

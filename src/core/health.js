@@ -264,14 +264,15 @@ async function _waitForCdp({ cdpPort, attempts, delay, probeCdp }) {
 /**
  * Some Windows builds block CDP for MSIX-packaged apps: direct spawn from
  * WindowsApps gets EACCES, and even COM activation passes the flag but the
- * debug port never binds (issues #42, #75, #128). Running the same files from
+ * debug port never binds (issues upstream#42, upstream#75, upstream#128). Running the same files from
  * a plain directory outside WindowsApps works and keeps the user's session,
  * so copy the package into LOCALAPPDATA once per version and launch that.
  */
 function _copyMsixPackageLocal(tvPath, { cpSync, rmSync, readdirSync, existsSync }) {
   const srcDir = dirname(tvPath);
   const pkgName = basename(srcDir);
-  const cacheRoot = join(process.env.LOCALAPPDATA || '', 'tradingview-cli');
+  if (!process.env.LOCALAPPDATA || !/^(?:[A-Za-z]:[\\/]|\\\\)/.test(process.env.LOCALAPPDATA)) throw new Error('An absolute LOCALAPPDATA is required for MSIX cache copying.');
+  const cacheRoot = join(process.env.LOCALAPPDATA, 'tradingview-cli');
   const dstDir = join(cacheRoot, pkgName);
   const dstExe = join(dstDir, 'TradingView.exe');
   if (!existsSync(dstExe)) {
@@ -334,7 +335,7 @@ export async function launch({ port, kill_existing, _deps } = {}) {
   if (!tvPath) {
     try {
       const cmd = platform === 'win32' ? 'where TradingView.exe' : 'which tradingview';
-      tvPath = deps.execSync(cmd, { timeout: 3000 }).toString().trim().split('\n')[0];
+      tvPath = deps.execSync(cmd, { timeout: 3000 }).toString().trim().split(/\r?\n/)[0].trim();
       if (tvPath && !deps.existsSync(tvPath)) tvPath = null;
     } catch { /* ignore */ }
   }

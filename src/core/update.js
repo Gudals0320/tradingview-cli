@@ -21,7 +21,7 @@ function _resolve(deps) {
   };
 }
 
-export async function update({ _deps } = {}) {
+export async function update({ allow_install_scripts = false, _deps } = {}) {
   const { execSync, existsSync, repoRoot } = _resolve(_deps);
   const git = (args, timeout = 15000) =>
     execSync(`git ${args}`, { cwd: repoRoot, timeout, stdio: ['ignore', 'pipe', 'pipe'],
@@ -92,7 +92,7 @@ export async function update({ _deps } = {}) {
   let depsWarning;
   if (lockChanged) {
     try {
-      execSync('npm ci --no-audit --no-fund', { cwd: repoRoot, timeout: 300000, stdio: ['ignore', 'pipe', 'pipe'] });
+      execSync(`npm ci ${allow_install_scripts ? '' : '--ignore-scripts '}--no-audit --no-fund`, { cwd: repoRoot, timeout: 300000, stdio: ['ignore', 'pipe', 'pipe'] });
       depsInstalled = true;
     } catch (err) {
       depsWarning = `Code updated but npm ci failed — run it manually in ${repoRoot}: ${err.message}`;

@@ -1,3 +1,4 @@
+import { safeFilename } from '../src/core/capture.js';
 /**
  * Tests for CDP input sanitization utilities and their integration across modules.
  * Covers safeString(), requireFinite(), source audit, and per-module validation.
@@ -114,8 +115,8 @@ describe('requireFinite() — numeric validation', () => {
     assert.throws(() => requireFinite('abc', 'value'), /value must be a finite number/);
   });
 
-  it('coerces null to 0', () => {
-    assert.equal(requireFinite(null, 'x'), 0);
+  it('rejects null instead of silently treating it as zero', () => {
+    assert.throws(() => requireFinite(null, 'x'), /finite number/);
   });
 
   it('rejects undefined', () => {
@@ -319,9 +320,9 @@ describe('source audit — no unsafe interpolation patterns', () => {
 // ── Path traversal prevention ────────────────────────────────────────────
 
 describe('path traversal prevention', () => {
-  it('capture.js strips path separators from filename', () => {
-    const source = readFileSync(new URL('../src/core/capture.js', import.meta.url), 'utf8');
-    assert.ok(source.includes(".replace(/[\\/\\\\]/g, '_')"));
+  it('capture filenames cannot escape or use Windows alternate streams/reserved names', () => {
+    for (const value of ['../../x', '..\\..\\x', 'a:b', 'bad<>*?"name']) assert.doesNotMatch(safeFilename(value), /[/\\:*?"<>]|\.\./);
+    for (const value of ['CON', 'nul.png', 'COM1', 'LPT9', '.', '']) assert.throws(() => safeFilename(value));
   });
 
 });

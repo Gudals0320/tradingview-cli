@@ -1,6 +1,15 @@
-import CDP from 'chrome-remote-interface';
-import { CDP_HOST, CDP_PORT, safeString } from '../connection.js';
+import { symbolMatches, normalizeTimeframe } from '../chart-context.js';
+import { nativeCheckpoint, nativeQuiescent } from '../session.js';
+import { randomUUID } from 'node:crypto';
+import { trackNativeOperation } from '../native-operation.js';
+import CDP from '../cdp.js';
+import { CDP_HOST, CDP_PORT, safeString, requireFinite } from '../connection.js';
 import { newTab } from './tab.js';
+
+export function feedMatches(feed, pane) {
+  return Boolean(pane && symbolMatches(feed.symbol, { symbol: pane.symbol, aliases: pane.aliases || [] })
+    && normalizeTimeframe(pane.timeframe) === normalizeTimeframe(feed.timeframe));
+}
 
 export function parseFeedSpecs(specs) {
   if (!Array.isArray(specs) || specs.length === 0) {
@@ -25,7 +34,7 @@ export function parseFeedSpecs(specs) {
 
 export function validateInterval(value) {
   if (value === undefined) return 250;
-  const interval = Number(value);
+  const interval = requireFinite(value, 'Interval');
   if (!Number.isFinite(interval)) throw new Error(`Interval must be finite, got: ${value}`);
   if (!Number.isInteger(interval)) throw new Error(`Interval must be an integer, got: ${value}`);
   if (interval < 100) throw new Error('Interval must be at least 100 ms.');
@@ -66,8 +75,7 @@ export function planFeedAssignments(feeds, inventories) {
   for (const feed of feeds) {
     const match = panes.find((pane) =>
       !reserved.has(`${pane.targetId}:${pane.paneIndex}`)
-      && pane.symbol === feed.symbol
-      && pane.timeframe === feed.timeframe
+      && feedMatches(feed, pane)
       && pane.hasBar !== false
     );
     if (!match) {
@@ -84,10 +92,15 @@ export function planFeedAssignments(feeds, inventories) {
   return { bindings, missing, unused };
 }
 
-export async function prepareFeedBindings(feeds, adapter) {
+export async function prepareFeedBindings(feeds, adapter, { allowReassignTargets = [], maxNewTabs = 8 } = {}) {
+  const ownedTargets = adapter.ownedTargets ||= new Set();
+  const mutable = targetId => ownedTargets.has(targetId) || allowReassignTargets.includes(targetId);
+  let openedTabs = 0;
   const clients = new Map();
   let inventories = [];
   let layoutCapacityCeiling = 16;
+  let mutationAttempted = false;
+  const mutatedTargets = new Set();
 
   const refresh = async () => {
     const targets = await adapter.discover();
@@ -111,6 +124,8 @@ export async function prepareFeedBindings(feeds, adapter) {
     for (const pane of panes) {
       const feed = remaining.shift();
       if (!feed) break;
+      mutationAttempted = true;
+      mutatedTargets.add(pane.targetId);
       await adapter.provision(clients.get(pane.targetId), pane.paneIndex, feed);
       reserve({ feed, targetId: pane.targetId, paneIndex: pane.paneIndex, exact: false });
     }
@@ -124,9 +139,15 @@ export async function prepareFeedBindings(feeds, adapter) {
       .toReversed();
     for (const layout of candidates) {
       try {
+        mutationAttempted = true;
+        mutatedTargets.add([...clients].find(([, value]) => value === client)?.[0]);
         await adapter.setLayout(client, layout.code);
         return layout;
-      } catch {
+      } catch (error) {
+        if (error.code !== 'LAYOUT_CAPACITY_UNAVAILABLE' || error.native_terminal !== true || error.recovery_required) {
+          error.recovery_required = true;
+          throw error;
+        }
         const lower = SUPPORTED_LAYOUTS.filter((candidate) => candidate.capacity < layout.capacity).at(-1);
         layoutCapacityCeiling = Math.min(layoutCapacityCeiling, lower?.capacity || currentCount);
       }
@@ -136,13 +157,14 @@ export async function prepareFeedBindings(feeds, adapter) {
 
   try {
     await refresh();
+    if (allowReassignTargets.some(target => !clients.has(target))) throw new Error('Explicit reassignment target was not found; no panes were changed.');
     const initial = planFeedAssignments(feeds, inventories);
     initial.bindings.forEach(reserve);
-    let missing = await assignInto(initial.missing, initial.unused);
+    let missing = await assignInto(initial.missing, initial.unused.filter(pane => mutable(pane.targetId)));
 
     if (missing.length > 0) {
-      const expandable = inventories.find((inventory) => inventory.visible && inventory.panes.length < 16)
-        || inventories.find((inventory) => inventory.panes.length < 16);
+      const expandable = inventories.find((inventory) => mutable(inventory.targetId) && inventory.visible && inventory.panes.length < 16)
+        || inventories.find((inventory) => mutable(inventory.targetId) && inventory.panes.length < 16);
       if (expandable) {
         const layout = await expandLayout(
           clients.get(expandable.targetId),
@@ -165,11 +187,14 @@ export async function prepareFeedBindings(feeds, adapter) {
     }
 
     while (missing.length > 0) {
+      if (openedTabs++ >= maxNewTabs) throw new Error('FEED_CAPACITY_UNAVAILABLE: Bounded tab creation exhausted; existing panes were protected.');
       const before = new Set(clients.keys());
+      mutationAttempted = true;
       await adapter.openTab(`TradingView CLI feeds ${clients.size + 1}`);
       await refresh();
       const created = inventories.find((inventory) => !before.has(inventory.targetId));
       if (!created) throw new Error('A new TradingView tab was requested but no new chart target appeared.');
+      ownedTargets.add(created.targetId);
 
       const layout = await expandLayout(
         clients.get(created.targetId),
@@ -187,19 +212,31 @@ export async function prepareFeedBindings(feeds, adapter) {
     }
 
     await refresh();
+    if ([...mutatedTargets].some(id => !inventories.some(inventory => inventory.targetId === id))
+      || inventories.some(inventory => mutatedTargets.has(inventory.targetId)
+        && (inventory.native_pending || inventory.panes.some(pane => pane.loading || pane.error)))) {
+      throw Object.assign(new Error('Feed mutations or pane loading remain unverified.'), { code: 'NATIVE_BUSY', recovery_required: true });
+    }
     for (const binding of bindings) {
       const pane = inventories
         .find((inventory) => inventory.targetId === binding.targetId)
         ?.panes.find((candidate) => candidate.index === binding.paneIndex);
-      if (!pane || pane.symbol !== binding.feed.symbol || String(pane.timeframe) !== binding.feed.timeframe || pane.hasBar === false) {
+      if (!pane || !feedMatches(binding.feed, pane) || pane.hasBar === false) {
         throw new Error(`Feed ${binding.feed.key} was not ready in pane ${binding.targetId}:${binding.paneIndex}.`);
       }
     }
 
     const order = new Map(feeds.map((feed, index) => [feed.key, index]));
     bindings.sort((a, b) => order.get(a.feed.key) - order.get(b.feed.key));
-    return { bindings, clients, inventories };
+    const usedTargets = new Set(bindings.map(binding => binding.targetId));
+    await Promise.allSettled([...clients].filter(([id]) => !usedTargets.has(id)).map(async ([id, client]) => {
+      if (adapter.close) await adapter.close(client);
+      clients.delete(id);
+    }));
+    nativeQuiescent();
+    return { bindings, clients, inventories, ownedTargets: [...ownedTargets] };
   } catch (error) {
+    if (mutationAttempted) error.recovery_required = true;
     if (adapter.close) {
       await Promise.allSettled([...clients.values()].map((client) => adapter.close(client)));
     }
@@ -215,7 +252,8 @@ function requirePaneIndex(value) {
   return index;
 }
 
-async function evaluateClient(client, expression, awaitPromise = false) {
+async function evaluateClient(client, expression, awaitPromise = false, mutation = false) {
+  if (mutation) expression = `(${trackNativeOperation.toString()})(window,${JSON.stringify(randomUUID())},async()=>(${expression}))`;
   const response = await client.Runtime.evaluate({ expression, returnByValue: true, awaitPromise });
   if (response.exceptionDetails) {
     const message = response.exceptionDetails.exception?.description
@@ -246,24 +284,30 @@ export function createTargetAdapter({
           var bars = series.bars();
           var last = bars.lastIndex();
           var status = typeof series.status === 'function' ? series.status() : null;
+          var loading = series.isLoading?.();
+          if (typeof loading?.value === 'function') loading = loading.value();
+          if (typeof loading !== 'boolean') throw new Error('Pane loading state is unreadable.');
           panes.push({
             index: i,
             symbol: series.symbol(),
             timeframe: String(series.interval()),
             status: status,
+            loading: loading === true,
             hasBar: (status == null || status === 3) && last >= 0 && !!bars.valueAt(last),
           });
         } catch (error) {
           panes.push({ index: i, symbol: null, timeframe: null, hasBar: false, error: error.message });
         }
       }
-      return { visible: document.visibilityState === 'visible', layout: layout, panes: panes };
+      return { visible: document.visibilityState === 'visible', layout: layout, panes: panes,
+        native_pending: Object.values(window.__tvCliNativeOperations || {}).some(operation => operation.pending)
+          || Boolean(window.__tvCliSave?.pending) || Boolean(window.__tvCliPineCompile && !window.__tvCliPineCompile.actionDone) };
     })()
   `;
 
   const adapter = {
     async discover() {
-      const response = await fetchFn(`http://${CDP_HOST}:${CDP_PORT}/json/list`);
+      const response = await fetchFn(`http://${CDP_HOST}:${CDP_PORT}/json/list`, { signal: globalThis.AbortSignal.timeout(15000) });
       const targets = await response.json();
       return targets
         .filter((target) => target.type === 'page' && /tradingview\.com\/chart/i.test(target.url || ''))
@@ -272,6 +316,7 @@ export function createTargetAdapter({
 
     async attach(targetId) {
       const client = await cdpFn({ host: CDP_HOST, port: CDP_PORT, target: targetId });
+      client.__tvCliTargetId = targetId;
       await client.Runtime.enable();
       return client;
     },
@@ -286,28 +331,30 @@ export function createTargetAdapter({
     },
 
     async setLayout(client, layoutCode) {
+      nativeCheckpoint('stream ohlcv provision', client.__tvCliTargetId, { all_panes: true });
       await evaluateClient(
         client,
         `window.TradingViewApi._chartWidgetCollection.setLayout(${safeString(layoutCode)})`,
-        true
+        true, true
       );
       await sleepFn(750);
     },
 
     async provision(client, paneIndex, feed) {
       const index = requirePaneIndex(paneIndex);
+      nativeCheckpoint('stream ohlcv provision', client.__tvCliTargetId, { pane_index: index });
       await evaluateClient(client, `
         (function() {
           var pane = window.TradingViewApi._chartWidgetCollection.getAll()[${index}];
           if (!pane) throw new Error('Pane ${index} is unavailable');
           return pane.setSymbol(${safeString(feed.symbol)}, {});
         })()
-      `, true);
+      `, true, true);
       await sleepFn(750);
 
       for (let attempt = 0; attempt < 60; attempt++) {
         const current = await adapter.inventory(client, '');
-        if (current.panes[index]?.symbol === feed.symbol) break;
+        if (symbolMatches(feed.symbol, { symbol: current.panes[index]?.symbol, aliases: [] })) break;
         if (attempt === 59) throw new Error(`Timed out setting symbol for ${feed.key}.`);
         await sleepFn(250);
       }
@@ -318,13 +365,13 @@ export function createTargetAdapter({
           if (!pane) throw new Error('Pane ${index} is unavailable');
           return pane.setResolution(${safeString(feed.timeframe)}, {});
         })()
-      `, true);
+      `, true, true);
       await sleepFn(750);
 
       for (let attempt = 0; attempt < 60; attempt++) {
         const current = await adapter.inventory(client, '');
         const pane = current.panes[index];
-        if (pane?.symbol === feed.symbol && pane.timeframe === feed.timeframe && pane.hasBar) return;
+        if (feedMatches(feed, pane) && pane.hasBar) return;
         if (attempt === 59) throw new Error(`Timed out loading ${feed.key} in pane ${index}.`);
         await sleepFn(250);
       }
@@ -379,7 +426,7 @@ export function selectChangedEvents(samples, previous, observedAt) {
         throw new Error(`${field} must be finite for ${sample.key}.`);
       }
     }
-    const hash = JSON.stringify(BAR_FIELDS.map((field) => sample[field]));
+    const hash = JSON.stringify([sample.symbol,normalizeTimeframe(sample.timeframe),...BAR_FIELDS.map((field) => sample[field])]);
     if (previous.get(sample.key) === hash) continue;
     previous.set(sample.key, hash);
     const { key: _key, ...event } = sample;
@@ -388,7 +435,7 @@ export function selectChangedEvents(samples, previous, observedAt) {
   return changed;
 }
 
-export async function streamOhlcvFeeds({ feedSpecs, interval, _deps = {} } = {}) {
+export async function streamOhlcvFeeds({ feedSpecs, interval, allowReassignTargets = [], _deps = {} } = {}) {
   const feeds = parseFeedSpecs(feedSpecs);
   const pollInterval = validateInterval(interval);
   const adapter = _deps.adapter || createTargetAdapter();
@@ -397,13 +444,13 @@ export async function streamOhlcvFeeds({ feedSpecs, interval, _deps = {} } = {})
   const stderr = _deps.stderr || process.stderr.write.bind(process.stderr);
   const sleep = _deps.sleep || ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   const now = _deps.now || Date.now;
-  const recover = _deps.recover || (async () => prepare(feeds, adapter));
+  const recover = _deps.recover || (async () => prepare(feeds, adapter, { allowReassignTargets }));
   let stopped = false;
   const shouldStop = _deps.shouldStop || (() => stopped);
   const stop = () => { stopped = true; };
   const previous = new Map();
   const ownedClients = new Set();
-  const closedClients = new Set();
+  const closedClients = new WeakSet();
   const recoveryState = new Map();
   let prepared;
 
@@ -414,7 +461,7 @@ export async function streamOhlcvFeeds({ feedSpecs, interval, _deps = {} } = {})
   };
 
   try {
-    prepared = await prepare(feeds, adapter);
+    prepared = await prepare(feeds, adapter, { allowReassignTargets });
     for (const client of prepared.clients.values()) ownedClients.add(client);
 
     process.on('SIGINT', stop);
@@ -437,14 +484,16 @@ export async function streamOhlcvFeeds({ feedSpecs, interval, _deps = {} } = {})
         return bindings.map((binding) => {
           const sample = samples.find((candidate) => candidate.pane_index === binding.paneIndex);
           if (!sample) throw new Error(`No chart bar is available for ${binding.feed.key}.`);
-          if (sample.symbol !== binding.feed.symbol || String(sample.timeframe) !== binding.feed.timeframe) {
+          if (!feedMatches(binding.feed, sample)) {
             throw new Error(`Pane ${targetId}:${binding.paneIndex} changed from ${binding.feed.key}.`);
           }
           return {
             ...sample,
             key: binding.feed.key,
-            symbol: binding.feed.symbol,
-            timeframe: binding.feed.timeframe,
+            symbol: sample.symbol,
+            timeframe: sample.timeframe,
+            requested_symbol: binding.feed.symbol,
+            requested_timeframe: binding.feed.timeframe,
             tab_id: targetId,
             pane_index: binding.paneIndex,
           };
@@ -472,17 +521,24 @@ export async function streamOhlcvFeeds({ feedSpecs, interval, _deps = {} } = {})
         const state = recoveryState.get(failure.targetId) || { attempts: 0, nextAt: 0 };
         if (now() < state.nextAt) continue;
         state.attempts += 1;
+        if (state.attempts > 5) throw new Error('Bounded feed recovery exhausted.');
         state.nextAt = now() + Math.min(250 * (2 ** (state.attempts - 1)), 5000);
         recoveryState.set(failure.targetId, state);
         try {
           const recovered = await recover({ failure, feeds, adapter, prepared });
           if (recovered) {
             for (const client of recovered.clients.values()) ownedClients.add(client);
+            const keep = new Set(recovered.clients.values());
+            await Promise.allSettled([...prepared.clients.values()].filter(client => !keep.has(client)).map(async client => {
+              await closeOnce(client); ownedClients.delete(client);
+            }));
             prepared = recovered;
+            nativeQuiescent();
             recoveryState.clear();
             stderr(`[stream:ohlcv] bindings recovered after target ${failure.targetId} failed.\n`);
           }
         } catch (error) {
+          if (error.code === 'CDP_TIMEOUT' || error.recovery_required === true) throw error;
           stderr(`[stream:ohlcv] recovery attempt ${state.attempts} failed: ${error.message}\n`);
         }
       }

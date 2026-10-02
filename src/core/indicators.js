@@ -1,10 +1,10 @@
 /**
  * Core indicator settings logic.
  */
-import { evaluate, safeString } from '../connection.js';
+import { evaluate, safeString, KNOWN_PATHS } from '../connection.js';
 import { STRATEGY_PAGE_CODE } from '../strategy-state.js';
 
-const CHART_API = 'window.TradingViewApi._activeChartWidgetWV.value()';
+const CHART_API = KNOWN_PATHS.chartApi;
 const DIALOG = '[data-name="indicators-dialog"]';
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -46,7 +46,7 @@ async function openDialog() {
       btn.click();
       return 'clicked';
     })()
-  `);
+  `, { mutation: true });
   if (opened === 'no-button') throw new Error('Indicators toolbar button not found.');
   for (let i = 0; i < 20; i++) {
     await delay(200);
@@ -79,7 +79,7 @@ async function closeDialog() {
       var close = dlg.querySelector('[data-name="close"], [class*="close"] button, button[class*="close"]');
       if (close) { close.click(); return; }
     })()
-  `);
+  `, { mutation: true });
   await delay(300);
 }
 
@@ -140,7 +140,7 @@ export async function addStudyFromSearch({ query, match, section } = {}) {
       pick.row.click();
       return { clicked: pick.title, section: pick.section };
     })()
-  `);
+  `, { mutation: true });
 
   if (clicked && clicked.error) { await closeDialog(); throw new Error(clicked.error); }
 
@@ -160,45 +160,49 @@ export async function addStudyFromSearch({ query, match, section } = {}) {
   };
 }
 
-export async function setInputs({ entity_id, inputs: inputsRaw, timeout = 30000 }) {
+export async function setInputs({ entity_id, inputs: inputsRaw, timeout = 30000, _deps = {} }) {
+  const inspect = _deps.evaluate || evaluate;
   const inputs = inputsRaw ? (typeof inputsRaw === 'string' ? JSON.parse(inputsRaw) : inputsRaw) : undefined;
   if (!entity_id) throw new Error('entity_id is required. Use chart_get_state to find study IDs.');
-  if (!inputs || typeof inputs !== 'object' || Object.keys(inputs).length === 0) {
+  if (!inputs || Array.isArray(inputs) || typeof inputs !== 'object' || Object.keys(inputs).length === 0) {
     throw new Error('inputs must be a non-empty object, e.g. { length: 50 }');
   }
 
   const inputsJson = JSON.stringify(inputs);
 
-  const result = await evaluate(`
+  const result = await inspect(`
     (function() {
       ${STRATEGY_PAGE_CODE};
       var chart = ${CHART_API};
       var study = chart.getStudyById(${safeString(entity_id)});
       if (!study) return { error: 'Study not found: ' + ${safeString(entity_id)} };
-      var strategy = prepareInputChange(window, ${safeString(entity_id)});
       var currentInputs = study.getInputValues();
       var overrides = ${inputsJson};
+      var ids = new Set(currentInputs.map(input => input.id));
+      var unknown = Object.keys(overrides).filter(key => !ids.has(key));
+      if (unknown.length) return { error: 'Unknown input ids: ' + unknown.join(', '), code: 'UNKNOWN_INPUT' };
       var updatedKeys = {};
-      var changed = false;
-      for (var i = 0; i < currentInputs.length; i++) {
-        if (overrides.hasOwnProperty(currentInputs[i].id)) {
-          if (currentInputs[i].value !== overrides[currentInputs[i].id]) changed = true;
-          currentInputs[i].value = overrides[currentInputs[i].id];
-          updatedKeys[currentInputs[i].id] = overrides[currentInputs[i].id];
-        }
-      }
-      if (changed) study.setInputValues(currentInputs);
+      var changed = currentInputs.some(input => Object.hasOwn(overrides, input.id) && input.value !== overrides[input.id]);
+      var strategy = false;
+      try { strategy = changed ? prepareInputChange(window, ${safeString(entity_id)}) : false; }
+      catch (error) { if (error.code === 'STRATEGY_CALCULATION_PENDING') return { error: error.message, code: error.code, details: error.details }; throw error; }
+      var nextInputs = currentInputs.map(input => {
+        if (!Object.hasOwn(overrides, input.id)) return { ...input };
+        updatedKeys[input.id] = overrides[input.id];
+        return { ...input, value: overrides[input.id] };
+      });
+      if (changed) study.setInputValues(nextInputs);
       return { updated_inputs: updatedKeys, strategy, changed };
     })()
-  `);
+  `, { mutation: true });
 
-  if (result && result.error) throw new Error(result.error);
+  if (result && result.error) throw Object.assign(new Error(result.error), { code: result.code, details: result.details });
   if (result.strategy && result.changed) {
     const start = Date.now();
     do {
-      const state = await evaluate(`(() => { ${STRATEGY_PAGE_CODE}; return compilationState(window); })()`);
+      const state = await inspect(`(() => { ${STRATEGY_PAGE_CODE}; return compilationState(window); })()`);
       if (state.phase === 'ready' && Object.entries(result.updated_inputs).every(([id, value]) => state.inputs?.some(input => input.id === id && input.value === value))) {
-        return { success: true, entity_id, updated_inputs: result.updated_inputs, report_ready: true };
+        return { success: true, entity_id, changed: true, updated_inputs: result.updated_inputs, report_ready: true };
       }
       if (['failed', 'invalidated'].includes(state.phase)) return { success: false, entity_id, updated_inputs: result.updated_inputs, error: state.error, report_ready: false };
       await delay(100);
@@ -206,7 +210,7 @@ export async function setInputs({ entity_id, inputs: inputsRaw, timeout = 30000 
     return { success: false, entity_id, updated_inputs: result.updated_inputs, report_ready: false,
       error: 'Strategy inputs were applied but their recalculation was not verified before timeout.' };
   }
-  return { success: true, entity_id, updated_inputs: result.updated_inputs };
+  return { success: true, entity_id, changed: result.changed, updated_inputs: result.updated_inputs };
 }
 
 export async function toggleVisibility({ entity_id, visible }) {
@@ -222,7 +226,7 @@ export async function toggleVisibility({ entity_id, visible }) {
       var actualVisible = study.isVisible();
       return { visible: actualVisible };
     })()
-  `);
+  `, { mutation: true });
 
   if (result && result.error) throw new Error(result.error);
   return { success: true, entity_id, visible: result.visible };

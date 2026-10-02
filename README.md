@@ -139,6 +139,7 @@ tv replay stop
 
 # 가격 변화를 계속 수집
 tv stream quote --interval 500
+# 종료할 때까지 같은 endpoint의 다른 tv 명령은 SESSION_BUSY입니다.
 ```
 
 `pine raw-compile`은 deprecated 호환 별칭이며 `pine compile`과 같은 스마트 검증을 수행합니다.
@@ -330,6 +331,83 @@ tv update
 
 `origin`이 `Gudals0320/tradingview-cli`를 가리키는 경우에만 원격 `main`을 가져와 fast-forward로 업데이트합니다. GitHub 인증을 미리 준비해야 합니다. `tv status`의 업데이트 확인도 인증된 Git을 사용합니다. `package-lock.json`이 바뀌면 `npm ci`를 실행하며, 업데이트 뒤에는 `tv` 명령을 다시 실행합니다.
 
+
+### Stream 소유권과 timeout 복구
+
+Legacy stream은 실행하는 동안 endpoint lease를 독점합니다. 같은 endpoint의
+다른 CLI 명령이나 workspace 예약은 stream을 종료한 뒤 실행하세요. 충돌 오류는
+명령·PID·run ID·시작 시간을 표시합니다. 협력하는 CLI 잠금의 지원 범위는 동일한
+OS 사용자와 TEMP/session 디렉터리입니다. 다른 사용자·별도 TEMP는 지원 범위 밖이며,
+살아 있거나 확인할 수 없는 PID는 시간이나 PID 재사용 추정만으로 회수하지 않습니다.
+
+기존 pane은 요청과 정확히 일치하면 읽기만 하여 재사용합니다. 다른 feed의 배정과
+레이아웃 확장은 CLI가 생성한 target에만 적용합니다. 기존 target을 재배정하려면
+`stream ohlcv --allow-reassign-target EXACT_TARGET`을 명시하세요. 복구 client는 교체 뒤
+즉시 닫고, 탭 생성·복구 재시도는 유한하게 제한합니다.
+
+레이아웃 전환은 getSavedCharts의 전체 객체(숫자 ID와 URL ID를 구분)를 native loader에
+전달합니다. Desktop 3.4.1의 page-local load service await 흐름을 직접 읽어 확인했습니다.
+완료 Promise와 여러 번 읽은 실제 URL ID가 함께 맞아야 성공합니다. 확인창 클릭은 하지 않습니다.
+확인창이 CLI 반환 뒤 늦게 나타나도 page watcher가 계속 관찰하며, 이 전환에서 생성된
+cancel-btn 동작만 취소로 기록합니다. Save/Don't save 후 지연된 전환은 계속 차단합니다.
+
+완료 신호 없는 opaque/void API는 시간이 지나도 LAYOUT_UNVERIFIED로 유지됩니다.
+`session recover`는 compile/save/registry/layout/pendingRequests/calculating 중 차단 원인을
+details에 표시합니다. 끝나지 않는 native 작업에는 사용자가 해당 확인창을 해결해야 합니다.
+마지막 수단은 사용자가 기록된 target만 명시적으로 reload하는 것입니다. reload는 해당 탭의
+미저장 차트·Pine 편집·일시 상태를 잃을 수 있으므로, 원문을 먼저 보관하고 개인 탭은 reload하지 마세요.
+CLI는 reload나 force 해제를 자동 수행하지 않습니다. 관측한 3.4.1 page-local 경로에서는
+새 CDP loaderId로 구세대 파기를 확인하고, layout/chart/controller가 여러 샘플에서 안정된 뒤
+복구합니다. 알 수 없는 외부/shell callback 구현에는 이 무효화를 일반화하지 않습니다.
+
+CDP 요청은 기본 15초로 제한되며 `TV_CDP_TIMEOUT_MS`는 100..120000 범위입니다.
+timeout은 native 작업 취소가 아닙니다. journal은 실제 변경 요청 직전에 정확한 target을
+기록합니다. 순수 조회·stream polling 강제 종료는 복구 journal을 만들지 않습니다.
+quote의 임시 종목 변경과 feed provisioning은 복원·준비 상태가 검증된 뒤에만 fence를
+해제합니다. 저장 timeout은 `saved:null,persistence_verified:false`이며 실행이 계속될 수 있습니다.
+
+`tv session status`의 native run ID로 `tv session recover --run-id ID`를 실행하면
+기록된 target의 native 요청·계산 종료를 검증합니다. 진행 중이면 차단이 유지되고,
+종료 뒤에는 reload 없이 복구할 수 있습니다. `incomplete:true`는 이전 명령의 결과를
+확정할 수 없다는 뜻이므로 상태를 읽고 재시도하세요. batch journal은 기존
+`pine-batch --recover` 또는 명시적인 `session discard --run-id ID`를 사용합니다.
+자동 복구는 도입하지 않았습니다. native 종료 확인과 이전 결과 채택은 별도 판단입니다.
+
+run ID 없는 손상 journal은 status에 노출된 hash와
+`session discard --journal-hash HASH`로 원본 bytes를 보존하여 보관할 수 있습니다.
+`workspace gate-status`는 repair 소유권도 표시하며,
+`workspace gate-clear --repair-token TOKEN`은 확인된 죽은 repair만 제거합니다.
+
+조회 명령은 UI 패널을 자동으로 열지 않습니다. `pine get/errors/console`은 편집기가
+닫혀 있으면 PINE_EDITOR_REQUIRED, `watchlist get`은 패널이 닫혀 있으면
+WATCHLIST_PANEL_REQUIRED를 반환합니다. 명시적으로 `tv ui panel pine-editor open` 또는
+`tv ui panel watchlist open`으로 준비한 뒤 조회하세요. 이 준비 명령은 변경 명령이며,
+workspace 예약 전에 전용 target에서 실행합니다.
+
+Legacy `pine compile`/`pine save`는 `--expect-script-id ID`를 지원하며 source_hash를
+반환합니다. draft와 사용자 저장 문서를 구분합니다. GUI의 reserved study 입력 변경은
+native schema 변경과 완전히 구별할 수 없으므로 실행 중 GUI 편집은 지원하지 않습니다.
+
+데이터 응답에는 context와 target이 포함됩니다. `count`는 1..500 정수이고,
+orders 응답은 요청·적용·전체·잘림 정보를 노출합니다. 기존 `data trades`의 trades는
+주문 기록의 호환 필드이며 orders/record_kind를 함께 제공합니다. tables의 cells는
+빈 셀·행을 보존한 2차원 배열이고 rows는 표시용 호환 필드입니다. labels는 x 내림차순,
+동일/없는 좌표는 native 삽입 순서로 안정 정렬합니다. 일치 study가 없으면 STUDY_NOT_FOUND,
+일치 study에 도형이 없으면 정상 빈 결과입니다.
+
+`pine analyze`는 분석 실행 성공과 진단을 구분합니다. 기본 exit 0은 분석 완료를 뜻하며,
+CI에서 확정 error 진단으로 실패하려면 `--fail-on-error`를 사용합니다. 배열의 동적 크기,
+재할당·별칭·스코프는 입증되지 않은 bounds error로 처리하지 않습니다.
+
+`tv update`의 dependency 설치는 기본 `--ignore-scripts`입니다. 현재 lockfile에는 필요한
+lifecycle script가 없습니다. 신뢰한 변경의 script가 필요하면 `--allow-install-scripts`로
+명시적으로 허용하거나 설치를 직접 수행하세요.
+
+`npm run smoke:desktop`은 정확히 하나의 저장된 CLI-QA-I22-A 전용 탭이 필요합니다.
+자원 identity와 개인 탭 상태를 확인하고 raw 결과는 ignored results/issue-overhaul에 남깁니다.
+공개 증거에는 요약만 포함합니다. Windows signal 검증은 자식의 SIGINT handler를 호출하며
+물리 키보드 Ctrl+C 검증을 뜻하지 않습니다.
+
 ## 개발과 검증
 
 ```bash
@@ -338,7 +416,7 @@ npm run lint
 npm test
 ```
 
-GitHub Actions는 `main` push, `main` 대상 PR, 수동 실행에서 Windows와 Node.js 24로 lint와 단위 테스트를 수행합니다. CI는 `TRADINGVIEW_SKIP_NETWORK_TESTS=1`로 Pine 서버에 접속하는 테스트 5개를 제외하므로 Desktop이나 계정이 필요하지 않습니다. 일반 로컬 `npm test`에는 서버 검사가 포함됩니다.
+GitHub Actions는 `main` push, `main` 대상 PR, 수동 실행에서 Windows와 Node.js 24로 lint와 단위 테스트를 수행합니다. CI는 `TRADINGVIEW_SKIP_NETWORK_TESTS=1`로 Pine 서버에 접속하는 테스트 5개를 제외하므로 Desktop이나 계정이 필요하지 않습니다. 기본 `npm test`는 오프라인 단위 검사이며 Pine 서버의 2개 스위트(5개 테스트)는 `npm run test:network`로 명시적으로 실행합니다.
 
 테스트는 명령 처리, Pine 검사, 입력값 검증, 차트 히스토리, 지표 설정, 전략 결과 검증, 배치 소유권·복구, 탭 처리, 업데이트 등을 다룹니다.
 

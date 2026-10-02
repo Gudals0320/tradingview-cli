@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
-import { reserveWorkspace, acquireWorkspace, workspaceStatus, markInterrupted, loadWorkspace, abandonWorkspace } from '../src/workspace-store.js';
+import { reserveWorkspace, acquireWorkspace, workspaceStatus, markInterrupted, loadWorkspace, abandonWorkspace, workspaceArtifactDirectory } from '../src/workspace-store.js';
 import { unlinkSync } from 'node:fs';
 import { acquireSession, sessionPaths, assertSessionAccess, clearAdmissionGate, admissionGateStatus } from '../src/session.js';
 
@@ -118,8 +118,8 @@ describe('persistent independent workspaces', () => {
       first.process.stdin.end('finish'); await first.exited;
       second.process.stdin.end('finish'); await second.exited;
     }
-    assert.equal(JSON.parse(readFileSync(join(options.directory, '.tv-workspaces', a.id, 'result.json'))).result.owner, a.id);
-    assert.equal(JSON.parse(readFileSync(join(options.directory, '.tv-workspaces', b.id, 'result.json'))).result.owner, b.id);
+    assert.equal(JSON.parse(readFileSync(join(workspaceArtifactDirectory(a, options), 'result.json'))).result.owner, a.id);
+    assert.equal(JSON.parse(readFileSync(join(workspaceArtifactDirectory(b, options), 'result.json'))).result.owner, b.id);
   });
   it('retains killed owner resources while another workspace completes', async () => {
     const options = fixture(), a = reserve(options, 'a'), b = reserve(options, 'b');

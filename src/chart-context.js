@@ -1,5 +1,9 @@
 export function normalizeTimeframe(value) {
-  const text = String(value || '').trim().toUpperCase();
+  const original = String(value || '').trim();
+  if (original === 'm') throw new Error('Bare m is ambiguous; use 1m for minutes or 1M for months.');
+  const minutes = original.match(/^(\d+)m$/);
+  if (minutes) return String(Number(minutes[1]));
+  const text = original.toUpperCase();
   if (['D', 'W', 'M'].includes(text)) return `1${text}`;
   const hours = text.match(/^(\d+)H$/); if (hours) return String(Number(hours[1]) * 60);
   return text;
@@ -30,7 +34,10 @@ export function readChartContext(window) {
 export function symbolMatches(expected, context) {
   if (!expected) return true;
   const wanted = expected.toUpperCase();
-  return [context.symbol, ...context.aliases].some(value => String(value).toUpperCase() === wanted);
+  return [context.symbol, ...(context.aliases || [])].some(value => {
+    const actual = String(value).toUpperCase();
+    return actual === wanted || (!wanted.includes(':') && actual.split(':').pop() === wanted);
+  });
 }
 
 export function contextMatches(expected, actual) {

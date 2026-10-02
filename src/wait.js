@@ -12,7 +12,7 @@ export async function waitForChartReady(expectedSymbol = null, expectedTf = null
   while (now() - start < timeout) {
     last = await inspect(`(${readChartContext.toString()})(window)`);
     if (last?.feed_error) throw new Error(`Chart feed failed: ${last.feed_error}`);
-    if (last && !last.loading && last.bar_count === 0 && (!expectedSymbol || last.symbol === expectedSymbol)) {
+    if (last && !last.loading && last.bar_count === 0 && symbolMatches(expectedSymbol, last)) {
       throw new Error(`No chart bars are available for ${expectedSymbol || last.symbol}.`);
     }
     const ready = last && !last.loading && last.bar_count > 0 && symbolMatches(expectedSymbol, last)
@@ -30,7 +30,7 @@ export async function waitForChartReady(expectedSymbol = null, expectedTf = null
 /**
  * Wait for the chart to finish (re)rendering — used before screenshots so a
  * capture right after chart_set_symbol / chart_set_timeframe doesn't grab a
- * stale frame (issue #144). Waits for any loading spinner to clear, then for
+ * stale frame (issue upstream#144). Waits for any loading spinner to clear, then for
  * the symbol/resolution/canvas signature to hold stable across 3 polls.
  */
 export async function waitForChartRender(timeout = 5000) {

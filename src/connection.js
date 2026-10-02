@@ -1,8 +1,11 @@
-import CDP from 'chrome-remote-interface';
+import CDP from './cdp.js';
 import { CDP_HOST, CDP_PORT } from './config.js';
 import { getDesktopInventory, activeTarget, bindShellTab } from './desktop.js';
-import { assertSessionAccess, isReadOnlySession, currentWorkspaceSession } from './session.js';
+import { assertSessionAccess, isReadOnlySession, currentWorkspaceSession, nativeCheckpoint } from './session.js';
 import { WORKSPACE_PAGE_CODE } from './workspace-page.js';
+import { randomUUID } from 'node:crypto';
+import { trackNativeOperation } from './native-operation.js';
+export { trackNativeOperation } from './native-operation.js';
 
 let client = null;
 let targetInfo = null;
@@ -12,10 +15,11 @@ let targetInfo = null;
 export { CDP_HOST, CDP_PORT };
 let preferredTarget = null;
 export function configureTarget(id) { preferredTarget = id || null; }
+export function configuredTarget() { return targetInfo?.id || preferredTarget || process.env.TV_CDP_TARGET || null; }
 const MAX_RETRIES = 5;
 const BASE_DELAY = 500;
 
-// Known direct API paths discovered via live probing (see PROBE_RESULTS.md)
+// Known direct API paths verified against Desktop; covered by the Desktop smoke.
 const KNOWN_PATHS = {
   chartApi: 'window.TradingViewApi._activeChartWidgetWV.value()',
   chartWidgetCollection: 'window.TradingViewApi._chartWidgetCollection',
@@ -51,8 +55,18 @@ export function safeString(str) {
  */
 export function requireFinite(value, name) {
   const n = Number(value);
-  if (!Number.isFinite(n)) throw new Error(`${name} must be a finite number, got: ${value}`);
+  if (!['number', 'string'].includes(typeof value) || (typeof value === 'string' && !value.trim()) || !Number.isFinite(n)) {
+    throw new Error(`${name} must be a finite number, got: ${value}`);
+  }
   return n;
+}
+
+export function requireInteger(value, name, min = 1, max = Number.MAX_SAFE_INTEGER) {
+  const number = requireFinite(value, name);
+  if (!Number.isSafeInteger(number) || number < min || number > max) {
+    throw new Error(`${name} must be an integer from ${min} to ${max}.`);
+  }
+  return number;
 }
 
 export async function getClient() {
@@ -64,8 +78,10 @@ export async function getClient() {
       await client.Runtime.evaluate({ expression: '1', returnByValue: true });
       return client;
     } catch {
+      const stale = client;
       client = null;
       targetInfo = null;
+      try { await stale.close(); } catch { /* The bounded client terminates failed close handshakes. */ }
     }
   }
   return connect();
@@ -97,6 +113,7 @@ export async function connect(targetId = null) {
 
       return client;
     } catch (err) {
+      if (client) await disconnect();
       if (['TARGET_AMBIGUOUS', 'TARGET_NOT_FOUND'].includes(err.code)) throw err;
       lastError = err;
       const delay = Math.min(BASE_DELAY * Math.pow(2, attempt), 30000);
@@ -132,7 +149,7 @@ async function findChartTarget() {
 }
 
 async function findTargetById(id) {
-  const resp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`);
+  const resp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`, { signal: globalThis.AbortSignal.timeout(15000) });
   const targets = await resp.json();
   return targets.find(t => t.id === id) || null;
 }
@@ -146,12 +163,21 @@ export async function getTargetInfo() {
 
 export async function evaluate(expression, opts = {}) {
   const c = await getClient();
+  const { mutation = false, mutationDetails = {}, ...protocolOptions } = opts;
+  opts = protocolOptions;
+  if (mutation) {
+    nativeCheckpoint(null, configuredTarget(), mutationDetails);
+    const token = randomUUID();
+    expression = `(${trackNativeOperation.toString()})(window,${JSON.stringify(token)},async () => (${expression}))`;
+    opts = { ...opts, awaitPromise: true };
+  }
   const workspace = currentWorkspaceSession()?.workspace;
   if (workspace) {
     const owner = { id: workspace.id, token: workspace.token, nonce: workspace.binding?.nonce };
+    const observe = currentWorkspaceSession()?.observe === true;
     expression = `(async () => {${WORKSPACE_PAGE_CODE};const owner=${JSON.stringify(owner)};
-      guardWorkspacePage(window,document,owner);
-      const value=await (${expression});guardWorkspacePage(window,document,owner);return value;})()`;
+      guardWorkspacePage(window,document,owner,{observe:${observe}});
+      const value=await (${expression});guardWorkspacePage(window,document,owner,{observe:${observe}});return value;})()`;
     opts = { ...opts, awaitPromise: true };
   }
   const result = await c.Runtime.evaluate({
@@ -171,8 +197,8 @@ export async function evaluate(expression, opts = {}) {
   return result.result?.value;
 }
 
-export async function evaluateAsync(expression) {
-  return evaluate(expression, { awaitPromise: true });
+export async function evaluateAsync(expression, opts = {}) {
+  return evaluate(expression, { ...opts, awaitPromise: true });
 }
 
 export async function disconnect() {

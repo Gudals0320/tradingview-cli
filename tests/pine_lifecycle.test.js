@@ -1,7 +1,8 @@
 import { it } from 'node:test';
 import assert from 'node:assert/strict';
 import { runInNewContext } from 'node:vm';
-import { newScript, openScript, save } from '../src/core/pine.js';
+import { setImmediate } from 'node:timers';
+import { newScript, openScript, save, listScripts, smartCompile } from '../src/core/pine.js';
 import { confirmPineSaveDialog } from '../src/core/desktop-dom.js';
 
 it('rejects invalid new types before connecting to or changing an editor', async () => {
@@ -70,11 +71,48 @@ it('save verifies already saved source without dispatching another save', async 
   const f = saveFixture(); f.controller.saveScript = () => { throw new Error('must not dispatch'); };
   assert.equal((await save({ _deps: f })).saved, true);
 });
+it('expected document mismatch rejects native save and compile before dispatch', async () => {
+  const f = saveFixture(); let calls = 0;
+  f.controller.saveScript = () => { calls++; };
+  const result = await save({ expect_script_id: 'other', _deps: f });
+  assert.equal(result.code, 'PINE_DOCUMENT_MISMATCH'); assert.equal(calls, 0);
+  const compiled = await smartCompile({ expect_script_id: 'other', _deps: {
+    source: 'indicator("QA")', readOutcome: async () => ({ markers: [], targets: [] }),
+    evaluate: expression => {
+      if (expression.includes('function pineCompileContext')) return { identity: { scriptIdPart: 'current' } };
+      if (expression.includes('return failCompilation(')) return true;
+      calls++; throw new Error('Unexpected native dispatch');
+    },
+  } });
+  assert.equal(compiled.code, 'PINE_DOCUMENT_MISMATCH'); assert.equal(calls, 0);
+});
+it('Pine list failure is distinct from a successful empty list', async () => {
+  const f = fixture(); f.context.fetch = async () => { throw new Error('injected network failure'); };
+  const failed = await listScripts({ _deps: f }); assert.equal(failed.success, false); assert.match(failed.error, /network failure/);
+  f.context.fetch = async () => ({ json: async () => [] });
+  assert.equal((await listScripts({ _deps: f })).success, true);
+});
 it('save waits for completion and verifies persisted source', async () => {
   const f = saveFixture(); let modified = true;
   f.controller.isModified = () => modified;
   f.controller.saveScript = async () => { modified = false; };
   assert.equal((await save({ _deps: f })).saved, true);
+});
+it('save retains its fence when a generic transport error occurs during dispatch', async () => {
+  const f=saveFixture();let complete;
+  f.controller.isModified=()=>true;
+  f.controller.saveScript=()=>new Promise(resolve=>{complete=resolve;});
+  const inspect=f.evaluate;
+  f.evaluate=(expression,options)=>{
+    const value=inspect(expression);
+    if(options?.mutation)throw Object.assign(new Error('WebSocket closed after dispatch'),{code:'ECONNRESET'});
+    return value;
+  };
+  try {
+    const result=await save({_deps:f});
+    assert.equal(result.recovery_required,true);assert.equal(result.saved,null);
+    assert.equal(f.context.window.__tvCliSave.pending,true);
+  } finally {complete?.();await f.context.window.__tvCliSave.promise;}
 });
 it('save never reports success on persistence mismatch, rejection, or timeout', async () => {
   const f = saveFixture(); f.context.fetch = async () => ({ ok: true, json: async () => ({ source: 'other' }) });
@@ -86,12 +124,44 @@ it('save never reports success on persistence mismatch, rejection, or timeout', 
   pending.controller.saveScript = () => new Promise(() => {});
   assert.match((await save({ timeout: 200, _deps: pending })).error, /timeout/);
   pending.controller.isModified = () => false;
-  assert.equal((await save({ _deps: pending })).saved, true);
+  const duplicate = await save({ _deps: pending });
+  assert.equal(duplicate.success, false);
+  assert.match(duplicate.error, /pending/);
+  assert.equal(pending.context.window.__tvCliSave.pending, true);
 });
-it('save recovers an expired page operation left by an interrupted CLI', async () => {
+it('save retains expired operation fencing until native quiescence', async () => {
   const f = saveFixture();
   f.context.window.__tvCliSave = { pending: true, token: 'dead-process', expiresAt: Date.now() - 1 };
+  assert.equal((await save({ _deps: f })).success, false);
+  assert.equal(f.context.window.__tvCliSave.pending, true);
+  f.context.window.__tvCliSave.pending = false;
   assert.equal((await save({ _deps: f })).saved, true);
+});
+it('late native save completion releases only its original pending operation', async () => {
+  const f = saveFixture(); let resolveNative, calls = 0, modified = true;
+  f.controller.isModified = () => modified;
+  f.controller.saveScript = () => { calls++; return new Promise(resolve => { resolveNative = resolve; }); };
+  const timedOut = await save({ timeout: 200, _deps: f });
+  assert.equal(timedOut.saved, null);
+  assert.equal(timedOut.persistence_verified, false);
+  assert.equal(timedOut.recovery_required, true);
+  const old = f.context.window.__tvCliSave;
+  assert.equal(old.pending, true);
+  assert.equal((await save({ _deps: f })).success, false);
+  assert.equal(calls, 1);
+  modified = false; resolveNative();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(old.pending, false);
+  assert.equal((await save({ _deps: f })).saved, true);
+  assert.notEqual(f.context.window.__tvCliSave.token, old.token);
+  assert.equal(calls, 1);
+});
+it('unmodified draft cannot claim saved-document persistence', async () => {
+  const f = saveFixture(); f.controller.isDraft = () => true;
+  const result = await save({ _deps: f });
+  assert.equal(result.success, false);
+  assert.equal(result.saved, false);
+  assert.equal(result.persistence_kind, 'draft');
 });
 it('save fails if a user cancels the native name dialog', async () => {
   const f = saveFixture(); f.controller.isModified = () => true;

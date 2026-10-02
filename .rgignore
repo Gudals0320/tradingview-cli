@@ -1,0 +1,6 @@
+# Raw historical evidence is retained in Git but omitted from normal code search.
+qa/**/*.json
+qa/**/*.json.gz
+qa/**/*.log
+qa/**/*.csv
+qa/**/*.png

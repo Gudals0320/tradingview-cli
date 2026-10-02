@@ -1,6 +1,5 @@
 import { it } from 'node:test';
 import assert from 'node:assert/strict';
-import { runInNewContext } from 'node:vm';
 import { setImmediate } from 'node:timers';
 import { smartCompile } from '../src/core/pine.js';
 import { observePineCompilation, dispatchPineCompilation, pineCompilationStatus, pineCompileContext } from '../src/core/pine-state.js';
@@ -45,28 +44,19 @@ function dependencies({ delayedError = false, neverComplete = false, saveRequire
   const f = fixture(); let ticks = 0;
   f.controller.getScriptIdVersion = () => ({ scriptIdPart: 'saved A', version: '2.0' });
   f.controller.isModified = () => modifiedAfter;
-  const context = { window: f.window, document: f.document };
   return { source: '//@version=6\nindicator("QA")\nplot(close)',
     readOutcome:async()=>({identity:{scriptIdPart:'saved A',version:'2.0'},modified:modifiedAfter,draft:false,markers:[],native_diagnostics:[],runtime_diagnostics:[],targets:[]}),
     readPersistence:async()=>({matches:!modifiedAfter}),
-    evaluate: expression => {
-      if(expression.includes('return failCompilation('))return true;
-      if (expression.includes('function pineCompileContext')) return {save_required:saveRequired};
-      if (expression.includes('return beginCompilation(')) return { phase: 'pending' };
-      if (expression.includes('return (function observePineCompilation')) return observePineCompilation(f.window, f.controller, 'token');
-      if (expression.includes('return (function dispatchPineCompilation')) {
-        f.window.__tvCliPineCompile.controller = f.controller;
-        return 'addToChart';
-      }
-      if (expression.includes('function pineCompilationStatus')) {
-        // Execute the real status helper, with the generated token mirrored.
-        const token = expression.match(/\)\(window, "([^"]+)"/)?.[1];
-        f.window.__tvCliPineCompile.token = token;
-        return runInNewContext(expression, context);
-      }
-      if (expression.includes('getModelMarkers')) return [];
-      throw new Error('Unexpected evaluation');
+    stages: {
+      fail: () => true,
+      context: () => ({save_required:saveRequired}),
+      begin: () => ({phase:'pending'}),
+      observe: ({token}) => observePineCompilation(f.window,f.controller,token),
+      dispatch: () => {f.window.__tvCliPineCompile.controller=f.controller;return 'addToChart';},
+      status: ({token,finish=false}) => pineCompilationStatus(f.window,token,finish),
+      markers: () => [],
     },
+    evaluate: () => { throw new Error('Unexpected unclassified compile evaluation'); },
     sleep: async () => {
       ticks++;
       if (ticks === 1) f.emit({ ui: { pendingRequests: { compiling: true } } });
@@ -137,7 +127,7 @@ it('compile --save requires saved identity and a clean editor after native compl
   assert.equal(dirty.code, 'SAVE_NOT_CONFIRMED');
 });
 it('dispatch exceptions retain target protection codes instead of becoming native refusal',async()=>{
-  let dispatches=0;const deps=dependencies();const evaluate=deps.evaluate;
-  deps.evaluate=expression=>{if(expression.includes('return (function dispatchPineCompilation')){dispatches++;throw new Error('AMBIGUOUS_TARGET: changed before dispatch');}return evaluate(expression);};
+  let dispatches=0;const deps=dependencies();
+  deps.stages.dispatch=()=>{dispatches++;throw new Error('AMBIGUOUS_TARGET: changed before dispatch');};
   const r=await smartCompile({_deps:deps});assert.equal(r.code,'AMBIGUOUS_TARGET');assert.equal(dispatches,1);assert.equal(r.success,false);
 });

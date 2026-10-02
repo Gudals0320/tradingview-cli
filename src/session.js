@@ -7,10 +7,27 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 const owned = new Map();
 const access = new AsyncLocalStorage();
+let admissionDepth = 0;
 export function withReadOnlySession(action) { return access.run({ readOnly: true }, action); }
 export function isReadOnlySession() { return access.getStore()?.readOnly === true; }
 export function withWorkspaceSession(lease, action) { return access.run({ workspace: lease }, action); }
 export function currentWorkspaceSession() { return access.getStore()?.workspace || null; }
+export function withLegacySession(lease, action) { return access.run({ ...access.getStore(), legacy: lease }, action); }
+export function nativeCheckpoint(command, targetId, details = {}) {
+  const lease = access.getStore()?.legacy;
+  if (!lease) return;
+  const previous = lease.pending();
+  const targetPanes = { ...previous?.target_panes };
+  if (targetId) {
+    const prior = targetPanes[targetId];
+    targetPanes[targetId] = details.all_panes || !Number.isInteger(details.pane_index) || prior === '*'
+      ? '*' : [...new Set([...(prior || []), details.pane_index])];
+  }
+  lease.checkpoint({ ...previous, ...details, phase: 'running', command: command || lease.command,
+    target_id: targetId, targets: [...new Set([...(previous?.targets || []), previous?.target_id, targetId].filter(Boolean))], target_panes: targetPanes,
+    native_quiescence_required: true });
+}
+export function nativeQuiescent() { access.getStore()?.legacy?.clearCheckpoint?.(); }
 export function canonicalSessionHost(host) {
   const value = String(host).trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
   if (['localhost', '::1', '0:0:0:0:0:0:0:1', '0.0.0.0'].includes(value)
@@ -30,6 +47,36 @@ function alive(pid) {
 }
 function read(path) { return JSON.parse(readFileSync(path, 'utf8')); }
 
+function busyOwner(lock) {
+  return failure('SESSION_BUSY', `TradingView CLI command ${lock.command || '<unknown>'} owns this Desktop session (pid ${lock.pid}, run_id ${lock.run_id || '<unknown>'}, started_at ${lock.created_at || '<unknown>'}).`);
+}
+
+function recoveryHint(state, paths) {
+  if (state.native_quiescence_required) return `Recover the interrupted native command with tv session recover --run-id ${state.recovery_run_id}. The recorded target is used; no Desktop reload is required after quiescence. Journal: ${paths.journal}`;
+  if (!state.recovery_run_id) return `Recovery journal is malformed or missing a run ID. Inspect tv session status and explicitly archive its exact hash with tv session discard --journal-hash HASH. Journal: ${paths.journal}`;
+  return `Recover the interrupted batch with pine-batch --recover, or explicitly archive its restoration journal with tv session discard --run-id ${state.recovery_run_id}. Journal: ${paths.journal}`;
+}
+
+function removeOwnedFile(path) {
+  for (let attempt = 0; ; attempt++) {
+    try { unlinkSync(path); return; }
+    catch (error) {
+      if (error.code === 'ENOENT') return;
+      if (!['EPERM', 'EACCES', 'EBUSY'].includes(error.code) || attempt >= 10) throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+    }
+  }
+}
+
+export function reclaimDeadSession(options = {}) {
+  if (!admissionDepth) throw failure('ADMISSION_REQUIRED', 'Dead lease reclamation requires the admission gate.');
+  const paths = sessionPaths(options);
+  if (!existsSync(paths.lock)) return;
+  const lock = read(paths.lock);
+  if (alive(lock.pid)) throw busyOwner(lock);
+  removeOwnedFile(paths.lock); // Never remove its recovery journal.
+}
+
 export function readReservations(options = {}) {
   const paths = sessionPaths(options);
   if (!existsSync(paths.reservations)) return [];
@@ -48,7 +95,13 @@ export function assertNoPortLease(options = {}) {
   if (!existsSync(paths.directory)) return;
   for (const file of readdirSync(paths.directory).filter(name => name.endsWith('.lock'))) {
     let lock; try { lock = read(join(paths.directory, file)); } catch { throw failure('OWNERSHIP_UNREADABLE', 'A legacy lease cannot be verified before workspace registration.'); }
-    if (Number(lock.port) === port || lock.desktop_wide) throw failure('SESSION_BUSY', 'A legacy endpoint or Desktop-wide lease prevents local workspace registration.');
+    if (Number(lock.port) === port || lock.desktop_wide) {
+      if (alive(lock.pid) || !admissionDepth) throw busyOwner(lock);
+      removeOwnedFile(join(paths.directory, file));
+      if (existsSync(join(paths.directory, file.replace(/\.lock$/, '.journal.json')))) {
+        throw failure('RECOVERY_REQUIRED', 'Dead lease was reclaimed but its recovery journal must be reconciled first.');
+      }
+    }
   }
 }
 export function assertNoWorkspaceAnywhere(options = {}) {
@@ -62,6 +115,7 @@ export function assertNoWorkspaceAnywhere(options = {}) {
 
 /** Metadata transaction only. Never hold this gate during Desktop operations. */
 export function withAdmissionGate(options, action) {
+  if (action.constructor.name === 'AsyncFunction') throw failure('ADMISSION_ASYNC', 'Admission actions must be synchronous metadata transactions.');
   const paths = sessionPaths(options);
   mkdirSync(paths.directory, { recursive: true });
   let gate;
@@ -74,32 +128,68 @@ export function withAdmissionGate(options, action) {
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5 + Math.floor(Math.random() * 10));
     }
   }
-  try { writeFileSync(gate, JSON.stringify({ pid: process.pid, token: randomUUID(), process_started_at: new Date(Date.now() - process.uptime() * 1000).toISOString(), created_at: new Date().toISOString() })); closeSync(gate); gate = null; return action(paths); }
-  finally { if (gate !== null) closeSync(gate); unlinkSync(paths.gate); }
+  let primaryError;
+  try {
+    writeFileSync(gate, JSON.stringify({ pid: process.pid, token: randomUUID(), process_started_at: new Date(Date.now() - process.uptime() * 1000).toISOString(), created_at: new Date().toISOString() }));
+    closeSync(gate); gate = null;
+    admissionDepth++;
+    const result = action(paths);
+    if (result?.then) throw failure('ADMISSION_ASYNC', 'Admission actions must not return a Promise.');
+    return result;
+  } catch (error) { primaryError = error; throw error; }
+  finally {
+    admissionDepth = Math.max(0, admissionDepth - 1);
+    try { if (gate !== null) closeSync(gate); removeOwnedFile(paths.gate); }
+    catch (error) {
+      if (primaryError) primaryError.details = { ...primaryError.details, cleanup_error: error.message };
+      else process.emitWarning(`Admission gate cleanup failed; inspect workspace gate-status: ${error.message}`);
+    }
+  }
 }
 
 export function admissionGateStatus(options = {}) {
   const path = sessionPaths(options).gate;
-  if (!existsSync(path)) return { success: true, busy: false };
+  const repairPath = `${path}.repair`;
+  let repair = null;
+  if (existsSync(repairPath)) {
+    try { repair = read(repairPath); repair.owner_alive = alive(repair.pid); }
+    catch { repair = { malformed: true, owner_alive: true }; }
+  }
+  if (!existsSync(path)) return { success: true, busy: false, repair };
   let value;
   try { value = read(path); } catch { throw failure('OWNERSHIP_UNREADABLE', 'Admission gate is malformed; automatic removal is unsafe.'); }
-  return { success: true, busy: true, path, ...value, owner_alive: alive(value.pid) };
+  return { success: true, busy: true, path, ...value, owner_alive: alive(value.pid), repair };
 }
 
 /** Explicit dead-gate repair. PID reuse stays fail-closed while that PID exists. */
 export function clearAdmissionGate(token, options = {}) {
   const paths = sessionPaths(options), repair = `${paths.gate}.repair`;
+  if (options.repairToken) {
+    const state = admissionGateStatus(options).repair;
+    if (!state || state.token !== options.repairToken) throw failure('GATE_TOKEN_MISMATCH', 'Pass the exact dead repair token.');
+    if (state.owner_alive) throw failure('SESSION_BUSY', 'Repair owner is alive or cannot be verified.');
+    removeOwnedFile(repair);
+    if (!token) return { success: true, repair_cleared: true };
+  }
   let handle;
   try { handle = openSync(repair, 'wx', 0o600); }
   catch (error) { if (error.code === 'EEXIST') throw failure('ADMISSION_BUSY', 'Another gate repair is in progress.'); throw error; }
-  closeSync(handle);
+  writeFileSync(handle, JSON.stringify({ pid: process.pid, token: randomUUID() })); closeSync(handle);
+  let primaryError;
   try {
     const gate = admissionGateStatus(options);
     if (!token || !gate.busy || gate.token !== token) throw failure('GATE_TOKEN_MISMATCH', 'Pass the exact dead gate token from workspace gate-status.');
     if (gate.owner_alive) throw failure('SESSION_BUSY', 'Gate owner PID still exists; PID reuse or unverifiable ownership requires manual inspection.');
-    unlinkSync(paths.gate);
+    removeOwnedFile(paths.gate);
     return { success: true, cleared: true, token };
-  } finally { unlinkSync(repair); }
+  } catch (error) { primaryError = error; throw error; }
+  finally {
+    try { removeOwnedFile(repair); }
+    catch (error) {
+      if (primaryError) primaryError.details = { ...primaryError.details, cleanup_error: error.message };
+      else process.emitWarning(`Repair cleanup failed: ${error.message}`);
+    }
+  }
 }
 
 export function sessionStatus(options = {}) {
@@ -109,8 +199,11 @@ export function sessionStatus(options = {}) {
   let pending = null;
   if (existsSync(paths.journal)) { try { pending = read(paths.journal); } catch { /* report existence without exposing draft */ } }
   return { locked: Boolean(lock), owner_pid: lock?.pid || null, run_id: lock?.run_id || null,
+    owner_command: lock?.command || null, process_started_at: lock?.process_started_at || null,
     owner_alive: lock ? alive(lock.pid) : false, recovery_required: existsSync(paths.journal), journal_path: paths.journal,
     recovery_run_id: pending?.run_id || pending?.snapshot?.run_id || null,
+    native_quiescence_required: pending?.native_quiescence_required === true,
+    recovery_journal_hash: existsSync(paths.journal) ? sourceHash(readFileSync(paths.journal)) : null,
     recovery_target: pending?.snapshot ? { target_id: pending.snapshot.target_id, chart_id: pending.snapshot.chart_id } : null,
     acquisition_in_progress: existsSync(paths.gate) };
 }
@@ -128,7 +221,7 @@ export function assertSessionAccess(options = {}) {
   const state = sessionStatus(options);
   if (state.locked && state.owner_alive) throw failure('SESSION_BUSY', 'Another TradingView CLI process owns this Desktop session.');
   if (state.recovery_required && !(options.readOnly || isReadOnlySession())) throw failure('RECOVERY_REQUIRED',
-    `An interrupted batch needs recovery. Inspect with tv session status, tv tab list or tv state. Recover with pine-batch --recover, or explicitly abandon restoration with tv session discard --run-id ${state.recovery_run_id || '<recorded-run-id>'}. Journal: ${paths.journal}`);
+    recoveryHint(state, paths));
 }
 
 export function acquireSession(options = {}) {
@@ -138,26 +231,34 @@ export function acquireSession(options = {}) {
   assertNoLocalWorkspace(options);
   const status = sessionStatus(options);
   if (status.locked) {
-    if (status.owner_alive) throw failure('SESSION_BUSY', 'Another batch owns this Desktop session.');
-    if (status.recovery_required && !options.recover && !options.readOnly) throw failure('RECOVERY_REQUIRED', `Recover the interrupted batch before running another: ${paths.journal}`);
+    if (status.owner_alive) throw busyOwner(read(paths.lock));
+    if (status.recovery_required && !options.recover && !options.readOnly) throw failure('RECOVERY_REQUIRED', recoveryHint(status, paths));
     unlinkSync(paths.lock);
   } else if (status.recovery_required && !options.recover && !options.readOnly) {
-    throw failure('RECOVERY_REQUIRED', `Recover the interrupted batch before running another: ${paths.journal}`);
+    throw failure('RECOVERY_REQUIRED', recoveryHint(status, paths));
   }
   const run_id = randomUUID();
   let handle;
   try { handle = openSync(paths.lock, 'wx', 0o600); }
   catch (error) { if (error.code === 'EEXIST') throw failure('SESSION_BUSY', 'Another batch acquired this session.'); throw error; }
-  writeFileSync(handle, JSON.stringify({ pid: process.pid, run_id, port: Number(options.port ?? CDP_PORT), desktop_wide: Boolean(options.desktopWide), created_at: new Date().toISOString() }));
+  writeFileSync(handle, JSON.stringify({ pid: process.pid, run_id, command: options.command || null,
+    process_started_at: new Date(Date.now() - process.uptime() * 1000).toISOString(),
+    port: Number(options.port ?? CDP_PORT), desktop_wide: Boolean(options.desktopWide), created_at: new Date().toISOString() }));
   closeSync(handle);
   owned.set(paths.key, run_id);
   let released = false;
   return {
-    run_id, paths,
+    run_id, paths, command: options.command || null,
+    clearCheckpoint: () => {
+      if (existsSync(paths.journal)) {
+        const value = read(paths.journal);
+        if (value.run_id === run_id && value.native_quiescence_required) removeOwnedFile(paths.journal);
+      }
+    },
     pending: () => existsSync(paths.journal) ? read(paths.journal) : null,
     checkpoint: (value) => {
       const temporary = `${paths.journal}.${run_id}.tmp`;
-      writeFileSync(temporary, JSON.stringify({ ...value, run_id, updated_at: new Date().toISOString() }, null, 2), { mode: 0o600 });
+      writeFileSync(temporary, JSON.stringify({ ...value, run_id, port: Number(options.port ?? CDP_PORT), updated_at: new Date().toISOString() }, null, 2), { mode: 0o600 });
       renameSync(temporary, paths.journal);
     },
     release: ({ restored = false } = {}) => {
@@ -172,12 +273,24 @@ export function acquireSession(options = {}) {
 }
 
 /** Explicitly abandon restoration; archive the draft for manual recovery. */
-export function discardSession({ runId, ...options } = {}) {
-  if (!runId) throw failure('RUN_ID_REQUIRED', 'Pass the exact recovery_run_id from tv session status with --run-id.');
+export function discardSession({ runId, journalHash, ...options } = {}) {
+  if (!runId && !journalHash) throw failure('RUN_ID_REQUIRED', 'Pass the exact recovery_run_id or, for a malformed journal, recovery_journal_hash.');
   const lease = acquireSession({ ...options, recover: true });
   try {
-    const pending = lease.pending();
+    let pending;
+    try { pending = lease.pending(); }
+    catch (error) { if (!journalHash) throw error; }
+    if (journalHash) {
+      const text = readFileSync(lease.paths.journal);
+      if (sourceHash(text) !== journalHash) throw failure('JOURNAL_HASH_MISMATCH', 'Journal changed; nothing archived.');
+      if (pending?.run_id || pending?.snapshot?.run_id) throw failure('RUN_ID_REQUIRED', 'A valid journal must use its exact run ID.');
+      const backup = `${lease.paths.journal}.${randomUUID()}.discarded`;
+      renameSync(lease.paths.journal, backup);
+      return { success: true, discarded: true, restored: false, incomplete: true, backup_path: backup,
+        warning: 'Malformed journal archived unchanged. Inspect Desktop manually before retrying.' };
+    }
     if (!pending) throw failure('RECOVERY_NOT_FOUND', 'There is no recovery journal to discard.');
+    if (pending.native_quiescence_required) throw failure('RECOVERY_REQUIRED', 'Use session recover to verify native quiescence before clearing this fence.');
     if (runId !== (pending.run_id || pending.snapshot?.run_id)) throw failure('RUN_ID_MISMATCH', 'The run ID does not match the saved recovery journal; nothing was discarded.');
     const backup = `${lease.paths.journal}.${randomUUID()}.discarded`;
     renameSync(lease.paths.journal, backup);

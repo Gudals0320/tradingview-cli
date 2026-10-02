@@ -4,6 +4,11 @@ import { mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
+// Each test worker uses its own session root; production private ACLs must not
+// be shared with a differently sandboxed OS account.
+const runtimeSessionRoot = mkdtempSync(join(tmpdir(), 'tv-runtime-session-'));
+process.env.TEMP = runtimeSessionRoot;
+process.env.TMP = runtimeSessionRoot;
 process.env.TV_CDP_HOST = `runtime-fixture-${randomUUID()}`;
 process.env.TV_CDP_PORT = '1';
 const { reserveWorkspace, acquireWorkspace, workspaceStatus, abandonWorkspace } = await import('../src/workspace-store.js');
@@ -17,7 +22,7 @@ function fixture() {
   const lease=acquireWorkspace(workspace.file);lease.saveBinding({nonce:'generation',browser:'browser',snapshot});lease.finish({success:true});
   const calculation={phase:'ready',source_hash:sourceHash(snapshot.source),report_verified:true,inputs_fingerprint:JSON.stringify(snapshot.studies[0].inputs)};
   const deps={checkLayout:async()=>{},browserIdentity:async()=>'browser',getClient:async()=>({}),raw:async(_,expression)=>{
-    if(expression.startsWith('startWorkspacePage'))return snapshot;
+    if(expression.startsWith('startWorkspacePage') || expression.startsWith('guardWorkspacePage'))return snapshot;
     if(expression.startsWith('finishWorkspacePage'))return {snapshot,calculation};
     if(expression==='window.__tvCliWorkspace?.nonce')return 'generation';
     throw new Error('Unexpected page operation '+expression);
@@ -39,6 +44,32 @@ it('a handler exception is clean when final resource state can be verified', asy
     await assert.rejects(()=>runWorkspace(f.workspace.file,'state',{},[],async()=>{throw new Error('read failed');},{_deps:f.deps}),/read failed/);
     assert.equal(workspaceStatus(f.workspace.file).interrupted,null);
   }finally{f.cleanup();}
+});
+it('pure workspace observation can run during an active operation without consuming its lease', async()=>{
+  const f=fixture();try {
+    const active=acquireWorkspace(f.workspace.file);
+    const result=await runWorkspace(f.workspace.file,'ohlcv',{},[],async()=>({success:true,bars:[],context:f.snapshot.context}),{_deps:f.deps});
+    assert.equal(result.provenance.observation,true);
+    assert.equal(workspaceStatus(f.workspace.file).operation.id,active.operation);
+    active.finish({success:true});
+  }finally{f.cleanup();}
+});
+it('a pre-start CDP timeout retains an interrupted operation even before its page acknowledgment', async()=>{
+  const f=fixture();try {
+    f.deps.raw=async()=>{throw Object.assign(new Error('unknown page dispatch'),{code:'CDP_TIMEOUT'});};
+    await assert.rejects(()=>runWorkspace(f.workspace.file,'pine compile',{},[],async()=>({success:true}),{_deps:f.deps}),{code:'CDP_TIMEOUT'});
+    assert.ok(workspaceStatus(f.workspace.file).interrupted?.operation_id);
+  }finally{
+    const status=workspaceStatus(f.workspace.file);
+    abandonWorkspace(f.workspace.file,{workspaceId:f.workspace.id,operationId:status.interrupted?.operation_id});
+  }
+});
+it('TTY pine set without a file refuses before operation admission or stdin consumption', async()=>{
+  const descriptor=Object.getOwnPropertyDescriptor(process.stdin,'isTTY');
+  Object.defineProperty(process.stdin,'isTTY',{configurable:true,value:true});
+  let calls=0;
+  try {await assert.rejects(()=>runWorkspace('unused-file','pine set',{},[],async()=>{calls++;}),{code:'PINE_SOURCE_REQUIRED'});assert.equal(calls,0);}
+  finally {if(descriptor)Object.defineProperty(process.stdin,'isTTY',descriptor);else delete process.stdin.isTTY;}
 });
 it('rejects rebind on the same page generation without adopting external state', async()=>{
   const f=fixture();try {

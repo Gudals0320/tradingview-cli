@@ -102,6 +102,7 @@ it('modified source after layout reload saves once and updates the actual old ap
 });
 it('modified saved source after reload still requires --save before any native save',async()=>{
   const f=fixture();f.setIdentity({scriptIdPart:'P',version:'9.0'});let saves=0;
+  f.window.__tvCliPineCompile.actionDone = true; // No native work in this policy-only fixture.
   f.controller.saveScript=async()=>{saves++;};
   const context=pineCompileContext(f.window,f.controller);
   const result=await smartCompile({_deps:{source:'indicator("Same title")\nplot(close)',

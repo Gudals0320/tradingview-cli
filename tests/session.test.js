@@ -9,6 +9,26 @@ import { acquireSession, sessionStatus, sessionPaths, assertSessionAccess, withR
 const moduleUrl = new URL('../src/session.js', import.meta.url).href;
 function fixture() { return { directory: mkdtempSync(join(tmpdir(), 'tv-session-test-')), host: 'test', port: 1 }; }
 describe('Desktop session ownership and recovery', () => {
+  it('gate cleanup EPERM preserves the primary error and records bounded cleanup failure', () => {
+    const opts=fixture();
+    const output=execFileSync(process.execPath,['--input-type=module','-e',`
+      import fs from 'node:fs';import{syncBuiltinESMExports}from'node:module';
+      import{withAdmissionGate,sessionPaths}from ${JSON.stringify(moduleUrl)};
+      const opts=${JSON.stringify(opts)},path=sessionPaths(opts).gate,original=fs.unlinkSync;
+      fs.unlinkSync=p=>{if(p===path)throw Object.assign(new Error('injected EPERM'),{code:'EPERM'});return original(p);};syncBuiltinESMExports();
+      let result;try{withAdmissionGate(opts,()=>{throw new Error('primary failure');});}catch(error){result={message:error.message,cleanup:error.details?.cleanup_error};}
+      finally{fs.unlinkSync=original;syncBuiltinESMExports();if(fs.existsSync(path))fs.unlinkSync(path);}
+      console.log(JSON.stringify(result));`],{encoding:'utf8'});
+    const result=JSON.parse(output);assert.equal(result.message,'primary failure');assert.match(result.cleanup,/EPERM/);
+  });
+  it('archives a corrupt recovery journal only by its exact hash without losing bytes', () => {
+    const opts = fixture(), lease = acquireSession(opts); lease.release();
+    const raw = '{corrupt private recovery'; writeFileSync(lease.paths.journal, raw);
+    assert.throws(() => discardSession({ ...opts, journalHash: 'wrong' }), { code: 'JOURNAL_HASH_MISMATCH' });
+    const archived = discardSession({ ...opts, journalHash: sessionStatus(opts).recovery_journal_hash });
+    assert.equal(readFileSync(archived.backup_path, 'utf8'), raw);
+    assert.equal(sessionStatus(opts).recovery_required, false);
+  });
   it('shares atomic ownership across local endpoint hostname and IPv6 aliases', () => {
     const opts = fixture(), aliases=['127.0.0.1','localhost','LOCALHOST.','::1','[::1]','::ffff:127.0.0.1'];
     const lease=acquireSession({...opts,host:aliases[0]});

@@ -1,0 +1,14 @@
+//@version=6
+indicator("CLI-QA-I22-Smoke-Draft", max_labels_count=100)
+plot(close)
+var t=table.new(position.bottom_right,3,2)
+if barstate.islast
+    table.cell(t,0,0,"A")
+    table.cell(t,1,0,"")
+    table.cell(t,2,0,"C")
+    table.cell(t,0,1,"D")
+    table.cell(t,1,1,"E")
+    table.cell(t,2,1,"F")
+if barstate.islastconfirmedhistory
+    for i=0 to 59
+        label.new(bar_index-i,close,str.tostring(i))

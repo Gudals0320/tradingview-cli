@@ -12,7 +12,7 @@ register('workspace', {
   subcommands: new Map([
     ['inventory', { description: 'HTTP-only target/layout inventory (no page execution)', handler: workspaceInventory }],
     ['gate-status', { description: 'Inspect admission metadata ownership', handler: () => admissionGateStatus() }],
-    ['gate-clear', { description: 'Clear an exact dead admission gate; retain all reservations', options: { token: { type: 'string' } }, handler: opts => clearAdmissionGate(opts.token) }],
+    ['gate-clear', { description: 'Clear an exact dead admission gate; retain all reservations', options: { token: { type: 'string' }, 'repair-token': { type: 'string' } }, handler: opts => clearAdmissionGate(opts.token, { repairToken: opts['repair-token'] }) }],
     ['init', { description: 'Reserve pre-provisioned independent saved resources', options: {
       file, target: { type: 'string' }, layout: { type: 'string' }, pine: { type: 'string' },
     }, handler: opts => initWorkspace(opts) }],
