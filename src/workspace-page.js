@@ -30,7 +30,7 @@ export function readWorkspacePage(window, document, options = {}) {
     ;
   const calculating = studies.some(study => study.strategy && (study.status === 0 || study.status === 1));
   return { layout: String(layout), pine: identity?.scriptIdPart || null, version: identity?.version,
-    source: editor?.editor.getValue().replace(/\r\n/g, '\n') || '', modified: controller?.isModified?.() ?? null,
+    source: editor?.editor.getValue().replace(/\r\n/g, '\n') || '', modified: controller?.isModified?.() ?? null,draft:controller?.isDraft?.()??null,
     context: { symbol: context.symbol, aliases: context.aliases, resolution: normalizeTimeframe(context.resolution), chart_type: context.chart_type,
       session: chart.symbolExt?.()?.session || null },
     studies, pending: pending_action || calculating, pending_action, calculating,
@@ -40,6 +40,7 @@ export function readWorkspacePage(window, document, options = {}) {
 export function bindWorkspacePage(window, document, resource, nonce) {
   const snapshot = readWorkspacePage(window, document, { pine: Boolean(resource.pine) });
   if (snapshot.layout !== resource.layout || snapshot.pine !== resource.pine) throw new Error('WORKSPACE_IDENTITY_MISMATCH: Saved resources do not match registration.');
+  if(resource.pine&&snapshot.draft===true)throw new Error('WORKSPACE_SAVED_DOCUMENT_REQUIRED: Drafts cannot be reserved as saved Pine documents.');
   if (resource.pine && (snapshot.studies.some(study => study.pine !== resource.pine) || snapshot.studies.length > 1)) throw new Error('WORKSPACE_STUDY_CONFLICT: Pine workspaces require a single owned study.');
   if (snapshot.pending) throw new Error('WORKSPACE_NATIVE_BUSY: Native action or calculation is pending.');
   const chart = window.TradingViewApi._activeChartWidgetWV.value();

@@ -23,6 +23,11 @@ function fixture() {
   return { resource, window, chart, inputs, editor, controller, call, owner: { ...resource, nonce: 'nonce' } };
 }
 describe('atomic workspace page guards', () => {
+  it('a draft identity cannot masquerade as a saved Pine resource',()=>{
+    const f=fixture();f.controller.isDraft=()=>true;
+    assert.throws(()=>f.call('bindWorkspacePage',f.resource,'new'),/WORKSPACE_SAVED_DOCUMENT_REQUIRED/);
+    assert.equal(f.window.__tvCliWorkspace.nonce,'nonce');
+  });
   it('binds a chart-only workspace without querying any Pine editor and permits symbol changes', () => {
     const f=fixture();
     const resource={...f.resource,pine:null};

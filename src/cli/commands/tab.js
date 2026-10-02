@@ -17,7 +17,7 @@ register('tab', {
       handler: (opts) => core.newTab({ layout: opts.layout, name: opts.name }),
     }],
     ['close', {
-      description: 'Close the current tab',
+      description: 'Close only the selected workspace owned CLI-created tab; preserve save/discard decisions',
       handler: opts => core.closeTab({ target_id: opts.workspaceTarget }),
     }],
     ['switch', {

@@ -50,7 +50,7 @@ register('workspace', {
     ['release', { description: 'Release idle resources; preserve artifacts', options: { file }, handler: opts => closeWorkspace(opts.file) }],
     ['abandon', { description: 'Explicit offline release after target/handle loss; preserve incomplete artifacts', options: { file, operation, id: { type: 'string', description: 'Exact workspace ID' } },
       handler: opts => abandonWorkspace(opts.file, { workspaceId: opts.id, operationId: opts.operation }) }],
-    ['wait', { description: 'Wait for this workspace strategy calculation (use --workspace FILE)', options: { timeout: { type: 'string', description: 'Milliseconds to wait (default 30000, max 300000)' } }, handler: async opts => {
+    ['wait', { description: 'Observe admitted/queued work and wait for the named workspace calculation (use --workspace NAME)', options: { timeout: { type: 'string', description: 'Milliseconds to wait (default 30000, max 300000)' } }, handler: async opts => {
       const timeout = Number(opts.timeout || 30000), start = Date.now();
       const inspect=opts._deps?.evaluate||evaluate,getStatus=opts._deps?.status||workspaceStatus,getLocks=opts._deps?.locks||resourceLockStatus;
       if (!Number.isFinite(timeout) || timeout < 1 || timeout > 300000) throw new Error('timeout must be 1..300000 ms.');

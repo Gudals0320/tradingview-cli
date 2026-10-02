@@ -39,6 +39,7 @@ it('old journals fence only their recorded targets and shared app actions; unrea
   assert.throws(()=>assertLegacyCompatibility({...options,legacyDirectory,shared:true}),{code:'LEGACY_RECOVERY_REQUIRED'});
   const lease=acquireSession(options);lease.checkpoint({native_quiescence_required:true,target_id:'a'});lease.release();
   assert.throws(()=>discardSession({...options,runId:lease.run_id}),{code:'RECOVERY_REQUIRED'});
-  assert.throws(()=>discardSession({...options,runId:lease.run_id,lostTargetInventory:[{id:'a'}]}),{code:'RECOVERY_REQUIRED'});
-  assert.equal(discardSession({...options,runId:lease.run_id,lostTargetInventory:[]}).incomplete,true);
+  assert.throws(()=>discardSession({...options,runId:lease.run_id,lostTargetInventory:[{id:'a',type:'page',url:'https://www.tradingview.com/chart/a/'}]}),{code:'RECOVERY_REQUIRED'});
+  assert.throws(()=>discardSession({...options,runId:lease.run_id,lostTargetInventory:[]}),{code:'RECOVERY_TARGET_UNCONFIRMED'});
+  assert.equal(discardSession({...options,runId:lease.run_id,lostTargetInventory:[{id:'other',type:'page',url:'https://www.tradingview.com/chart/other/'}]}).incomplete,true);
 });

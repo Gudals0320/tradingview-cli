@@ -80,6 +80,13 @@ it('rejects rebind on the same page generation without adopting external state',
     assert.equal(workspaceStatus(f.workspace.file).interrupted,null);
   }finally{f.cleanup();}
 });
+it('a resource release failure includes the completed committed native result instead of suggesting replay',async()=>{
+  const f=fixture();try {
+    f.deps.acquireResources=async()=>({resources:['workspace:fixture'],waited_ms:0,release(){throw Object.assign(new Error('simulated cleanup failure'),{code:'LOCK_RELEASE_FAILED',details:{token:'exact-dead-token'}});}});
+    await assert.rejects(runWorkspace(f.workspace.file,'timeframe',{},['60'],async()=>({success:true,resolution:'60'}),{_deps:f.deps}),error=>error.code==='LOCK_RELEASE_FAILED'&&error.details.completed_result.success===true&&error.details.result_committed===true&&error.details.token==='exact-dead-token');
+    assert.equal(workspaceStatus(f.workspace.file).interrupted,null);
+  }finally{f.cleanup();}
+});
 it('binds fresh input-only reports to a separately verified applied saved version', async()=>{
   const f=fixture();try {
     f.snapshot.version=9;f.snapshot.studies[0].inputs.find(input=>input.id==='pineVersion').value=3;

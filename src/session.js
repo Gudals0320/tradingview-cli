@@ -335,6 +335,7 @@ export function discardSession({ runId, journalHash, lostTargetInventory, ...opt
     if (!pending) throw failure('RECOVERY_NOT_FOUND', 'There is no recovery journal to discard.');
     if (pending.native_quiescence_required) {
       const targets=[...new Set([pending.target_id,...(pending.targets||[])].filter(Boolean))];
+      if(Array.isArray(lostTargetInventory)&&!lostTargetInventory.some(row=>row.type==='page'&&/tradingview\.com\/chart\//.test(row.url||'')))throw failure('RECOVERY_TARGET_UNCONFIRMED','No inspectable chart pages exist; Desktop may still be starting. Absence is not yet proven.');
       if(!Array.isArray(lostTargetInventory)||!targets.length||targets.some(id=>lostTargetInventory.some(row=>row.id===id)))throw failure('RECOVERY_REQUIRED', 'Use session recover to verify native quiescence, or --target-lost for targets proven absent on reachable CDP.');
     }
     if (runId !== (pending.run_id || pending.snapshot?.run_id)) throw failure('RUN_ID_MISMATCH', 'The run ID does not match the saved recovery journal; nothing was discarded.');

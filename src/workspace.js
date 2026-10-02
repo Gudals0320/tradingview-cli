@@ -174,6 +174,7 @@ export async function reconnectWorkspace(name, { target, generation, pine, detac
     try {
       const snapshot = await raw(client, pageCall('readWorkspacePage', { pine: Boolean(prospective.pine) }));
       if (snapshot.layout !== prospective.layout || (prospective.pine && snapshot.pine !== prospective.pine)) throw workspaceError('WORKSPACE_IDENTITY_MISMATCH', 'New target must already display the owned saved layout and exact document.');
+      if(prospective.pine&&snapshot.draft===true)throw workspaceError('WORKSPACE_SAVED_DOCUMENT_REQUIRED','Save the dedicated draft as a document before attaching it; no native save was dispatched.');
       if (snapshot.pending) throw workspaceError('WORKSPACE_NATIVE_BUSY', 'Wait for the target to settle before reconnecting.');
       lease.checkpoint({phase:'reconnecting',command:'workspace reconnect',target_id:target,old_generation:generation,layout:selected.layout,pine:prospective.pine});
       lease.reassign({ target, pine: prospective.pine, expectedGeneration: generation });
@@ -290,12 +291,12 @@ export async function runWorkspace(file, command, values, positionals, handler, 
   }
   const permit = await permitFor(command, values, positionals);
   if(command==='quote'&&positionals[0])permit.symbols=[positionals[0],selected.binding?.snapshot?.context?.symbol].filter(Boolean);
-  const resourceLease = await acquireResources(resourceKinds(command, values, positionals).map(kind => kind === 'app' ? 'app' : `${kind}:${kind === 'layout' ? selected.layout : kind === 'document' ? selected.pine : selected.id}`), { command, workspace_id: selected.id, timeout: values['lock-timeout-ms'] });
+  const resourceLease = await (_deps?.acquireResources||acquireResources)(resourceKinds(command, values, positionals).map(kind => kind === 'app' ? 'app' : `${kind}:${kind === 'layout' ? selected.layout : kind === 'document' ? selected.pine : selected.id}`), { command, workspace_id: selected.id, timeout: values['lock-timeout-ms'] });
   let lease;
   try { lease = acquireWorkspace(file,{command}); } catch (error) { resourceLease.release(); throw error; }
   const workspace = lease.workspace;
   let started = false;
-  let handlerStarted = false, client, finalState;
+  let handlerStarted = false, client, finalState, completedResult;
   const inspect = _deps?.raw || raw;
   try { return await withWorkspaceSession(lease, async () => {
     try {
@@ -319,7 +320,7 @@ export async function runWorkspace(file, command, values, positionals, handler, 
         if(inventory.targets.some(item=>item.target===workspace.target))throw workspaceError('WORKSPACE_CLOSE_UNVERIFIED','The owned target is still inspectable after close.');
         noteWorkspaceState(file,'target_lost');lease.saveBinding({...workspace.binding,source_proof:null});
         const output={...result,workspace_id:workspace.id,target:workspace.target,state:'target_lost',results_invalidated:true};
-        lease.finish({success:true,result:output});return output;
+        lease.finish({success:true,result:output});completedResult=output;return output;
       }
       const after = await inspect(client, pageCall('finishWorkspacePage', owner(workspace), lease.operation,{allowIncomplete:result?.success===false&&result?.recovery_required!==true}));
       finalState = after.snapshot;
@@ -347,7 +348,7 @@ export async function runWorkspace(file, command, values, positionals, handler, 
         study: study ? { ...study, inputs: study.inputs.filter(input => input.id !== 'text'), compiled_hash: sourceHash(JSON.stringify(study.inputs)) } : null, calculation, native_events: after.events };
       const output = { ...result, provenance };
       lease.checkpoint({ phase: success ? 'complete' : 'failed', command, before, after: after.snapshot, provenance });
-      lease.finish({ success, result: output, interrupted: false }); return output;
+      lease.finish({ success, result: output, interrupted: false });completedResult=output; return output;
     } catch (error) {
       let interrupted = ['WORKSPACE_PAGE_BUSY', 'CDP_TIMEOUT'].includes(error.code) || (handlerStarted && !finalState);
       if(!started&&error.code==='WORKSPACE_EXTERNAL_CHANGE')noteWorkspaceState(file,'external_conflict');
@@ -359,7 +360,7 @@ export async function runWorkspace(file, command, values, positionals, handler, 
       try { lease.finish({ success: false, interrupted, error: error.message }); } catch (cleanup) { error.details = { cleanup_error: cleanup.message }; }
       throw error;
     }
-  }); } finally { resourceLease.release(); }
+  }); } finally { try{resourceLease.release();}catch(error){if(completedResult!==undefined)error.details={...error.details,completed_result:completedResult,result_committed:true,native_outcome:'completed; repair ownership instead of replaying'};throw error;} }
 }
 
 export async function recoverWorkspace(file, { operationId, rebind = false, restoreDocument = false } = {}) {

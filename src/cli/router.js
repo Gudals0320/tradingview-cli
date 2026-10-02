@@ -93,7 +93,7 @@ export async function run(argv) {
   }
 
   const cmdName = args[0];
-  // Help never touches a workspace, matching `tv --workspace FILE <command> --help`.
+  // Help never touches a workspace, matching `tv --workspace NAME <command> --help`.
   if (cmdName === 'help') workspaceFile = null;
   const offline = false;
   // These handlers only inspect existing state. Data/Pine reads can open panels
@@ -209,6 +209,7 @@ async function execute(handler, values, positionals, offline = false, readOnly =
     try { resourceLease?.release(); } catch (error) { primaryError ||= error; }
   }
   if (primaryError) {
+    if(result!==undefined&&primaryError.code==='LOCK_RELEASE_FAILED')primaryError.details={...primaryError.details,completed_result:result,native_outcome:'completed; do not replay solely to repair ownership'};
     if (cleanupWarnings.length) primaryError.details = { ...primaryError.details, cleanup_warnings: cleanupWarnings };
     handleError(primaryError);
     return;

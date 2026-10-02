@@ -87,6 +87,10 @@ pages must pass the first report_revision; REPORT_CHANGED means restart at offse
 
 ## Recovery
 
+The complete [error-code → next-action table](docs/errors.md) covers selection,
+foreground, queue capacity/cancellation/release, legacy fences, target loss,
+SAVE_REQUIRED, SESSION_BUSY and REPORT_* recovery distinctions.
+
 Only reachable CDP with an absent recorded target proves target_lost. Unreachable
 CDP is disconnected. No automatic recreation or infinite retry. Preserve incomplete
 journals/results, foreign modified drafts and unknown native outcomes.

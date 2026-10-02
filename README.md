@@ -49,6 +49,11 @@ TV_CDP_HOST/TV_CDP_PORT/TV_CDP_TIMEOUT_MS로 연결 설정을 변경할 수 있�
 
 ## 레이아웃과 workspace 준비
 
+Windows PowerShell5의 `2>&1`은 native stderr JSON을 NativeCommandError로 감쌀 수
+있습니다. stdout/stderr를 따로 수집하고 `$LASTEXITCODE`도 확인하세요. 모듈은 영구적인
+실행 정책을 변경하지 않습니다; 로컬 모듈을 허용하지 않는 셸에서는 명시 이름 지정이
+그대로 동작합니다.
+
 ```powershell
 tv layout create "Research A"
 tv layout list
@@ -244,6 +249,7 @@ offline 검사는 Desktop 없이 실행합니다. 실환경 smoke는 명시 전�
 - [Workspace 준비·잠금·복구·이행](docs/workspaces.md)
 - [명령 실행 범위](docs/workspace-commands.md)
 - [Dispatch와 결과 증거](docs/operation-contracts.md)
+- [오류 코드별 다음 조치](docs/errors.md)
 - [백테스트 보호의 과거 검증 기록](docs/backtest-readiness.md)
 - [에이전트 지침](AGENTS.md)
 
