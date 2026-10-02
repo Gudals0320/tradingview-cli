@@ -85,5 +85,6 @@ tv session discard --run-id RUN_ID
 ## Changing this repository
 
 - Run `npm run lint` and `npm test` before committing. Tests run offline and need no Desktop.
+- `tv help --json` is generated from the code at runtime; never write or commit catalog output. Its text comes from the `description` of each command and option, so when you change behavior, options or arguments, update those descriptions in the same change and check the result with `tv help --json <command>`. Tests fail if a description is missing, not if it is wrong.
 - A new command must be registered in `src/cli/commands/`, classified exactly once in `src/cli/policy.js` and given a positional range in `src/cli/arguments.js` if it takes arguments. `tests/command-policy.test.js` fails on unclassified commands. The `tv help --json` catalog picks up new commands automatically.
 - Every `tv ...` line in README.md, docs/workspaces.md and this file is syntax-checked against the real argument parser by `tests/documented-arguments.test.js`.

@@ -36,7 +36,10 @@ it('catalog entries carry the published contract fields', () => {
     assert.ok(command.invocation in catalog.invocations, command.name);
     assert.ok(String(command.read_only) in catalog.read_only_values, command.name);
     assert.equal(command.output, command.name.startsWith('stream ') ? 'jsonl' : 'json');
-    for (const option of command.options) assert.match(option.name, /^--[a-z0-9-]+$/);
+    for (const option of command.options) {
+      assert.match(option.name, /^--[a-z0-9-]+$/);
+      assert.ok(option.description.trim(), `${command.name} ${option.name} needs a description`);
+    }
   }
   const compile = catalog.commands.find(command => command.name === 'pine compile');
   assert.equal(compile.read_only, false);
