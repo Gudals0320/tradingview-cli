@@ -3,15 +3,15 @@
 ## Scope and ownership
 
 PR #23 is reopened after independent adversarial review of `ab0f463` found R1–R4.
-The previous final agreement and all-complete conclusion are superseded. H2/H7,
-F02/F03/F08 and native error/recovery/transport completion are not complete until
-the counterexamples below pass on a newly reviewed SHA. Original bug-asserting
+The previous ab0f463 agreement and all-complete conclusion are superseded. R1–R4
+and H2/H7/F02/F03/F08 were reopened, corrected and reviewed on 48b3e88 as recorded
+below. Final documentation/delivery coordination remains separate. Original bug-asserting
 reproductions and private evidence in ignored results/pr23-review are preserved.
 
-- [ ] R1: post-dispatch observation/transport/progress errors must retain native fences independently of error class; pre-dispatch failures must clean safely.
-- [ ] R2: uncertain layout expansion must abort capacity fallback, provisioning and new tabs; quiescence requires all actual mutations settled.
-- [ ] R3: recovery must verify every recorded target and inactive pane; missing/unreadable/pending state must preserve the journal.
-- [ ] R4: CDP discovery and a never-upgrading TCP/WebSocket handshake must own cancellable transport and leave no child/socket alive after a deadline.
+- [x] R1: dispatch/verified-outcome tracking retains fences for ordinary errors; exact-token undispatched cancellation is tested; Reviewer agreed 48b3e88.
+- [x] R2: uncertain expansion aborts fallback/provisioning/new tabs; tracked mutation readiness is required; Reviewer agreed 48b3e88, with the explicit capacity support limit below.
+- [x] R3: every recorded target/pane and native token is checked; missing/unreadable/pending state retains the journal; Reviewer agreed 48b3e88.
+- [x] R4: discovery and incomplete handshakes are canceled; real TCP child/socket cleanup passed independently; Reviewer agreed 48b3e88.
 
 Current restrictions: QA-A only for compile injection, no alert/personal-watchlist
 mutation, no live multi-feed with a personal tab. On resume the user explicitly
@@ -86,12 +86,12 @@ Candidate dispositions below are reconciled against implementation, regression s
 - [x] #21/4: 레포 비대화 — fixed: raw/private trials ignored, concise summaries/harnesses retained, .rgignore excludes historical bulk without rewriting history; operation-contracts policy.
 - [x] #21/5: 코드 위생 (P3) — fixed+test: upstream reference qualification, encoded Pine open, fail-closed list, declaration/constants cleanup and stream contracts; child rows and regression suites.
 - [x] #22/H1: stream 종료 시 lease가 해제되지 않고, 남은 lock이 workspace 등록을 계속 막음 — prior verdict: 재현됨; disposition: fixed+test+live: stream return/signal cleanup and dead lease reclamation under admission; session/lifetime and Desktop hard-kill fixtures.
-- [ ] #22/H2: 실패한 compile·save가 남긴 page 상태 때문에 workspace가 영구적으로 `NATIVE_BUSY`가 될 수 있음 — reopened R1/R3; corrected in b78aa6c, regression and QA injection pass; final independent review pending.
+- [x] #22/H2: 실패한 compile·save가 남긴 page 상태 때문에 workspace가 영구적으로 `NATIVE_BUSY`가 될 수 있음 — reopened R1/R3; corrected in b78aa6c, regression and QA injection pass; Reviewer agreed 48b3e88.
 - [x] #22/H3: `parseArgs({strict:false})` 때문에 인자 오류가 조용히 다른 동작으로 바뀜 — prior verdict: 부분 재현; disposition: fixed+test (arguments.test.js)
 - [x] #22/H4: `indicator set`이 존재하지 않는 input id를 무시하고 성공을 반환함 — prior verdict: 재현됨; disposition: fixed+test (arguments.test.js)
 - [x] #22/H5: `stream ohlcv`가 사용자의 기존 차트 pane과 레이아웃을 덮어씀 — prior verdict: 판단 불가; disposition: fixed+VM/adapter test: existing panes preserved by default, exact reassignment authorization required; multi_feed/data-contracts tests. Live provisioning intentionally unverified with personal tab present.
 - [x] #22/H6: `layout switch`가 미저장 변경을 자동으로 폐기함 — prior verdict: 재현 안 됨; disposition: investigated: automatic discard was not reproduced; confirmed Korean false-success fixed under N1/X1. No production dialog dismissal; layout-lifetime tests and QA cancellation.
-- [ ] #22/H7: 모든 CDP 호출과 page 내 promise에 타임아웃이 없어, 하나의 hang이 전체 CLI를 막음 — reopened R2/R4; corrected in b78aa6c/419c7b3, deadline/fence and real TCP cleanup tests pass; final independent review pending.
+- [x] #22/H7: 모든 CDP 호출과 page 내 promise에 타임아웃이 없어, 하나의 hang이 전체 CLI를 막음 — reopened R2/R4; corrected in b78aa6c/419c7b3, deadline/fence and real TCP cleanup tests pass; Reviewer agreed 48b3e88.
 - [x] #22/M1: 전략 컴파일에서 리포트 fingerprint 변화만으로 새 결과를 채택할 수 있음 — prior verdict: 재현 안 됨; disposition: investigated, no demonstrated early-ready defect: native compiled source/status/report trace (91 samples in prior QA fixture) and strategy_state/pine_targets regressions; retained legitimate fast/same-source behavior, no forced cycle.
 - [x] #22/M2: `quote SYMBOL`의 차트 복원 실패를 삼키고, 거래소가 다른 같은 티커는 전환하지 않음 — prior verdict: 부분 재현; disposition: fixed+test+live: qualified exchange identity and truthful restore/read-back; data-contracts and QA quote restoration.
 - [x] #22/M3: `pane symbol`이 focus 성공 여부를 확인하지 않고 "현재 활성 차트"를 바꿈 — prior verdict: 재현 안 됨; disposition: defensive fix+test: requested widget dispatch and verified focus/read-back; chart_indicator tests. Prior live focus itself worked; no claim of reproduced wrong-pane mutation.
@@ -172,13 +172,13 @@ All rows retain individual completion evidence; parent rows close only after eve
 - [x] #21/5h stream EPIPE/port/shared path — fixed+test+live: stream returns after signal/EPIPE, validates port, reuses shared collectors; lifetime/arguments tests and Desktop stream fixtures.
 - [x] #21/5i network test documentation — fixed: CONTRIBUTING describes offline/network discovery and dedicated smoke prerequisites.
 - [x] #22/F01: resolved: strict pre-admission parser/input contracts; arguments tests; Group A.
-- [ ] #22/F02: reopened R1–R4: corrected phase/transport/recovery lifetime; focused and integration validation pass; final independent review pending.
-- [ ] #22/F03: reopened R1–R3: dispatch errors retain terminal fences; every target/pane is probed; final independent review pending.
+- [x] #22/F02: reopened R1–R4: corrected phase/transport/recovery lifetime; focused and integration validation pass; Reviewer agreed 48b3e88.
+- [x] #22/F03: reopened R1–R3: dispatch errors retain terminal fences; every target/pane is probed; Reviewer agreed 48b3e88.
 - [x] #22/F04: resolved: resource preservation, explicit confirmations, late callback bounds; multi_feed/tab/layout-lifetime tests; Group C/E1.
 - [x] #22/F05: resolved: exact target identity and verified UID/pane/tab outcomes; tab/chart_indicator/layout-lifetime tests and QA layout smoke.
 - [x] #22/F06: resolved: context/exchange restoration/range/timeframe semantics; data-contracts/chart_history/arguments tests and QA quote/1m smoke.
 - [x] #22/F07: resolved: table shape, limits/order semantics, compiled-text exclusion; extraction/data-contracts tests and QA graphics smoke.
-- [ ] #22/F08: reopened R2/R3: unknown layout outcomes abort fallback and all recorded resources participate in recovery; VM/adapter validation only; final independent review pending.
+- [x] #22/F08: reopened R2/R3: unknown layout outcomes abort fallback and all recorded resources participate in recovery; VM/adapter validation only; Reviewer agreed 48b3e88.
 - [x] #22/F09: resolved: pure observation, fail-closed lists and owned focus; command-policy/data-contracts tests and live read hashes; no personal watchlist writes.
 - [x] #22/F10: resolved: verified persistence and draft distinction; pine_lifecycle/pine_outcome tests and QA save/draft smoke.
 - [x] #22/F11: resolved: analyzer confidence and exit contract; pine_analyze/CLI tests.
@@ -271,7 +271,7 @@ Final code candidate `8c75ec4` (later edits only reconcile this ledger and label
 ### Reopened adversarial review candidate (2026-10-02 KST)
 
 The preceding final agreements are historical. Independent report R1–R4 against
-ab0f463 superseded them; affected rows above remain open until new SHA agreement.
+ab0f463 superseded them. The repaired code's new SHA agreement is recorded below.
 Original bug-asserting repros/report and unsuccessful initial repair trials remain
 unchanged in ignored results/pr23-review. No issue is closed by removing evidence.
 
@@ -282,3 +282,12 @@ unchanged in ignored results/pr23-review. No issue is closed by removing evidenc
 - Full current-code Desktop: npm run smoke:desktop exit 0; 42 parent checks, 10 Pine and four layout checks (child confirmations are included in parent count). Windows/Node24.19.0/Desktop3.4.1/Electron41.7.1/Chromium146/Korean. Protected personal tab count one, state hash unchanged. executor-desktop-resume.log retains the output; underlying harness evidence remains in results/issue-overhaul. Pure-read invariance does not claim every query succeeded: data equity/depth intentionally failed when required data was unavailable.
 - Transport counterexamples are actual local TCP/HTTP, without Desktop: never-upgrade/no-response peers, child exit within finite cleanup time and peer sockets zero, plus successful upgrade/evaluation. R2 delayed planner and R3 inactive/multiple-target recovery are VM/adapter fixtures using the real deadline/planner/lease/recovery functions. Live multi-feed provisioning remains unverified with the personal tab present.
 - Limits remain explicit: unknown terminal capacity errors abort safely rather than automatically opening alternative tabs; vanished/unreadable recorded targets stay fenced. Supported layout invalidation remains the observed Desktop 3.4.1 page-local contract. The smoke draft's server deletion is unverified. No real alert/watchlist writes or additional restart occurred on resume.
+
+### Independent repaired-code agreement and delivery handoff
+
+- Existing Reviewer explicitly agreed to 48b3e88400abcba464939ff7863d2127fdc44f0e on 2026-10-02 KST: R1–R4 fixed, no blocking findings. Its clean export passed 436/436 offline tests and lint. Independent original never-upgrade TCP repro reported CDP_TIMEOUT after 103ms, child exit and zero sockets; the original bug assertions now fail as expected.
+- Reviewer independently checked R1–R3 code/serialized regressions and evidence labels. It did not repeat network441, live QA injection or full Desktop smoke because the outside reviewer held exclusive QA access; those claims rely on the separately identified Executor logs. No claim of independent live repetition is made.
+- Three nonblocking observations were retained: production smaller-layout capacity fallback is currently unavailable because only fixtures produce explicit terminal-capacity proof; an unmatched mutated-target lookup conservatively blocks readiness; removing a recorded pane leaves recovery fenced. These are explicit support limits, not silently counted as successful fallback/recovery.
+- Reviewer requested this documentation-only closure of reopened rows and a PR description update. No source changed after its 48b3e88 agreement. This documentation delta still needs the Reviewer diff check coordinated by Lead.
+- Final actual-user Executor audit before QA handoff found lock/journal/reservations/gate/repair clear, QA-A and one personal chart, no QA-B or owned harness process. The outside reviewer subsequently owns live QA; Executor performs no further Desktop actions until release.
+- Auto-approval rejected Executor review-message and push/PR-edit calls because this chat's trusted history did not expose the original publication/role-message authorization; no blocked action executed. Lead recovered its original human authorization and dispatched the review directly. Lead coordinates final documentation review, Git ownership and external delivery. At this handoff remote PR #23 still points to ab0f463; local repairs are committed, not yet pushed. Do not treat this as final delivered status.
