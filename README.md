@@ -204,6 +204,10 @@ discard는 연결 가능한 CDP에서 기록 target들이 모두 없는지 확�
 
 ## 기존 설치/파일/스크립트 이행
 
+버전2의 breaking changes는 WORKSPACE_REQUIRED 의무 선택, 활성 탭 fallback 제거,
+구 active-tab pine-batch 실행 은퇴, TEMP에서 LOCALAPPDATA/XDG로 상태 저장소 이동입니다.
+기존 전역 설치와 모든 터미널/스크립트를 아래 순서로 이행하세요.
+
 상태는 `%LOCALAPPDATA%\tradingview-cli` 또는 Unix XDG state에 지속 저장됩니다.
 `TV_STATE_DIR`로 바꿀 수 있습니다. 전역 활성 선택은 저장하지 않습니다. 이름/연결/잠금/
 journal/history/results는 private 저장소에 있으며 공개 handle에는 소스/token이 없습니다.
@@ -251,6 +255,7 @@ offline 검사는 Desktop 없이 실행합니다. 실환경 smoke는 명시 전�
 - [Dispatch와 결과 증거](docs/operation-contracts.md)
 - [오류 코드별 다음 조치](docs/errors.md)
 - [백테스트 보호의 과거 검증 기록](docs/backtest-readiness.md)
+- [이슈29 검증·증거·자원·제약 기록](docs/issue29-validation.md)
 - [에이전트 지침](AGENTS.md)
 
 미공식 도구입니다. TradingView 약관과 계정/데이터 권한 범위에서 사용하세요. 내부 API와
