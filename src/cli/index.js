@@ -11,12 +11,18 @@
 // Import failures (including invalid environment configuration) use the same
 // structured error contract as command failures.
 try {
-  for (const name of ['health', 'chart', 'data', 'pine', 'capture', 'replay', 'drawing',
-    'alerts', 'watchlist', 'layout', 'indicator', 'ui', 'pane', 'tab', 'stream', 'session', 'workspace', 'help']) {
-    await import(`./commands/${name}.js`);
+  if (process.argv.length === 3 && ['--version', '-V'].includes(process.argv[2])) {
+    const { readFileSync } = await import('node:fs');
+    const { version } = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
+    console.log(version);
+  } else {
+    for (const name of ['health', 'chart', 'data', 'pine', 'capture', 'replay', 'drawing',
+      'alerts', 'watchlist', 'layout', 'indicator', 'ui', 'pane', 'tab', 'stream', 'session', 'workspace', 'help']) {
+      await import(`./commands/${name}.js`);
+    }
+    const { run } = await import('./router.js');
+    await run(process.argv);
   }
-  const { run } = await import('./router.js');
-  await run(process.argv);
 } catch (error) {
   console.error(JSON.stringify({ success: false, code: error.code || 'CLI_INITIALIZATION', error: error.message }));
   process.exitCode = 1;

@@ -30,6 +30,7 @@ export function printHelp() {
     }
   }
   console.log('\nRun "tv <command> --help" for command-specific options.');
+  console.log('Run "tv --version" (or "tv -V") for the installed package version.');
   console.log('Run "tv help --json" for a machine-readable command catalog.');
   console.log('\nDISCLAIMER');
   console.log('  Not affiliated with TradingView Inc.');

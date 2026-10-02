@@ -61,6 +61,9 @@ npm link
 
 `npm link`를 실행하면 `tv` 명령을 전역으로 사용할 수 있습니다. 전역 연결 없이 저장소 안에서 실행하려면 다음 형식을 사용합니다.
 
+설치된 버전은 `tv --version` 또는 `tv -V`로 확인합니다. 현재 버전은 `1.0.0`입니다.
+버전 확인은 TradingView Desktop 연결 없이 실행됩니다.
+
 ```bash
 npm run tv -- status
 node src/cli/index.js status
