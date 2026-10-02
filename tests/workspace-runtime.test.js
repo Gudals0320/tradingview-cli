@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto';
 const runtimeSessionRoot = mkdtempSync(join(tmpdir(), 'tv-runtime-session-'));
 process.env.TEMP = runtimeSessionRoot;
 process.env.TMP = runtimeSessionRoot;
+process.env.TV_STATE_DIR = join(runtimeSessionRoot, 'tradingview-cli-sessions');
 process.env.TV_CDP_HOST = `runtime-fixture-${randomUUID()}`;
 process.env.TV_CDP_PORT = '1';
 const { reserveWorkspace, acquireWorkspace, workspaceStatus, abandonWorkspace } = await import('../src/workspace-store.js');
@@ -25,6 +26,7 @@ function fixture() {
     if(expression.startsWith('startWorkspacePage') || expression.startsWith('guardWorkspacePage'))return snapshot;
     if(expression.startsWith('finishWorkspacePage'))return {snapshot,calculation};
     if(expression==='window.__tvCliWorkspace?.nonce')return 'generation';
+    if(expression.startsWith('window.__tvCliCompilation'))return calculation;
     throw new Error('Unexpected page operation '+expression);
   }};
   return {workspace,snapshot,calculation,deps,cleanup:()=>abandonWorkspace(workspace.file,{workspaceId:workspace.id})};
@@ -68,8 +70,9 @@ it('TTY pine set without a file refuses before operation admission or stdin cons
   const descriptor=Object.getOwnPropertyDescriptor(process.stdin,'isTTY');
   Object.defineProperty(process.stdin,'isTTY',{configurable:true,value:true});
   let calls=0;
-  try {await assert.rejects(()=>runWorkspace('unused-file','pine set',{},[],async()=>{calls++;}),{code:'PINE_SOURCE_REQUIRED'});assert.equal(calls,0);}
-  finally {if(descriptor)Object.defineProperty(process.stdin,'isTTY',descriptor);else delete process.stdin.isTTY;}
+  const f=fixture();
+  try {await assert.rejects(()=>runWorkspace(f.workspace.file,'pine set',{},[],async()=>{calls++;}),{code:'PINE_SOURCE_REQUIRED'});assert.equal(calls,0);}
+  finally {f.cleanup();if(descriptor)Object.defineProperty(process.stdin,'isTTY',descriptor);else delete process.stdin.isTTY;}
 });
 it('rejects rebind on the same page generation without adopting external state', async()=>{
   const f=fixture();try {

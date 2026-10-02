@@ -100,7 +100,7 @@ describe('persistent independent workspaces', () => {
     const options = fixture(), lease = acquireSession(options);
     assert.throws(() => reserve(options, 'a'), { code: 'SESSION_BUSY' });
     lease.checkpoint({ phase: 'failed' }); lease.release();
-    assert.throws(() => reserve(options, 'a'), { code: 'SESSION_BUSY' });
+    assert.ok(reserve(options, 'a'), 'Unscoped legacy journal fences shared app operations, not unrelated workspace resources.');
   });
   it('keeps separate workspace commands running in two actual OS processes', async () => {
     const options = fixture(), a = reserve(options, 'a'), b = reserve(options, 'b');

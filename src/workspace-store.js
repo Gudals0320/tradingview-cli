@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync, renameSync, openSync, closeSyn
 import { resolve, dirname, join } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { sessionPaths, sessionStatus, readReservations, withAdmissionGate, assertNoPortLease, canonicalSessionHost, reclaimDeadSession } from './session.js';
+import { sessionPaths, sessionStatus, readReservations, withAdmissionGate, assertNoPortLease, canonicalSessionHost, reclaimDeadSession, assertLegacyCompatibility } from './session.js';
 import { CDP_HOST } from './config.js';
 import { secureDirectory } from './private-store.js';
 
@@ -30,10 +30,12 @@ function match(rows, workspace) {
   return row;
 }
 const samePath = (a, b) => process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
-function available(options) {
+function available(options, workspace) {
+  assertLegacyCompatibility({ ...options, target: workspace?.target });
   reclaimDeadSession(options);
   const state = sessionStatus(options);
-  if (state.locked || state.recovery_required) fail('SESSION_BUSY', 'An endpoint lease or recovery journal prevents workspace admission.');
+  if (state.locked) fail('SESSION_BUSY', 'An endpoint lease prevents workspace admission.');
+  if (state.recovery_required && state.recovery_target?.target_id === workspace?.target) fail('RECOVERY_REQUIRED', 'A legacy journal affects this workspace target. Reconcile its exact run ID.');
   if (canonicalSessionHost(options.host ?? CDP_HOST) === '127.0.0.1') assertNoPortLease(options);
 }
 
@@ -77,17 +79,17 @@ export function loadWorkspace(file, options = {}) {
   return value;
 }
 
-export function reserveWorkspace({ file, target, layout, pine }, options = {}) {
-  if (![file, target, layout, pine].every(value => typeof value === 'string' && value.trim())) {
-    fail('WORKSPACE_RESOURCE_REQUIRED', 'file, exact target, saved layout ID and saved Pine document ID are required.');
+export function reserveWorkspace({ file, target, layout, pine = null }, options = {}) {
+  if (![file, target, layout].every(value => typeof value === 'string' && value.trim()) || (pine !== null && (typeof pine !== 'string' || !pine.trim()))) {
+    fail('WORKSPACE_RESOURCE_REQUIRED', 'file, exact target and saved layout ID are required; Pine document is optional.');
   }
   file = resolve(file);
   return withAdmissionGate(options, paths => {
-    available(options);
+    available(options, { target });
     secureDirectory(paths.directory);
     const rows = readReservations(options);
     for (const kind of ['target', 'layout', 'pine']) {
-      if (rows.some(row => row[kind] === { target, layout, pine }[kind])) fail('WORKSPACE_CONFLICT', `The ${kind} resource is already reserved.`);
+      if ({ target, layout, pine }[kind] && rows.some(row => row[kind] === { target, layout, pine }[kind])) fail('WORKSPACE_CONFLICT', `The ${kind} resource is already reserved.`);
     }
     if (rows.some(row => samePath(row.file, file)) || existsSync(file)) fail('WORKSPACE_EXISTS', 'Workspace file already exists.');
     const workspace = { schema: 2, id: randomUUID(), token: randomUUID(), file,
@@ -106,7 +108,7 @@ export function reserveWorkspace({ file, target, layout, pine }, options = {}) {
 export function acquireWorkspace(file, { recover = false, recoveryOperation, ...options } = {}) {
   const workspace = loadWorkspace(file, options), operation = randomUUID();
   withAdmissionGate(options, paths => {
-    available(options);
+    available(options, workspace);
     const rows = readReservations(options), row = match(rows, workspace);
     if (row.operation) fail('WORKSPACE_BUSY', 'Another CLI invocation owns this workspace operation.');
     if (row.interrupted && !recover) fail('WORKSPACE_RECOVERY_REQUIRED', 'Inspect and recover the interrupted workspace operation.');
@@ -146,6 +148,16 @@ export function acquireWorkspace(file, { recover = false, recoveryOperation, ...
     },
     saveBinding(binding) {
       lease.assertOwner(); workspace.binding = binding; savePrivate(workspace, options);
+    },
+    reassign({ target = workspace.target, pine = workspace.pine, expectedGeneration }) {
+      lease.assertOwner();
+      if (workspace.binding?.nonce !== expectedGeneration) fail('WORKSPACE_GENERATION_CHANGED', 'Workspace generation changed while reconnecting.');
+      withAdmissionGate(options, paths => {
+        const rows = readReservations(options), row = match(rows, workspace);
+        if (rows.some(other => other.id !== workspace.id && (other.target === target || (pine && other.pine === pine)))) fail('WORKSPACE_CONFLICT', 'Requested target or document belongs to another workspace.');
+        row.target = target; row.pine = pine; workspace.target = target; workspace.pine = pine; workspace.binding = null;
+        savePrivate(workspace, options); atomic(paths.reservations, rows);
+      });
     },
     recoveredOperation: status.interrupted?.operation_id || null,
     acknowledgeRecovery(operationId) {

@@ -53,7 +53,7 @@ export function invocationClass(command) {
   if (MIXED_COMMANDS.has(command)) return 'mixed';
   if (NATIVE_COMMANDS.has(command)) return 'native';
   const scope = commandScope(command);
-  if (['offline', 'workspace-admin'].includes(scope)) return scope;
+  if (['offline', 'workspace-admin', 'preparation'].includes(scope)) return scope;
   throw new Error(`Unclassified invocation contract: ${command}`);
 }
 export const LEGACY_COMMANDS = new Set(['status', 'launch', 'range', 'scroll', 'discover', 'ui-state', 'screenshot',
@@ -68,6 +68,35 @@ export function commandScope(command) {
   if (WORKSPACE_COMMANDS.has(command)) return 'workspace';
   if (OFFLINE_COMMANDS.has(command)) return 'offline';
   if (ADMIN_COMMANDS.has(command)) return 'workspace-admin';
-  if (LEGACY_COMMANDS.has(command)) return 'legacy';
+  if (PREPARATION_COMMANDS.has(command)) return 'preparation';
+  if (LEGACY_COMMANDS.has(command)) return 'app-shared';
   throw new Error(`Unclassified CLI command: ${command}`);
+}
+
+export const PREPARATION_COMMANDS = new Set(['status', 'tab list', 'layout list', 'layout create', 'layout open', 'workspace create', 'workspace select', 'pine list']);
+for (const name of PREPARATION_COMMANDS) LEGACY_COMMANDS.delete(name);
+export const APP_COMMANDS = new Set(['launch', 'alert list', 'alert create', 'alert delete', 'watchlist get', 'watchlist add', 'watchlist add-bulk', 'watchlist remove',
+  'tab new', 'tab close', 'tab switch', 'layout switch', 'stream ohlcv', 'ui click', 'ui keyboard', 'ui hover', 'ui scroll', 'ui find', 'ui eval', 'ui type', 'ui panel', 'ui fullscreen', 'ui mouse']);
+for (const name of [...LEGACY_COMMANDS]) {
+  if (APP_COMMANDS.has(name)) continue;
+  LEGACY_COMMANDS.delete(name); WORKSPACE_COMMANDS.add(name);
+}
+for (const name of PREPARATION_COMMANDS) WORKSPACE_COMMANDS.delete(name);
+for (const name of ['workspace list', 'workspace import', 'workspace show']) OFFLINE_COMMANDS.add(name);
+for (const name of ['workspace reconnect', 'workspace attach', 'workspace detach']) ADMIN_COMMANDS.add(name);
+for (const name of PURE_READ_COMMANDS) if (WORKSPACE_COMMANDS.has(name)) WORKSPACE_READS.add(name);
+WORKSPACE_READS.add('workspace wait');
+// Results have their own revision/source validation; do not open panels while observing.
+export const PINE_COMMANDS = new Set(['pine get', 'pine set', 'pine compile', 'pine raw-compile', 'pine save', 'pine errors', 'pine console', 'pine new', 'pine open',
+  'data strategy', 'data trades', 'data ledger', 'data equity', 'workspace wait']);
+export const FOREGROUND_COMMANDS = new Set([...APP_COMMANDS].filter(name => name.startsWith('ui ') || ['tab close', 'tab switch', 'layout switch'].includes(name)));
+export function workspaceRequired(command) { return commandScope(command) === 'workspace' || FOREGROUND_COMMANDS.has(command) || command === 'stream ohlcv' || command.startsWith('watchlist ') || command.startsWith('alert '); }
+export function resourceKinds(command, values = {}, positionals = []) {
+  const scope = commandScope(command);
+  if (pureRead(command, values, positionals) && !FOREGROUND_COMMANDS.has(command)) return [];
+  const kinds = [];
+  if (scope === 'app-shared' || ['layout create', 'layout open', 'workspace create', 'workspace reconnect'].includes(command)) kinds.push('app');
+  if (workspaceRequired(command)) kinds.push('layout', 'workspace');
+  if (['pine save', 'pine compile', 'pine raw-compile', 'pine new', 'pine open'].includes(command)) kinds.push('document');
+  return kinds;
 }

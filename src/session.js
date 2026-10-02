@@ -1,4 +1,5 @@
 import { mkdirSync, openSync, closeSync, readFileSync, writeFileSync, existsSync, unlinkSync, renameSync, readdirSync } from 'node:fs';
+import { stateDirectory } from './state-directory.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -10,9 +11,11 @@ const access = new AsyncLocalStorage();
 let admissionDepth = 0;
 export function withReadOnlySession(action) { return access.run({ readOnly: true }, action); }
 export function isReadOnlySession() { return access.getStore()?.readOnly === true; }
-export function withWorkspaceSession(lease, action) { return access.run({ workspace: lease }, action); }
+export function withWorkspaceSession(lease, action) { return access.run({ ...access.getStore(), workspace: lease }, action); }
 export function currentWorkspaceSession() { return access.getStore()?.workspace || null; }
 export function withLegacySession(lease, action) { return access.run({ ...access.getStore(), legacy: lease }, action); }
+export function withSharedSession(action) { return access.run({ ...access.getStore(), shared: true }, action); }
+export function isSharedSession() { return access.getStore()?.shared === true; }
 export function nativeCheckpoint(command, targetId, details = {}) {
   const lease = access.getStore()?.legacy;
   if (!lease) return;
@@ -34,7 +37,7 @@ export function canonicalSessionHost(host) {
     || /^127\./.test(value) || /^::ffff:127\./.test(value)) return '127.0.0.1';
   return value;
 }
-export function sessionPaths({ host = CDP_HOST, port = CDP_PORT, directory = join(tmpdir(), 'tradingview-cli-sessions') } = {}) {
+export function sessionPaths({ host = CDP_HOST, port = CDP_PORT, directory = stateDirectory() } = {}) {
   const endpoint = `${canonicalSessionHost(host)}:${port}`;
   const key = createHash('sha256').update(endpoint).digest('hex');
   const gateKey = createHash('sha256').update('desktop-admission-metadata').digest('hex');
@@ -46,6 +49,26 @@ function alive(pid) {
   try { process.kill(pid, 0); return true; } catch (error) { return error.code !== 'ESRCH'; }
 }
 function read(path) { return JSON.parse(readFileSync(path, 'utf8')); }
+
+export function assertLegacyCompatibility({ target, shared = false, ...options } = {}) {
+  // Old installed CLIs still use the temporary store. Read it without moving or deleting it.
+  if (options.directory && !options.legacyDirectory) return;
+  const paths = sessionPaths({ ...options, directory: options.legacyDirectory || join(tmpdir(), 'tradingview-cli-sessions') });
+  if (paths.directory === sessionPaths(options).directory) return;
+  if (existsSync(paths.lock)) {
+    const lock = read(paths.lock);
+    if (alive(lock.pid)) throw failure('LEGACY_CLI_ACTIVE', 'An old installed CLI owns the temporary endpoint lease. Wait for it and update that terminal.');
+  }
+  if (existsSync(paths.journal)) {
+    let pending;
+    try { pending = read(paths.journal); } catch { pending = {}; }
+    const targets = [pending.target_id, pending.snapshot?.target_id, ...(pending.targets || [])].filter(Boolean);
+    if ((target && targets.includes(target)) || shared) {
+      const error = failure('LEGACY_RECOVERY_REQUIRED', 'A legacy journal affects this target or shared app operations. Preserve it and reconcile with the old CLI before migrating.');
+      error.details = { run_id: pending.run_id || pending.snapshot?.run_id || null, journal: paths.journal, scope: targets.length ? 'recorded_targets_and_app' : 'app' }; throw error;
+    }
+  }
+}
 
 function busyOwner(lock) {
   return failure('SESSION_BUSY', `TradingView CLI command ${lock.command || '<unknown>'} owns this Desktop session (pid ${lock.pid}, run_id ${lock.run_id || '<unknown>'}, started_at ${lock.created_at || '<unknown>'}).`);
@@ -123,7 +146,8 @@ export function withAdmissionGate(options, action) {
   for (;;) {
     try { gate = openSync(paths.gate, 'wx', 0o600); break; }
     catch (error) {
-      if (!['EEXIST', 'EPERM', 'EBUSY', 'EACCES'].includes(error.code)) throw error;
+      if (['EPERM', 'EACCES'].includes(error.code)) throw failure('ADMISSION_PERMISSION', `Cannot access admission metadata: ${paths.gate}. Check its owner and permissions.`);
+      if (!['EEXIST', 'EBUSY'].includes(error.code)) throw error;
       if (Date.now() - started >= (options.gateTimeout || 2000)) throw failure('ADMISSION_BUSY', `Admission metadata did not clear. Inspect ${paths.gate} if its process was killed.`);
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5 + Math.floor(Math.random() * 10));
     }
@@ -204,7 +228,7 @@ export function sessionStatus(options = {}) {
     recovery_run_id: pending?.run_id || pending?.snapshot?.run_id || null,
     native_quiescence_required: pending?.native_quiescence_required === true,
     recovery_journal_hash: existsSync(paths.journal) ? sourceHash(readFileSync(paths.journal)) : null,
-    recovery_target: pending?.snapshot ? { target_id: pending.snapshot.target_id, chart_id: pending.snapshot.chart_id } : null,
+    recovery_target: pending ? { target_id: pending.target_id || pending.snapshot?.target_id, chart_id: pending.snapshot?.chart_id } : null,
     acquisition_in_progress: existsSync(paths.gate) };
 }
 
@@ -217,7 +241,8 @@ export function assertSessionAccess(options = {}) {
     workspace.assertOwner(); return;
   }
   if (owned.has(paths.key)) return;
-  assertNoLocalWorkspace(options);
+  if (isSharedSession()) return;
+  if (!options.shared) assertNoLocalWorkspace(options);
   const state = sessionStatus(options);
   if (state.locked && state.owner_alive) throw failure('SESSION_BUSY', 'Another TradingView CLI process owns this Desktop session.');
   if (state.recovery_required && !(options.readOnly || isReadOnlySession())) throw failure('RECOVERY_REQUIRED',
@@ -228,7 +253,7 @@ export function acquireSession(options = {}) {
   const paths = sessionPaths(options);
   return withAdmissionGate(options, () => {
   if (options.desktopWide) assertNoWorkspaceAnywhere(options);
-  assertNoLocalWorkspace(options);
+  if (!options.shared) assertNoLocalWorkspace(options);
   const status = sessionStatus(options);
   if (status.locked) {
     if (status.owner_alive) throw busyOwner(read(paths.lock));

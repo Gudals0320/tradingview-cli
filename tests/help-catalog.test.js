@@ -100,7 +100,7 @@ it('catalog separates routing scope from Desktop and lease requirements', () => 
   expect('pine analyze', 'none', false);
   expect('launch', 'launches', true);
   expect('ui eval', 'cdp', true);
-  expect('state', 'cdp', 'without_workspace');
+  expect('state', 'cdp', false);
   expect('workspace init', 'cdp', false);
 });
 

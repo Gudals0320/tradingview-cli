@@ -13,8 +13,10 @@ it('inventory probes are bounded, uncached and finish cleanup before a failed ta
       return { layout_name: `qa-${target.id}` };
     } finally { active--; completed++; }
   };
-  await assert.rejects(getDesktopInventory({ _deps: { targets, inspect } }), /target closed/);
+  const inventory = await getDesktopInventory({ _deps: { targets, inspect } });
+  assert.equal(inventory.partial, true); assert.deepEqual(inventory.errors.map(error => error.target_id), ['3']);
   assert.equal(maximum, 4); assert.equal(active, 0); assert.equal(completed, 9);
-  await assert.rejects(getDesktopInventory({ _deps: { targets, inspect } }), /target closed/);
+  const again = await getDesktopInventory({ _deps: { targets, inspect } });
+  assert.equal(again.tabs.length, 9);
   assert.equal(calls, 18, 'Every inventory revalidates target identity; no speculative cache.');
 });

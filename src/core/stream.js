@@ -61,6 +61,12 @@ async function pollLoop(fetcher, { interval = 500, dedupe = true, label = 'strea
         process.stdout.write(line + '\n');
       }
     } catch (err) {
+      if (err.code?.startsWith('WORKSPACE_') || ['TARGET_NOT_FOUND', 'CDP_CONNECTION', 'CDP_TIMEOUT'].includes(err.code)) {
+        running = false;
+        process.stderr.write(JSON.stringify({ success: false, code: err.code, error: err.message }) + '\n');
+        process.exitCode = 1;
+        break;
+      }
       // Connection errors — retry silently
       if (/CDP|ECONNREFUSED/i.test(err.message)) {
         await sleep(2000);

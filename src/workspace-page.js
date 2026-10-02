@@ -4,14 +4,16 @@ import { layoutConfirmationRoot, layoutConfirmationVisible, layoutOperationPendi
 import { trackNativeOperation } from './native-operation.js';
 
 /** Serialized page functions have no captured Node state. */
-export function readWorkspacePage(window, document) {
+export function readWorkspacePage(window, document, options = {}) {
   const chart = window.TradingViewApi?._activeChartWidgetWV?.value();
-  const controller = findPineController(document), editor = findPineEditor(document);
+  const includePine = options.pine !== false && window.__tvCliWorkspace?.pine !== null;
+  const controller = includePine ? findPineController(document) : null, editor = includePine ? findPineEditor(document) : null;
   const meta = window.TradingViewApi?._chartWidgetCollection?.metaInfo;
   const unwrap = value => typeof value?.value === 'function' ? value.value() : value;
   const layout = unwrap(meta?.uid);
-  if (!chart || !layout || !controller || !editor) throw new Error('WORKSPACE_NOT_READY: Saved chart and mounted Pine document required.');
-  const identity = controller.getScriptIdVersion();
+  if (!chart || !layout) throw new Error('WORKSPACE_NOT_READY: A saved chart is required.');
+  if (options.pine === true && (!controller || !editor)) throw new Error('WORKSPACE_PINE_REQUIRED: Mount the owned Pine editor before binding a Pine workspace.');
+  const identity = controller?.getScriptIdVersion();
   const studies = chart._chartWidget.model().model().dataSources().flatMap(source => {
     const info = source.metaInfo?.();
     if (!info?.isTVScript) return [];
@@ -21,14 +23,14 @@ export function readWorkspacePage(window, document) {
       strategy: Boolean(info.isTVScriptStrategy || info.is_strategy), inputs: JSON.parse(JSON.stringify(inputs)), status: status?.type }];
   });
   const context = readChartContext(window);
-  const pending_action = Object.keys(controller._editorStore?.getStore?.().getState()?.ui?.pendingRequests || {}).length > 0
+  const pending_action = Object.keys(controller?._editorStore?.getStore?.().getState()?.ui?.pendingRequests || {}).length > 0
     || Boolean(window.__tvCliSave?.pending) || Boolean(window.__tvCliPineCompile && !window.__tvCliPineCompile.actionDone)
     || Object.values(window.__tvCliNativeOperations || {}).some(operation => operation.pending)
     || layoutOperationPending(window, document)
     ;
-  const calculating = studies.some(study => study.status === 0 || study.status === 1);
+  const calculating = studies.some(study => study.strategy && (study.status === 0 || study.status === 1));
   return { layout: String(layout), pine: identity?.scriptIdPart || null, version: identity?.version,
-    source: editor.editor.getValue().replace(/\r\n/g, '\n'), modified: controller.isModified?.(),
+    source: editor?.editor.getValue().replace(/\r\n/g, '\n') || '', modified: controller?.isModified?.() ?? null,
     context: { symbol: context.symbol, aliases: context.aliases, resolution: normalizeTimeframe(context.resolution), chart_type: context.chart_type,
       session: chart.symbolExt?.()?.session || null },
     studies, pending: pending_action || calculating, pending_action, calculating,
@@ -36,14 +38,14 @@ export function readWorkspacePage(window, document) {
 }
 
 export function bindWorkspacePage(window, document, resource, nonce) {
-  const snapshot = readWorkspacePage(window, document);
+  const snapshot = readWorkspacePage(window, document, { pine: Boolean(resource.pine) });
   if (snapshot.layout !== resource.layout || snapshot.pine !== resource.pine) throw new Error('WORKSPACE_IDENTITY_MISMATCH: Saved resources do not match registration.');
-  if (snapshot.studies.some(study => study.pine !== resource.pine) || snapshot.studies.length > 1) throw new Error('WORKSPACE_STUDY_CONFLICT: Use one owned Pine study only.');
+  if (resource.pine && (snapshot.studies.some(study => study.pine !== resource.pine) || snapshot.studies.length > 1)) throw new Error('WORKSPACE_STUDY_CONFLICT: Pine workspaces require a single owned study.');
   if (snapshot.pending) throw new Error('WORKSPACE_NATIVE_BUSY: Native action or calculation is pending.');
   const chart = window.TradingViewApi._activeChartWidgetWV.value();
   window.__tvCliWorkspace?.dispose?.();
-  window.__tvCliWorkspace = { id: resource.id, token: resource.token, nonce, chart,
-    controller: findPineController(document), baseline: snapshot, operation: null, permit: {} };
+  window.__tvCliWorkspace = { id: resource.id, token: resource.token, nonce, chart, pine: resource.pine,
+    controller: resource.pine ? findPineController(document) : null, baseline: snapshot, operation: null, permit: {} };
   return { nonce, snapshot };
 }
 
@@ -78,7 +80,7 @@ export function guardWorkspacePage(window, document, owner, { observe = false } 
   const bound = window.__tvCliWorkspace;
   if (!bound || bound.nonce !== owner.nonce || bound.id !== owner.id || bound.token !== owner.token
     || bound.chart !== window.TradingViewApi?._activeChartWidgetWV?.value()
-    || bound.controller !== findPineController(document)) throw new Error('WORKSPACE_GENERATION_CHANGED: Target page or controller changed; explicit recovery required.');
+    || (bound.pine && bound.controller !== findPineController(document))) throw new Error('WORKSPACE_GENERATION_CHANGED: Target page or controller changed; explicit recovery required.');
   const actual = readWorkspacePage(window, document);
   // Observation validates the same contract using local copies. It must never
   // consume another invocation's permit or advance its baseline.
@@ -99,7 +101,7 @@ export function guardWorkspacePage(window, document, owner, { observe = false } 
     // A symbol may normalize twice while the feed initializes; keep its aliases.
     if (field !== 'symbol') delete permit[field];
   }
-  if (actual.studies.length > 1 || actual.studies.some(study => study.pine !== actual.pine)) fail();
+  if (bound.pine && (actual.studies.length > 1 || actual.studies.some(study => study.pine !== actual.pine))) fail();
   const old = before.studies[0], current = actual.studies[0];
   if (JSON.stringify(old?.inputs) !== JSON.stringify(current?.inputs) || old?.id !== current?.id || actual.version !== before.version) {
     if (permit.compile) {

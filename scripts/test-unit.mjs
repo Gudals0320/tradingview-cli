@@ -9,7 +9,7 @@ const files = readdirSync(new URL('../tests/', import.meta.url))
 const testTemp = mkdtempSync(join(tmpdir(), 'tradingview-unit-'));
 const result = spawnSync(process.execPath, ['--test', ...files], {
   stdio: 'inherit',
-  env: { ...process.env, TEMP: testTemp, TMP: testTemp,
+  env: { ...process.env, TEMP: testTemp, TMP: testTemp, TV_STATE_DIR: join(testTemp, 'tradingview-cli-sessions'),
     TRADINGVIEW_SKIP_NETWORK_TESTS: process.argv.includes('--network') ? '0' : '1' },
 });
 process.exitCode = result.status ?? 1;

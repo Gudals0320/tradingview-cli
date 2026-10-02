@@ -1,5 +1,6 @@
 import { register } from '../router.js';
-import { initWorkspace, recoverWorkspace, closeWorkspace, workspaceInventory, rebindWorkspace } from '../../workspace.js';
+import { initWorkspace, recoverWorkspace, closeWorkspace, workspaceInventory, rebindWorkspace, createWorkspace, verifyWorkspaceSelection, reconnectWorkspace } from '../../workspace.js';
+import { listWorkspaceNames, registerWorkspaceName, resolveWorkspace } from '../../workspace-registry.js';
 import { workspaceStatus, markInterrupted, abandonWorkspace } from '../../workspace-store.js';
 import { compilationState, STRATEGY_PAGE_CODE } from '../../strategy-state.js';
 import { evaluate } from '../../connection.js';
@@ -10,6 +11,23 @@ const operation = { type: 'string', description: 'Exact interrupted operation ID
 register('workspace', {
   description: 'Independent target/layout/Pine ownership',
   subcommands: new Map([
+    ['reconnect', { description: 'Explicitly bind the saved layout on an inspectable target; invalidate old results', options: {
+      target: { type: 'string', description: 'Exact replacement CDP target already showing the dedicated layout' }, generation: { type: 'string', description: 'Exact recorded page generation from workspace show' },
+    }, handler: (opts, args) => reconnectWorkspace(args[0], opts) }],
+    ['attach', { description: 'Attach a dedicated Pine document already mounted in this chart-only workspace', options: {
+      pine: { type: 'string', description: 'Exact dedicated saved document ID' }, generation: { type: 'string', description: 'Exact recorded page generation' },
+    }, handler: (opts, args) => reconnectWorkspace(args[0], opts) }],
+    ['detach', { description: 'Convert to chart-only without changing or closing the editor document', options: {
+      generation: { type: 'string', description: 'Exact recorded page generation' },
+    }, handler: (opts, args) => reconnectWorkspace(args[0], { ...opts, detach: true }) }],
+    ['list', { description: 'List persistent workspace names (selection is terminal-local)', handler: () => listWorkspaceNames() }],
+    ['import', { description: 'Register a legacy schema 1/2 file handle under a persistent name', options: { file }, handler: (opts, args) => registerWorkspaceName(args[0], opts.file) }],
+    ['create', { description: 'Create a named workspace for one open dedicated saved layout; Pine is optional', options: {
+      layout: { type: 'string', description: 'Exact saved layout ID (first use layout create/open)' },
+      target: { type: 'string', description: 'Optional exact CDP target for migration' }, pine: { type: 'string', description: 'Optional dedicated saved Pine document ID' },
+    }, handler: (opts, args) => createWorkspace(args[0], opts) }],
+    ['select', { description: 'Verify workspace/layout selection; PowerShell module applies it to the calling terminal', handler: (_, args) => verifyWorkspaceSelection(args[0]) }],
+    ['show', { description: 'Inspect a named workspace without changing terminal selection', handler: (_, args) => workspaceStatus(resolveWorkspace(args[0])) }],
     ['inventory', { description: 'HTTP-only target/layout inventory (no page execution)', handler: workspaceInventory }],
     ['gate-status', { description: 'Inspect admission metadata ownership', handler: () => admissionGateStatus() }],
     ['gate-clear', { description: 'Clear an exact dead admission gate; retain all reservations', options: { token: { type: 'string', description: 'Exact dead admission gate token from gate-status' }, 'repair-token': { type: 'string', description: 'Exact dead repair token from gate-status' } }, handler: opts => clearAdmissionGate(opts.token, { repairToken: opts['repair-token'] }) }],

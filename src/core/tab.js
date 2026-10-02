@@ -20,7 +20,7 @@ import { assertSessionAccess, nativeCheckpoint } from '../session.js';
  */
 export async function list() {
   const inventory = await getDesktopInventory();
-  return { success: true, tab_count: inventory.tabs.length, tabs: inventory.tabs };
+  return { success: true, tab_count: inventory.tabs.length, tabs: inventory.tabs, partial: inventory.partial, errors: inventory.errors };
 }
 
 /**
