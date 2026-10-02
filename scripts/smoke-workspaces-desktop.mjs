@@ -53,8 +53,8 @@ try {
   evidence.parallel_calculation=await Promise.all([
     run(a,['indicator','set',studyA,'--inputs',JSON.stringify({[values['input-id']]:next[0]})]),
     run(b,['indicator','set',studyB,'--inputs',JSON.stringify({[values['input-id']]:next[1]})]),
-    new Promise(resolve=>setTimeout(resolve,150)).then(()=>run(b,['workspace','wait','--timeout','10000'])),
-    run(b,['workspace','show',b]),
+    new Promise(resolve=>setTimeout(resolve,500)).then(()=>run(b,['workspace','wait','--timeout','10000'])),
+    new Promise(resolve=>setTimeout(resolve,500)).then(()=>run(b,['workspace','show',b])),
   ]);
   evidence.parallel_calculation.forEach(result=>assert.equal(result.exit,0,result.stderr));
   evidence.stream_coexistence=await Promise.all([run(a,['stream','quote','--interval','100'],{stream:true}),run(b,['timeframe','4H'])]);

@@ -52,16 +52,19 @@ register('workspace', {
       handler: opts => abandonWorkspace(opts.file, { workspaceId: opts.id, operationId: opts.operation }) }],
     ['wait', { description: 'Wait for this workspace strategy calculation (use --workspace FILE)', options: { timeout: { type: 'string', description: 'Milliseconds to wait (default 30000, max 300000)' } }, handler: async opts => {
       const timeout = Number(opts.timeout || 30000), start = Date.now();
+      const inspect=opts._deps?.evaluate||evaluate,getStatus=opts._deps?.status||workspaceStatus,getLocks=opts._deps?.locks||resourceLockStatus;
       if (!Number.isFinite(timeout) || timeout < 1 || timeout > 300000) throw new Error('timeout must be 1..300000 ms.');
       do {
         const owned=currentWorkspaceSession()?.workspace;
-        const status=owned?workspaceStatus(owned.file):null;
-        const state = await evaluate(`(() => {${STRATEGY_PAGE_CODE};return (${compilationState.toString()})(window);})()`);
-        if(!status?.operation) {
+        const status=owned?getStatus(owned.file):null;
+        const locks=owned?getLocks():null;
+        const admitted=owned?[...(locks?.holders||[]),...(locks?.queue||[])].filter(row=>row.workspace_id===owned.id):[];
+        const state = await inspect(`(() => {${STRATEGY_PAGE_CODE};return (${compilationState.toString()})(window);})()`);
+        if(!status?.operation&&!admitted.length) {
           if (state.phase === 'ready') return { success: true, ...state };
           if (['failed', 'invalidated', 'not-strategy', 'unverified'].includes(state.phase)) return { success: false, ...state };
-        } else if(!status.owner_alive)return {success:false,code:'WORKSPACE_OWNER_DEAD',operation:status.operation,error:'Active operation owner terminated; inspect and reconcile it.'};
-        await new Promise(resolve => setTimeout(resolve, 100));
+        } else if(status?.operation&&!status.owner_alive)return {success:false,code:'WORKSPACE_OWNER_DEAD',operation:status.operation,error:'Active operation owner terminated; inspect and reconcile it.'};
+        await (opts._deps?.sleep|| (ms=>new Promise(resolve=>setTimeout(resolve,ms))))(100);
       } while (Date.now() - start < timeout);
       return { success: false, code: 'REPORT_TIMEOUT',calculation_pending:true, error: 'Workspace calculation did not complete.' };
     } }],
