@@ -4,6 +4,7 @@ import { runInNewContext } from 'node:vm';
 import { setImmediate } from 'node:timers';
 import { newScript, openScript, save, listScripts, smartCompile } from '../src/core/pine.js';
 import { confirmPineSaveDialog } from '../src/core/desktop-dom.js';
+import { readStrategyReport } from '../src/strategy-state.js';
 
 it('rejects invalid new types before connecting to or changing an editor', async () => {
   await assert.rejects(newScript({ type: 'typo' }), /Invalid Pine script type/);
@@ -29,6 +30,31 @@ function fixture() {
     evaluate: expression => runInNewContext(expression, context),
     evaluateAsync: expression => runInNewContext(expression, context) };
 }
+
+it('new/open invalidate the page report only when editor content changes, including partial failure', async () => {
+  for (const action of ['new', 'open', 'open-same', 'open-reject', 'new-partial']) {
+    const f = fixture();
+    const epoch = { phase: 'ready', strategy_mode: true, strategy_id: 'previous', report_verified: true };
+    f.context.window.__tvCliCompilation = epoch;
+    f.context.window.__tvCliVerifiedStrategies = new Map([['previous', epoch]]);
+    if (action === 'open-same') {
+      await f.controller.setScript('saved A\r\n');
+    } else if (action === 'open-reject') {
+      f.controller.openScript = async () => { throw new Error('open rejected'); };
+    } else if (action === 'new-partial') {
+      f.controller.setScript = async () => { throw new Error('template rejected'); };
+    }
+    const operation = action.startsWith('new') ? () => newScript({ type: 'strategy', _deps: f }) : () => openScript({ name: 'A', _deps: f });
+    if (['open-reject', 'new-partial'].includes(action)) await assert.rejects(operation(), /rejected/);
+    else await operation();
+    if (['open-same', 'open-reject'].includes(action)) {
+      assert.equal(epoch.phase, 'ready'); assert.equal(epoch.report_verified, true);
+    } else {
+      assert.equal(readStrategyReport(f.context.window).code, 'REPORT_INVALIDATED');
+      assert.equal(epoch.report_verified, false); assert.equal(f.context.window.__tvCliVerifiedStrategies.size, 0);
+    }
+  }
+});
 
 it('new detaches the saved identity and waits for the async template before setting source', async () => {
   const f = fixture();

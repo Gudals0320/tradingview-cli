@@ -624,12 +624,16 @@ export async function newScript({ type, _deps }) {
   const escaped = JSON.stringify(template);
   const set = await (_deps?.evaluateAsync || evaluateAsync)(`
     (async function() {
+      ${STRATEGY_PAGE_CODE};
       var controller = ${FIND_CONTROLLER};
       if (!controller) throw new Error('Pine document controller unavailable; cannot safely create a script.');
-      await controller.openNewScript(${JSON.stringify(type)});
-      await controller.setScript(${escaped});
-      var m = ${FIND_MONACO};
-      return !controller.getScriptIdVersion()?.scriptIdPart && m?.editor.getValue() === ${escaped};
+      const before = (${FIND_MONACO})?.editor.getValue();
+      try {
+        await controller.openNewScript(${JSON.stringify(type)});
+        await controller.setScript(${escaped});
+        var m = ${FIND_MONACO};
+        return !controller.getScriptIdVersion()?.scriptIdPart && m?.editor.getValue() === ${escaped};
+      } finally { if ((${FIND_MONACO})?.editor.getValue() !== before) invalidateEditedSource(window); }
     })()
   `, { mutation: true });
 
@@ -646,6 +650,7 @@ export async function openScript({ name, _deps }) {
 
   const result = await (_deps?.evaluateAsync || evaluateAsync)(`
     (function() {
+      ${STRATEGY_PAGE_CODE};
       var target = ${escapedName};
       return fetch('https://pine-facade.tradingview.com/pine-facade/list/?filter=saved', { credentials: 'include' })
         .then(function(r) { return r.json(); })
@@ -673,14 +678,15 @@ export async function openScript({ name, _deps }) {
               if (!source) return {error: 'Script source is empty', name: match.scriptName || match.scriptTitle};
               var controller = ${FIND_CONTROLLER};
               if (!controller) throw new Error('Pine document controller unavailable; cannot safely open a script.');
-              return controller.openScript({scriptIdPart:id, version:ver}).then(function() {
+              const before = (${FIND_MONACO})?.editor.getValue();
+              return Promise.resolve().then(() => controller.openScript({scriptIdPart:id, version:ver})).then(function() {
                 var m = ${FIND_MONACO};
                 if (controller.getScriptIdVersion()?.scriptIdPart !== id || !m ||
                     m.editor.getValue().replace(/\\r\\n/g, '\\n') !== source.replace(/\\r\\n/g, '\\n')) {
                   throw new Error('Pine document identity/source did not match the requested script.');
                 }
                 return {success:true,name:match.scriptName || match.scriptTitle,id:id,lines:source.split('\\n').length};
-              });
+              }).finally(() => { if ((${FIND_MONACO})?.editor.getValue() !== before) invalidateEditedSource(window); });
             });
         })
         .catch(function(e) { return {error: e.message}; });

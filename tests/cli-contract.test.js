@@ -93,6 +93,21 @@ it('real ledger CLI carries selectors and revisions, fails changed pages with ex
   assert.ok(catalog.options.some(option => option.name === '--report-revision'));
 });
 
+it('real extraction CLI returns structured error codes and study details on stderr with exit 1', async t => {
+  let failure;
+  const f = await fixture(t, () => ({ extraction_error: failure }));
+  for (const [args, code] of [
+    [['data', 'labels'], 'GRAPHICS_EXTRACTION_FAILED'],
+    [['values'], 'VALUES_EXTRACTION_FAILED'],
+    [['ohlcv'], 'OHLCV_EXTRACTION_FAILED'],
+  ]) {
+    failure = { code, message: code + ': native extraction failed', details: { study_id: 'bad-study', study_name: 'Built-in fixture', bar_index: 4 } };
+    const result = jsonError(await f.run(['--target', 'fixture-target', ...args]), /native extraction failed/, code);
+    assert.equal(result.details.study_id, 'bad-study'); assert.equal(result.details.study_name, 'Built-in fixture');
+    assert.equal(sessionStatus(f.options).recovery_required, false);
+  }
+});
+
 function jsonResult(result, exitCode = 0) {
   assert.equal(result.exitCode, exitCode, result.stderr);
   assert.equal(result.stderr, '', 'A returned result belongs on stdout only.');

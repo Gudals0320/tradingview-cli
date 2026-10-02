@@ -28,11 +28,22 @@ async function readData(expression, _deps = {}) {
   const inspect = _deps.evaluate || evaluate;
   const result = await inspect(`(() => {
     const readContext = ${readChartContext.toString()};
-    const context = readContext(window), data = (${expression}), after = readContext(window);
-    if (!context || !after || context.symbol !== after.symbol || context.resolution !== after.resolution
-      || context.chart_type !== after.chart_type) throw new Error('DATA_CONTEXT_CHANGED: Chart changed during extraction.');
-    return { data, context };
+    let context = null;
+    try {
+      context = readContext(window);
+      const data = (${expression}), after = readContext(window);
+      if (!context || !after || context.symbol !== after.symbol || context.resolution !== after.resolution
+        || context.chart_type !== after.chart_type) throw new Error('DATA_CONTEXT_CHANGED: Chart changed during extraction.');
+      return { data, context };
+    } catch (error) {
+      return { extraction_error: { code: error.code || String(error.message).match(/^([A-Z_]+):/)?.[1] || 'DATA_EXTRACTION_FAILED',
+        message: error.message, details: { context, study_id: error.study_id ?? null, study_name: error.study_name ?? null, bar_index: error.bar_index ?? null } } };
+    }
   })()`);
+  if (result?.extraction_error) {
+    const { code, message, details } = result.extraction_error;
+    throw Object.assign(new Error(message), { code, details });
+  }
   if (!result || !result.context) throw new Error('Chart context unavailable.');
   if (result.context.loading) throw Object.assign(new Error('Chart data is loading; retry after it becomes ready.'), { code: 'DATA_NOT_READY' });
   if (result.context.feed_error) throw Object.assign(new Error('Chart feed failed: ' + result.context.feed_error), { code: 'DATA_FEED_ERROR' });
@@ -93,7 +104,10 @@ function buildGraphicsJS(collectionName, mapKey, filter) {
             } catch(e) { throw new Error('Table collection read failed: ' + e.message); }
           }
           if (items.length > 0) results.push({name: name, count: items.length, items: items});
-        } catch(e) { throw new Error('GRAPHICS_EXTRACTION_FAILED: ' + e.message); }
+        } catch(e) {
+          var studyId = null; try { studyId = s.id?.() ?? null; } catch {}
+          throw Object.assign(new Error('GRAPHICS_EXTRACTION_FAILED: ' + e.message), { code:'GRAPHICS_EXTRACTION_FAILED', study_id:studyId, study_name:name || null });
+        }
       }
       return { studies: results, matched_studies: matched };
     })()
@@ -111,7 +125,7 @@ export async function getOhlcv({ count, summary, _deps } = {}) {
         var start = Math.max(bars.firstIndex(), end - ${limit} + 1);
         for (var i = start; i <= end; i++) {
           var v = bars.valueAt(i);
-          if (!v) throw new Error('OHLCV_EXTRACTION_FAILED: Missing bar inside requested range.');
+          if (!v) throw Object.assign(new Error('OHLCV_EXTRACTION_FAILED: Missing bar inside requested range.'), { code:'OHLCV_EXTRACTION_FAILED', bar_index:i });
           result.push({time: v[0], open: v[1], high: v[2], low: v[3], close: v[4], volume: v[5] ?? null});
         }
         return {bars: result, total_bars: bars.size(), source: 'direct_bars'};
@@ -407,7 +421,10 @@ export async function getStudyValues({ _deps } = {}) {
           var inputs = null;
           try { var ip = s.inputs ? s.inputs() : null; if (ip && Object.keys(ip).length) inputs = Object.fromEntries(Object.entries(ip).filter(([key,value]) => key !== 'text' && !(typeof value === 'string' && value.length > 500))); } catch(e) {}
           if (Object.keys(values).length > 0) results.push({ id: id, name: name, inputs: inputs, values: values });
-        } catch(e) { throw new Error('VALUES_EXTRACTION_FAILED: ' + e.message); }
+        } catch(e) {
+          var studyId = null; try { studyId = s.id?.() ?? null; } catch {}
+          throw Object.assign(new Error('VALUES_EXTRACTION_FAILED: ' + e.message), { code:'VALUES_EXTRACTION_FAILED', study_id:studyId, study_name:name || null });
+        }
       }
       return results;
     })()

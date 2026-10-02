@@ -34,16 +34,24 @@ it('OHLCV reports a loaded tail separately from insufficient history and never i
   assert.equal((await getOhlcv({ count: 1, _deps: f._deps })).bars[0].volume, null);
   assert.equal((await getOhlcv({ summary: true, _deps: f._deps })).avg_volume, null);
   f.bars.valueAt = i => i === 0 ? [100, 1, 3, 1, 2, 0] : null;
-  await assert.rejects(getOhlcv({ count: 2, _deps: f._deps }), /OHLCV_EXTRACTION_FAILED/);
+  await assert.rejects(getOhlcv({ count: 2, _deps: f._deps }), error => {
+    assert.equal(error.code, 'OHLCV_EXTRACTION_FAILED'); assert.equal(error.details.bar_index, 1); return true;
+  });
   await assert.rejects(getOhlcv({ count: 501, _deps: f._deps }), /500/);
 });
 
 it('graphics extraction failures are errors rather than successful empty collections', async () => {
   const f = fixture();
   f.source._graphics._primitivesCollection.dwglabels.get = () => { throw new Error('incompatible API'); };
-  await assert.rejects(getPineLabels({ _deps: f._deps }), /GRAPHICS_EXTRACTION_FAILED.*incompatible API/);
+  await assert.rejects(getPineLabels({ _deps: f._deps }), error => {
+    assert.equal(error.code, 'GRAPHICS_EXTRACTION_FAILED'); assert.equal(error.details.study_id, 'qa');
+    assert.equal(error.details.study_name, 'QA'); assert.match(error.message, /incompatible API/); return true;
+  });
   f.source.dataWindowView = () => { throw new Error('incompatible view'); };
-  await assert.rejects(getStudyValues({ _deps: f._deps }), /VALUES_EXTRACTION_FAILED.*incompatible view/);
+  await assert.rejects(getStudyValues({ _deps: f._deps }), error => {
+    assert.equal(error.code, 'VALUES_EXTRACTION_FAILED'); assert.equal(error.details.study_id, 'qa');
+    assert.equal(error.details.study_name, 'QA'); assert.match(error.message, /incompatible view/); return true;
+  });
 });
 
 it('collection reads expose their exact context and preserve empty table cells/rows', async () => {
