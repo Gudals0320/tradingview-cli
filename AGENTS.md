@@ -10,7 +10,7 @@ tv help --json pine
 tv help --json pine compile
 ```
 
-The catalog is generated from the registered commands, so it matches the installed code. Each entry lists `usage`, `positionals` (`min`/`max`, `null` = unbounded), `options`, `scope`, `invocation`, `read_only` (`true` / `false` / `"conditional"` with `read_only_when`) and `output` (`json` or `jsonl`). The legend for each field is in the same output. `tv help --json` with no filter is large (about 50 KB), so filter by command when you can.
+The catalog is generated from the registered commands, so it matches the installed code. Each entry lists `usage`, `positionals` (`min`/`max`, `null` = unbounded), `options`, `scope`, `invocation`, `desktop` (whether the call contacts Desktop), `endpoint_lease` (whether it holds the shared lease), `read_only` (`true` / `false` / `"conditional"` with `read_only_when`) and `output` (`json`, `jsonl`, or `"conditional"` with `output_when`). The legend for each field is in the same output. `tv help --json` with no filter is large (about 50 KB), so filter by command when you can.
 
 Inside the repository without `npm link`, run `node src/cli/index.js ...` instead of `tv ...`. Install dependencies first with `npm ci`; even `--help` fails without them.
 
@@ -19,7 +19,7 @@ Inside the repository without `npm link`, run `node src/cli/index.js ...` instea
 - TradingView Desktop is running and logged in, with CDP at `127.0.0.1:9222`. Override with `TV_CDP_HOST` / `TV_CDP_PORT`.
 - Run `tv status` first. Exit code `2` means no CDP connection.
 - `tv launch` **kills running TradingView instances by default**, which can discard the user's unsaved work. Do not run it without the user's consent; `--no-kill` avoids the kill.
-- Some commands (`help`, `pine analyze`, `pine check`, `search`, `session status`) need no Desktop. Their `scope` is `offline`.
+- Commands with `desktop: "none"` need no Desktop, for example `help`, `pine analyze`, `pine check`, `search` and `session status`. Do not infer this from `scope: "offline"`: `session recover` and `workspace inventory` are routed offline but still contact Desktop.
 
 ## Calling contract
 
@@ -27,7 +27,7 @@ Inside the repository without `npm link`, run `node src/cli/index.js ...` instea
 - Errors go to stderr as `{"success":false,"error":...,"code":...,"details":...}`.
 - Check **both** the exit code and `success`. A `success:false` result can appear on stdout with exit `1`.
 - Exit codes: `0` success; `1` invalid input, operation failure or compile failure; `2` CDP connection failure.
-- Run one call at a time per Desktop endpoint. Overlapping calls fail with `SESSION_BUSY`. A running `stream` holds the lease until it is terminated, so always run streams with a timeout or terminate them yourself.
+- Run one lease-holding call (`endpoint_lease` other than `false`) at a time per Desktop endpoint. Overlapping lease holders fail with `SESSION_BUSY`. A running `stream` holds the lease until it is terminated, so always run streams with a timeout or terminate them yourself.
 - For parallel work, use workspaces (`tv --workspace FILE ...`); see [docs/workspaces.md](docs/workspaces.md) and [docs/workspace-commands.md](docs/workspace-commands.md).
 - Entity IDs (studies, drawings, CDP targets) are only valid for the current session. Re-read them after a reconnect.
 

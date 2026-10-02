@@ -89,6 +89,8 @@ export async function run(argv) {
   }
 
   const cmdName = args[0];
+  // Help never touches a workspace, matching `tv --workspace FILE <command> --help`.
+  if (cmdName === 'help') workspaceFile = null;
   const offline = cmdName === 'update' || cmdName === 'session' || cmdName === 'workspace'
     || (cmdName === 'pine' && ['analyze', 'check'].includes(args[1]));
   // These handlers only inspect existing state. Data/Pine reads can open panels

@@ -30,6 +30,10 @@ export function pureRead(command, values = {}, positionals = []) {
 }
 export const OFFLINE_COMMANDS = new Set(['help', 'update', 'search', 'pine analyze', 'pine check', 'session status', 'session discard', 'session recover',
   'workspace inventory', 'workspace status', 'workspace interrupt', 'workspace abandon', 'workspace gate-status', 'workspace gate-clear']);
+// Offline routing takes no lease and no CDP client, but these handlers still
+// reach Desktop or take the endpoint lease themselves; published by `tv help --json`.
+export const DESKTOP_REQUIREMENTS = new Map([['launch', 'launches'], ['session recover', 'cdp'], ['workspace inventory', 'cdp_http']]);
+export const OFFLINE_LEASE_COMMANDS = new Set(['session recover', 'session discard']);
 export const ADMIN_COMMANDS = new Set(['workspace init', 'workspace recover', 'workspace rebind', 'workspace release']);
 // Only these commands dispatch native changes which may outlive the CLI.
 // Pure collection and observation never create a recovery journal.

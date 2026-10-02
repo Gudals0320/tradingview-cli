@@ -5,13 +5,15 @@ import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { registeredCommands } from '../src/cli/router.js';
 import { buildCatalog } from '../src/cli/catalog.js';
-import { MIXED_COMMANDS, MIXED_RULES } from '../src/cli/policy.js';
+import { MIXED_COMMANDS, MIXED_RULES, OFFLINE_COMMANDS, DESKTOP_REQUIREMENTS, OFFLINE_LEASE_COMMANDS } from '../src/cli/policy.js';
 for (const file of readdirSync(new URL('../src/cli/commands/', import.meta.url))) await import(`../src/cli/commands/${file}`);
 
 const CLI = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
 function run(args) {
+  const env = { ...process.env };
+  delete env.TV_CDP_TARGET;
   try {
-    return { stdout: execFileSync(process.execPath, [CLI, ...args], { encoding: 'utf8', timeout: 15000 }), stderr: '', exitCode: 0 };
+    return { stdout: execFileSync(process.execPath, [CLI, ...args], { encoding: 'utf8', timeout: 15000, env }), stderr: '', exitCode: 0 };
   } catch (error) {
     return { stdout: error.stdout || '', stderr: error.stderr || '', exitCode: error.status };
   }
@@ -35,7 +37,9 @@ it('catalog entries carry the published contract fields', () => {
     assert.ok(command.scope in catalog.scopes, command.name);
     assert.ok(command.invocation in catalog.invocations, command.name);
     assert.ok(String(command.read_only) in catalog.read_only_values, command.name);
-    assert.equal(command.output, command.name.startsWith('stream ') ? 'jsonl' : 'json');
+    assert.ok(String(command.desktop) in catalog.desktop_values, command.name);
+    assert.ok(String(command.endpoint_lease) in catalog.endpoint_lease_values, command.name);
+    if (command.name !== 'help') assert.equal(command.output, command.name.startsWith('stream ') ? 'jsonl' : 'json');
     for (const option of command.options) {
       assert.match(option.name, /^--[a-z0-9-]+$/);
       assert.ok(option.description.trim(), `${command.name} ${option.name} needs a description`);
@@ -79,4 +83,41 @@ it('tv help without --json prints the same text as --help', () => {
   assert.equal(run(['help', 'pine']).stdout, run(['pine', '--help']).stdout);
   assert.equal(run(['help', 'pine', 'compile']).stdout, run(['pine', 'compile', '--help']).stdout);
   assert.ok(run(['--help']).stdout.includes('tv help --json'));
+});
+
+it('catalog separates routing scope from Desktop and lease requirements', () => {
+  for (const name of [...DESKTOP_REQUIREMENTS.keys(), ...OFFLINE_LEASE_COMMANDS]) assert.ok(registeredCommands().get(name.split(' ')[0]), name);
+  for (const name of OFFLINE_LEASE_COMMANDS) assert.ok(OFFLINE_COMMANDS.has(name), name);
+  const byName = new Map(buildCatalog(registeredCommands()).commands.map(command => [command.name, command]));
+  const expect = (name, desktop, endpointLease) => {
+    assert.equal(byName.get(name).desktop, desktop, name);
+    assert.equal(byName.get(name).endpoint_lease, endpointLease, name);
+  };
+  expect('session recover', 'cdp', true);
+  expect('session discard', 'none', true);
+  expect('session status', 'none', false);
+  expect('workspace inventory', 'cdp_http', false);
+  expect('pine analyze', 'none', false);
+  expect('launch', 'launches', true);
+  expect('ui eval', 'cdp', true);
+  expect('state', 'cdp', 'without_workspace');
+  expect('workspace init', 'cdp', false);
+});
+
+it('help declares and honors its conditional output format', () => {
+  const help = buildCatalog(registeredCommands(), ['help']).commands[0];
+  assert.equal(help.output, 'conditional');
+  assert.match(help.output_when, /--json/);
+  assert.doesNotThrow(() => JSON.parse(run(['help', '--json', 'help']).stdout));
+  assert.throws(() => JSON.parse(run(['help', 'pine']).stdout));
+});
+
+it('help works under --workspace without touching the workspace file', () => {
+  const missing = 'missing-workspace.tvws.json';
+  const json = run(['--workspace', missing, 'help', '--json', 'pine', 'check']);
+  assert.equal(json.exitCode, 0, json.stderr);
+  assert.deepEqual(JSON.parse(json.stdout).commands.map(command => command.name), ['pine check']);
+  const text = run(['--workspace', missing, 'help', 'pine']);
+  assert.equal(text.exitCode, 0, text.stderr);
+  assert.equal(text.stdout, run(['pine', '--help']).stdout);
 });
