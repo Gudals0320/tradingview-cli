@@ -8,7 +8,7 @@
   },
   "scripts": {
     "tv": "node src/cli/index.js",
-    "lint": "eslint src/ tests/ examples/",
+    "lint": "eslint src/ tests/ examples/ scripts/",
     "test": "npm run test:unit",
     "test:unit": "node scripts/test-unit.mjs",
     "test:e2e": "npm run smoke:desktop",
