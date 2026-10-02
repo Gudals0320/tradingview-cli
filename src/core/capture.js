@@ -17,6 +17,7 @@ export function safeFilename(value) {
 }
 
 export async function captureScreenshot({ region, filename, method, waitForRender = false } = {}) {
+  if(method!==undefined&&!['cdp','api'].includes(method))throw new Error('Screenshot method must be cdp or api.');
   mkdirSync(SCREENSHOT_DIR, { recursive: true });
 
   if (waitForRender) await waitForChartRender();
@@ -28,13 +29,13 @@ export async function captureScreenshot({ region, filename, method, waitForRende
   if (method === 'api') {
     try {
       const colPath = await getChartCollection();
-      await evaluate(`${colPath}.takeScreenshot()`);
+      await evaluate(`${colPath}.takeScreenshot()`,{mutation:true});
       return {
         success: true, method: 'api', waited_for_render: !!waitForRender,
         note: 'takeScreenshot() triggered — TradingView will save/show the screenshot via its own UI',
       };
-    } catch {
-      // Fall through to CDP method
+    } catch(cause) {
+      throw Object.assign(new Error('Owned chart screenshot API failed; no hidden-tab CDP fallback was attempted.'),{code:'SCREENSHOT_API_UNAVAILABLE',cause});
     }
   }
 

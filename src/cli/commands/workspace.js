@@ -1,15 +1,37 @@
 import { register } from '../router.js';
-import { initWorkspace, recoverWorkspace, closeWorkspace, workspaceInventory, rebindWorkspace } from '../../workspace.js';
+import { initWorkspace, recoverWorkspace, closeWorkspace, workspaceInventory, rebindWorkspace, createWorkspace, verifyWorkspaceSelection, reconnectWorkspace,resetWorkspace } from '../../workspace.js';
+import { listWorkspaceNames, registerWorkspaceName, resolveWorkspace } from '../../workspace-registry.js';
 import { workspaceStatus, markInterrupted, abandonWorkspace } from '../../workspace-store.js';
 import { compilationState, STRATEGY_PAGE_CODE } from '../../strategy-state.js';
 import { evaluate } from '../../connection.js';
-import { admissionGateStatus, clearAdmissionGate } from '../../session.js';
+import { admissionGateStatus, clearAdmissionGate,currentWorkspaceSession } from '../../session.js';
+import { resourceLockStatus, clearDeadResource } from '../../resource-lock.js';
 
 const file = { type: 'string', description: 'Persistent workspace file' };
 const operation = { type: 'string', description: 'Exact interrupted operation ID' };
 register('workspace', {
   description: 'Independent target/layout/Pine ownership',
   subcommands: new Map([
+    ['reset',{description:'Explicitly release a quiescent/lost workspace and its name; preserve artifacts, never recreate or reset while disconnected',options:{id:{type:'string',description:'Exact workspace ID from list/show'},operation:{type:'string',description:'Exact dead/interrupted operation ID for a proven lost target'},'reservation-id':{type:'string',description:'Exact dead preparation reservation ID when no workspace exists'}},handler:(opts,args)=>resetWorkspace(args[0],{...opts,reservationId:opts['reservation-id']})}],
+    ['locks', {description:'Inspect resource holders and bounded wait tickets without Desktop access',handler:()=>({success:true,...resourceLockStatus()})}],
+    ['lock-clear', {description:'Clear an exact dead resource token only after its native journal is reconciled',options:{token:{type:'string',description:'Exact dead holder token from workspace locks'}},handler:opts=>clearDeadResource(opts.token)}],
+    ['reconnect', { description: 'Explicitly bind the saved layout on an inspectable target; invalidate old results', options: {
+      target: { type: 'string', description: 'Exact replacement CDP target already showing the dedicated layout' }, generation: { type: 'string', description: 'Exact recorded page generation from workspace show' },
+    }, handler: (opts, args) => reconnectWorkspace(args[0], opts) }],
+    ['attach', { description: 'Attach a dedicated Pine document already mounted in this chart-only workspace', options: {
+      pine: { type: 'string', description: 'Exact dedicated saved document ID' }, generation: { type: 'string', description: 'Exact recorded page generation' },
+    }, handler: (opts, args) => reconnectWorkspace(args[0], opts) }],
+    ['detach', { description: 'Convert to chart-only without changing or closing the editor document', options: {
+      generation: { type: 'string', description: 'Exact recorded page generation' },
+    }, handler: (opts, args) => reconnectWorkspace(args[0], { ...opts, detach: true }) }],
+    ['list', { description: 'List persistent workspace names (selection is terminal-local)', handler: () => listWorkspaceNames() }],
+    ['import', { description: 'Import a released legacy schema 1/2 handle; preserve its old private artifacts', options: { file,'legacy-state':{type:'string',description:'Optional exact old private state directory (default old temporary store)'} }, handler: (opts, args) => registerWorkspaceName(args[0], opts.file,{...(opts['legacy-state']?{legacyDirectory:opts['legacy-state']}:{})}) }],
+    ['create', { description: 'Create a named workspace for one open dedicated saved layout; Pine is optional', options: {
+      layout: { type: 'string', description: 'Exact saved layout ID (first use layout create/open)' },
+      target: { type: 'string', description: 'Optional exact CDP target for migration' }, pine: { type: 'string', description: 'Optional dedicated saved Pine document ID' },
+    }, handler: (opts, args) => createWorkspace(args[0], opts) }],
+    ['select', { description: 'Verify workspace/layout selection; PowerShell module applies it to the calling terminal', handler: (_, args) => verifyWorkspaceSelection(args[0]) }],
+    ['show', { description: 'Inspect a named workspace without changing terminal selection', handler: (_, args) => workspaceStatus(resolveWorkspace(args[0])) }],
     ['inventory', { description: 'HTTP-only target/layout inventory (no page execution)', handler: workspaceInventory }],
     ['gate-status', { description: 'Inspect admission metadata ownership', handler: () => admissionGateStatus() }],
     ['gate-clear', { description: 'Clear an exact dead admission gate; retain all reservations', options: { token: { type: 'string', description: 'Exact dead admission gate token from gate-status' }, 'repair-token': { type: 'string', description: 'Exact dead repair token from gate-status' } }, handler: opts => clearAdmissionGate(opts.token, { repairToken: opts['repair-token'] }) }],
@@ -28,16 +50,23 @@ register('workspace', {
     ['release', { description: 'Release idle resources; preserve artifacts', options: { file }, handler: opts => closeWorkspace(opts.file) }],
     ['abandon', { description: 'Explicit offline release after target/handle loss; preserve incomplete artifacts', options: { file, operation, id: { type: 'string', description: 'Exact workspace ID' } },
       handler: opts => abandonWorkspace(opts.file, { workspaceId: opts.id, operationId: opts.operation }) }],
-    ['wait', { description: 'Wait for this workspace strategy calculation (use --workspace FILE)', options: { timeout: { type: 'string', description: 'Milliseconds to wait (default 30000, max 300000)' } }, handler: async opts => {
+    ['wait', { description: 'Observe admitted/queued work and wait for the named workspace calculation (use --workspace NAME)', options: { timeout: { type: 'string', description: 'Milliseconds to wait (default 30000, max 300000)' } }, handler: async opts => {
       const timeout = Number(opts.timeout || 30000), start = Date.now();
+      const inspect=opts._deps?.evaluate||evaluate,getStatus=opts._deps?.status||workspaceStatus,getLocks=opts._deps?.locks||resourceLockStatus;
       if (!Number.isFinite(timeout) || timeout < 1 || timeout > 300000) throw new Error('timeout must be 1..300000 ms.');
       do {
-        const state = await evaluate(`(() => {${STRATEGY_PAGE_CODE};return (${compilationState.toString()})(window);})()`);
-        if (state.phase === 'ready') return { success: true, ...state };
-        if (['failed', 'invalidated', 'not-strategy', 'unverified'].includes(state.phase)) return { success: false, ...state };
-        await new Promise(resolve => setTimeout(resolve, 100));
+        const owned=currentWorkspaceSession()?.workspace;
+        const status=owned?getStatus(owned.file):null;
+        const locks=owned?getLocks():null;
+        const admitted=owned?[...(locks?.holders||[]),...(locks?.queue||[])].filter(row=>row.workspace_id===owned.id):[];
+        const state = await inspect(`(() => {${STRATEGY_PAGE_CODE};return (${compilationState.toString()})(window);})()`);
+        if(!status?.operation&&!admitted.length) {
+          if (state.phase === 'ready') return { success: true, ...state };
+          if (['failed', 'invalidated', 'not-strategy', 'unverified'].includes(state.phase)) return { success: false, ...state };
+        } else if(status?.operation&&!status.owner_alive)return {success:false,code:'WORKSPACE_OWNER_DEAD',operation:status.operation,error:'Active operation owner terminated; inspect and reconcile it.'};
+        await (opts._deps?.sleep|| (ms=>new Promise(resolve=>setTimeout(resolve,ms))))(100);
       } while (Date.now() - start < timeout);
-      return { success: false, code: 'REPORT_TIMEOUT', error: 'Workspace calculation did not complete.' };
+      return { success: false, code: 'REPORT_TIMEOUT',calculation_pending:true, error: 'Workspace calculation did not complete.' };
     } }],
   ]),
 });

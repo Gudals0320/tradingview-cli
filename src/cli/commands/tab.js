@@ -17,14 +17,13 @@ register('tab', {
       handler: (opts) => core.newTab({ layout: opts.layout, name: opts.name }),
     }],
     ['close', {
-      description: 'Close the current tab',
-      handler: () => core.closeTab(),
+      description: 'Close only the selected workspace owned CLI-created tab; preserve save/discard decisions',
+      handler: opts => core.closeTab({ target_id: opts.workspaceTarget }),
     }],
     ['switch', {
-      description: 'Switch to a tab by index',
+      description: 'Select the owned workspace tab; an optional legacy index must match it',
       handler: (opts, positionals) => {
-        if (positionals[0] === undefined) throw new Error('Index required. Usage: tv tab switch 0');
-        return core.switchTab({ index: positionals[0] });
+        return core.switchTab({ index: positionals[0], target_id: opts.workspaceTarget });
       },
     }],
   ]),

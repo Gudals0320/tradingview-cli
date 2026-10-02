@@ -1,18 +1,23 @@
 import { mkdirSync, openSync, closeSync, readFileSync, writeFileSync, existsSync, unlinkSync, renameSync, readdirSync } from 'node:fs';
+import { stateDirectory } from './state-directory.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { CDP_HOST, CDP_PORT } from './config.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { ownerAlive } from './process-identity.js';
 
 const owned = new Map();
 const access = new AsyncLocalStorage();
 let admissionDepth = 0;
 export function withReadOnlySession(action) { return access.run({ readOnly: true }, action); }
 export function isReadOnlySession() { return access.getStore()?.readOnly === true; }
-export function withWorkspaceSession(lease, action) { return access.run({ workspace: lease }, action); }
+export function withWorkspaceSession(lease, action) { return access.run({ ...access.getStore(), workspace: lease }, action); }
 export function currentWorkspaceSession() { return access.getStore()?.workspace || null; }
 export function withLegacySession(lease, action) { return access.run({ ...access.getStore(), legacy: lease }, action); }
+export function withSharedSession(action) { return access.run({ ...access.getStore(), shared: true }, action); }
+export function withSharedTarget(action) { return access.run({ ...access.getStore(), workspace: null, shared: true }, action); }
+export function isSharedSession() { return access.getStore()?.shared === true; }
 export function nativeCheckpoint(command, targetId, details = {}) {
   const lease = access.getStore()?.legacy;
   if (!lease) return;
@@ -34,7 +39,7 @@ export function canonicalSessionHost(host) {
     || /^127\./.test(value) || /^::ffff:127\./.test(value)) return '127.0.0.1';
   return value;
 }
-export function sessionPaths({ host = CDP_HOST, port = CDP_PORT, directory = join(tmpdir(), 'tradingview-cli-sessions') } = {}) {
+export function sessionPaths({ host = CDP_HOST, port = CDP_PORT, directory = stateDirectory() } = {}) {
   const endpoint = `${canonicalSessionHost(host)}:${port}`;
   const key = createHash('sha256').update(endpoint).digest('hex');
   const gateKey = createHash('sha256').update('desktop-admission-metadata').digest('hex');
@@ -46,6 +51,26 @@ function alive(pid) {
   try { process.kill(pid, 0); return true; } catch (error) { return error.code !== 'ESRCH'; }
 }
 function read(path) { return JSON.parse(readFileSync(path, 'utf8')); }
+
+export function assertLegacyCompatibility({ target, shared = false, ...options } = {}) {
+  // Old installed CLIs still use the temporary store. Read it without moving or deleting it.
+  if (options.directory && !options.legacyDirectory) return;
+  const paths = sessionPaths({ ...options, directory: options.legacyDirectory || join(tmpdir(), 'tradingview-cli-sessions') });
+  if (paths.directory === sessionPaths(options).directory) return;
+  if (existsSync(paths.lock)) {
+    const lock = read(paths.lock);
+    if (ownerAlive(lock)&&lock.scope!=='app') throw failure('LEGACY_CLI_ACTIVE', 'An old installed CLI owns the temporary endpoint lease. Wait for it and update that terminal.');
+  }
+  if (existsSync(paths.journal)) {
+    let pending;
+    try { pending = read(paths.journal); } catch { pending = {}; }
+    const targets = [pending.target_id, pending.snapshot?.target_id, ...(pending.targets || [])].filter(Boolean);
+    if ((target && targets.includes(target)) || shared) {
+      const error = failure('LEGACY_RECOVERY_REQUIRED', 'A legacy journal affects this target or shared app operations. Preserve it and reconcile with the old CLI before migrating.');
+      error.details = { run_id: pending.run_id || pending.snapshot?.run_id || null, journal: paths.journal, scope: targets.length ? 'recorded_targets_and_app' : 'app' }; throw error;
+    }
+  }
+}
 
 function busyOwner(lock) {
   return failure('SESSION_BUSY', `TradingView CLI command ${lock.command || '<unknown>'} owns this Desktop session (pid ${lock.pid}, run_id ${lock.run_id || '<unknown>'}, started_at ${lock.created_at || '<unknown>'}).`);
@@ -73,7 +98,10 @@ export function reclaimDeadSession(options = {}) {
   const paths = sessionPaths(options);
   if (!existsSync(paths.lock)) return;
   const lock = read(paths.lock);
-  if (alive(lock.pid)) throw busyOwner(lock);
+  if(lock.scope==='app'&&!lock.desktop_wide)return;
+  const proof=options.ownerProof;
+  const provenDead=proof&&proof.owner_pid===lock.pid&&proof.run_id===(lock.run_id||null)&&proof.process_started_at===(lock.process_started_at||null)&&proof.owner_alive===false;
+  if (!provenDead && alive(lock.pid)) throw busyOwner(lock);
   removeOwnedFile(paths.lock); // Never remove its recovery journal.
 }
 
@@ -95,6 +123,7 @@ export function assertNoPortLease(options = {}) {
   if (!existsSync(paths.directory)) return;
   for (const file of readdirSync(paths.directory).filter(name => name.endsWith('.lock'))) {
     let lock; try { lock = read(join(paths.directory, file)); } catch { throw failure('OWNERSHIP_UNREADABLE', 'A legacy lease cannot be verified before workspace registration.'); }
+    if(lock.scope==='app'&&!lock.desktop_wide)continue;
     if (Number(lock.port) === port || lock.desktop_wide) {
       if (alive(lock.pid) || !admissionDepth) throw busyOwner(lock);
       removeOwnedFile(join(paths.directory, file));
@@ -117,14 +146,22 @@ export function assertNoWorkspaceAnywhere(options = {}) {
 export function withAdmissionGate(options, action) {
   if (action.constructor.name === 'AsyncFunction') throw failure('ADMISSION_ASYNC', 'Admission actions must be synchronous metadata transactions.');
   const paths = sessionPaths(options);
-  mkdirSync(paths.directory, { recursive: true });
+  try { mkdirSync(paths.directory, { recursive: true }); }
+  catch (error) { if (['EPERM', 'EACCES'].includes(error.code)) throw failure('ADMISSION_PERMISSION', `Cannot write admission directory: ${paths.directory}.`); throw error; }
   let gate;
   const started = Date.now();
   for (;;) {
     try { gate = openSync(paths.gate, 'wx', 0o600); break; }
     catch (error) {
       if (!['EEXIST', 'EPERM', 'EBUSY', 'EACCES'].includes(error.code)) throw error;
-      if (Date.now() - started >= (options.gateTimeout || 2000)) throw failure('ADMISSION_BUSY', `Admission metadata did not clear. Inspect ${paths.gate} if its process was killed.`);
+      if (Date.now() - started >= (options.gateTimeout || 2000)) {
+        if (['EPERM', 'EACCES'].includes(error.code)) {
+          const probe = `${paths.gate}.${randomUUID()}.permission-probe`;
+          try { const handle = openSync(probe, 'wx', 0o600); closeSync(handle); unlinkSync(probe); }
+          catch (cause) { if (['EPERM', 'EACCES'].includes(cause.code)) throw failure('ADMISSION_PERMISSION', `Cannot write admission metadata: ${paths.directory}. Check owner and permissions.`); throw cause; }
+        }
+        throw failure('ADMISSION_BUSY', `Admission metadata did not clear. Inspect ${paths.gate} if its process was killed.`);
+      }
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5 + Math.floor(Math.random() * 10));
     }
   }
@@ -158,7 +195,7 @@ export function admissionGateStatus(options = {}) {
   if (!existsSync(path)) return { success: true, busy: false, repair };
   let value;
   try { value = read(path); } catch { throw failure('OWNERSHIP_UNREADABLE', 'Admission gate is malformed; automatic removal is unsafe.'); }
-  return { success: true, busy: true, path, ...value, owner_alive: alive(value.pid), repair };
+  return { success: true, busy: true, path, ...value, owner_alive: ownerAlive(value), repair };
 }
 
 /** Explicit dead-gate repair. PID reuse stays fail-closed while that PID exists. */
@@ -200,11 +237,13 @@ export function sessionStatus(options = {}) {
   if (existsSync(paths.journal)) { try { pending = read(paths.journal); } catch { /* report existence without exposing draft */ } }
   return { locked: Boolean(lock), owner_pid: lock?.pid || null, run_id: lock?.run_id || null,
     owner_command: lock?.command || null, process_started_at: lock?.process_started_at || null,
-    owner_alive: lock ? alive(lock.pid) : false, recovery_required: existsSync(paths.journal), journal_path: paths.journal,
+    owner_scope:lock?.scope||'legacy',recovery_effect_scope:pending?.effect_scope||null,
+    owner_alive: lock ? options.fastIdentity ? alive(lock.pid) : ownerAlive({...lock,process_started_at:lock.process_started_at}) : false, recovery_required: existsSync(paths.journal), journal_path: paths.journal,
     recovery_run_id: pending?.run_id || pending?.snapshot?.run_id || null,
     native_quiescence_required: pending?.native_quiescence_required === true,
     recovery_journal_hash: existsSync(paths.journal) ? sourceHash(readFileSync(paths.journal)) : null,
-    recovery_target: pending?.snapshot ? { target_id: pending.snapshot.target_id, chart_id: pending.snapshot.chart_id } : null,
+    recovery_target: pending ? { target_id: pending.target_id || pending.snapshot?.target_id, chart_id: pending.snapshot?.chart_id } : null,
+    recovery_targets:pending?[...new Set([pending.target_id,pending.snapshot?.target_id,...(pending.targets||[])].filter(Boolean))]:[],
     acquisition_in_progress: existsSync(paths.gate) };
 }
 
@@ -217,7 +256,8 @@ export function assertSessionAccess(options = {}) {
     workspace.assertOwner(); return;
   }
   if (owned.has(paths.key)) return;
-  assertNoLocalWorkspace(options);
+  if (isSharedSession()) return;
+  if (!options.shared) assertNoLocalWorkspace(options);
   const state = sessionStatus(options);
   if (state.locked && state.owner_alive) throw failure('SESSION_BUSY', 'Another TradingView CLI process owns this Desktop session.');
   if (state.recovery_required && !(options.readOnly || isReadOnlySession())) throw failure('RECOVERY_REQUIRED',
@@ -226,10 +266,12 @@ export function assertSessionAccess(options = {}) {
 
 export function acquireSession(options = {}) {
   const paths = sessionPaths(options);
+  const proof=sessionStatus(options);
   return withAdmissionGate(options, () => {
   if (options.desktopWide) assertNoWorkspaceAnywhere(options);
-  assertNoLocalWorkspace(options);
-  const status = sessionStatus(options);
+  if (!options.shared) assertNoLocalWorkspace(options);
+  const status = sessionStatus({...options,fastIdentity:true});
+  if(status.owner_pid===proof.owner_pid&&status.run_id===proof.run_id&&status.process_started_at===proof.process_started_at&&!proof.owner_alive)status.owner_alive=false;
   if (status.locked) {
     if (status.owner_alive) throw busyOwner(read(paths.lock));
     if (status.recovery_required && !options.recover && !options.readOnly) throw failure('RECOVERY_REQUIRED', recoveryHint(status, paths));
@@ -242,6 +284,7 @@ export function acquireSession(options = {}) {
   try { handle = openSync(paths.lock, 'wx', 0o600); }
   catch (error) { if (error.code === 'EEXIST') throw failure('SESSION_BUSY', 'Another batch acquired this session.'); throw error; }
   writeFileSync(handle, JSON.stringify({ pid: process.pid, run_id, command: options.command || null,
+    scope:options.shared?'app':'legacy',
     process_started_at: new Date(Date.now() - process.uptime() * 1000).toISOString(),
     port: Number(options.port ?? CDP_PORT), desktop_wide: Boolean(options.desktopWide), created_at: new Date().toISOString() }));
   closeSync(handle);
@@ -273,9 +316,9 @@ export function acquireSession(options = {}) {
 }
 
 /** Explicitly abandon restoration; archive the draft for manual recovery. */
-export function discardSession({ runId, journalHash, ...options } = {}) {
+export function discardSession({ runId, journalHash, lostTargetInventory, ...options } = {}) {
   if (!runId && !journalHash) throw failure('RUN_ID_REQUIRED', 'Pass the exact recovery_run_id or, for a malformed journal, recovery_journal_hash.');
-  const lease = acquireSession({ ...options, recover: true });
+  const lease = acquireSession({ ...options, recover: true, shared:true });
   try {
     let pending;
     try { pending = lease.pending(); }
@@ -290,11 +333,15 @@ export function discardSession({ runId, journalHash, ...options } = {}) {
         warning: 'Malformed journal archived unchanged. Inspect Desktop manually before retrying.' };
     }
     if (!pending) throw failure('RECOVERY_NOT_FOUND', 'There is no recovery journal to discard.');
-    if (pending.native_quiescence_required) throw failure('RECOVERY_REQUIRED', 'Use session recover to verify native quiescence before clearing this fence.');
+    if (pending.native_quiescence_required) {
+      const targets=[...new Set([pending.target_id,...(pending.targets||[])].filter(Boolean))];
+      if(Array.isArray(lostTargetInventory)&&!lostTargetInventory.some(row=>row.type==='page'&&/tradingview\.com\/chart\//.test(row.url||'')))throw failure('RECOVERY_TARGET_UNCONFIRMED','No inspectable chart pages exist; Desktop may still be starting. Absence is not yet proven.');
+      if(!Array.isArray(lostTargetInventory)||!targets.length||targets.some(id=>lostTargetInventory.some(row=>row.id===id)))throw failure('RECOVERY_REQUIRED', 'Use session recover to verify native quiescence, or --target-lost for targets proven absent on reachable CDP.');
+    }
     if (runId !== (pending.run_id || pending.snapshot?.run_id)) throw failure('RUN_ID_MISMATCH', 'The run ID does not match the saved recovery journal; nothing was discarded.');
     const backup = `${lease.paths.journal}.${randomUUID()}.discarded`;
     renameSync(lease.paths.journal, backup);
-    return { success: true, discarded: true, restored: false, run_id: runId, backup_path: backup,
+    return { success: true, discarded: true, restored: false, incomplete:true, run_id: runId, backup_path: backup,
       warning: 'Desktop changes were left in place. The saved draft remains in the archived journal.' };
   } finally { lease.release(); }
 }

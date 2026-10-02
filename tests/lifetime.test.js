@@ -46,7 +46,7 @@ it('workspace admission reclaims only dead leases under the gate and preserves j
   const second = options(), p2 = sessionPaths(second);
   const lease = acquireSession(second); lease.checkpoint({ source: 'retain' }); lease.release();
   writeFileSync(p2.lock, JSON.stringify({ pid: 99999999, port: 1 }));
-  assert.throws(() => reserveWorkspace({ ...resources, file: join(second.directory, 'qa.json') }, second), { code: 'SESSION_BUSY' });
+  assert.ok(reserveWorkspace({ ...resources, file: join(second.directory, 'qa.json') }, second));
   assert.equal(JSON.parse(readFileSync(p2.journal)).source, 'retain');
   assert.equal(sessionStatus(second).locked, false);
 });

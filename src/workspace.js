@@ -1,13 +1,25 @@
 import CDP from './cdp.js';
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { readFileSync,existsSync } from 'node:fs';
 import { CDP_HOST, CDP_PORT } from './config.js';
-import { acquireWorkspace, reserveWorkspace, releaseWorkspace, workspaceError, loadWorkspace } from './workspace-store.js';
-import { withWorkspaceSession, sourceHash, canonicalSessionHost } from './session.js';
+import { acquireWorkspace, reserveWorkspace, releaseWorkspace, workspaceError, loadWorkspace, workspaceStatus, noteWorkspaceState } from './workspace-store.js';
+import { withWorkspaceSession, sourceHash, canonicalSessionHost, assertLegacyCompatibility } from './session.js';
 import { configureTarget, getClient } from './connection.js';
 import { WORKSPACE_PAGE_CODE } from './workspace-page.js';
 import { normalizeTimeframe } from './chart-context.js';
-import { WORKSPACE_COMMANDS, WORKSPACE_READS, pureRead } from './cli/policy.js';
+import { WORKSPACE_READS, pureRead, PINE_COMMANDS, FOREGROUND_COMMANDS, resourceKinds, workspaceRequired } from './cli/policy.js';
+import { acquireResources } from './resource-lock.js';
+import { getDesktopInventory } from './desktop.js';
+import { withSharedSession, withSharedTarget } from './session.js';
+import { sessionPaths,readReservations } from './session.js';
+import { registerWorkspaceName, resolveWorkspace, selectWorkspace, reserveWorkspaceName, recordCreatedLayout, wasCreatedLayout,workspaceNameRecord,forgetWorkspaceName } from './workspace-registry.js';
+import {abandonWorkspace} from './workspace-store.js';
+import {ownerAlive} from './process-identity.js';
+import {synchronizeLegacyNamespace} from './legacy-bridge.js';
+import { newTab } from './core/tab.js';
+import { secureDirectory } from './private-store.js';
+import { layoutList } from './core/ui.js';
 export { WORKSPACE_COMMANDS } from './cli/policy.js';
 
 async function raw(client, expression) {
@@ -20,17 +32,23 @@ async function raw(client, expression) {
   return value.result?.value;
 }
 export async function workspaceInventory() {
-  const targets = await CDP.List({ host: CDP_HOST, port: CDP_PORT });
+  let targets;
+  try { targets = await CDP.List({ host: CDP_HOST, port: CDP_PORT }); }
+  catch (cause) { throw Object.assign(workspaceError('WORKSPACE_DISCONNECTED', 'Desktop CDP is unreachable; keep the saved workspace and reconnect after Desktop is available.'), { cause }); }
   return { success: true, targets: targets.filter(target => target.type === 'page' && /tradingview\.com\/chart\//.test(target.url))
-    .map(target => ({ target: target.id, layout: target.url.match(/\/chart\/([^/?]+)/)?.[1] || null })) };
+    .map(target => ({ target: target.id, layout: target.url.match(/\/chart\/([^/?]+)/)?.[1] || null })), partial: false, errors: [] };
 }
 async function checkLayout(workspace) {
-  const { targets } = await workspaceInventory();
+  let targets;
+  try {({targets}=await workspaceInventory());}
+  catch(cause){if(workspace.id&&workspace.file)try{noteWorkspaceState(workspace.file,'disconnected');}catch{/* Preserve transport error. */}throw cause;}
   const exact = targets.find(target => target.target === workspace.target);
-  if (!exact || exact.layout !== workspace.layout) throw workspaceError('WORKSPACE_TARGET_LOST', 'Exact target and saved layout must still be open.');
+  if (!exact) {if(workspace.id&&workspace.file)noteWorkspaceState(workspace.file,'target_lost');throw workspaceError('WORKSPACE_TARGET_LOST', 'CDP is reachable but the exact workspace target is absent. Use explicit workspace reconnect.');}
+  if (exact.layout !== workspace.layout) throw workspaceError('WORKSPACE_IDENTITY_MISMATCH', 'Target shows a different saved layout.');
   if (targets.some(target => target.target !== workspace.target && target.layout === workspace.layout)) {
     throw workspaceError('WORKSPACE_LAYOUT_SHARED', 'The saved layout is also open in another target.');
   }
+  if(workspace.id&&readReservations().some(row=>row.id===workspace.id&&['disconnected','target_lost'].includes(row.connection_state)))noteWorkspaceState(workspace.file,'idle');
 }
 async function browserIdentity() {
   const version = await CDP.Version({ host: CDP_HOST, port: CDP_PORT });
@@ -85,6 +103,93 @@ export async function initWorkspace(resources) {
     }
   });
 }
+export async function createWorkspace(name, { layout, target, pine } = {}) {
+  if (!layout) throw workspaceError('WORKSPACE_RESOURCE_REQUIRED', 'Select or create a saved layout first; pass --layout ID.');
+  const inventory = await workspaceInventory();
+  const matches = inventory.targets.filter(item => item.layout === layout && (!target || item.target === target));
+  if (matches.length !== 1) throw workspaceError('WORKSPACE_TARGET_REQUIRED', 'Open the dedicated saved layout in exactly one target using layout open, then create the workspace.');
+  const directory = join(sessionPaths().directory, 'handles'); secureDirectory(directory);
+  const file = join(directory, `${randomUUID()}.json`);
+  const reservation=reserveWorkspaceName(name,{file});
+  let initialized=false;
+  try { await initWorkspace({ file, target: matches[0].target, layout, pine,created_by_cli:wasCreatedLayout(layout,matches[0].target) });initialized=true;return registerWorkspaceName(name, file, {}, reservation.token); }
+  catch(cause){if(initialized){try{await closeWorkspace(file);}catch(cleanup){cause.details={...cause.details,workspace_file:file,cleanup_error:cleanup.message};}}throw cause;}
+  finally { reservation.cancel(); }
+}
+export async function verifyWorkspaceSelection(name) {
+  if(process.env.TV_SELECTION_CLIENT!=='powershell-module') throw workspaceError('SELECTION_REQUIRES_MODULE','A child CLI cannot select its parent terminal. Import TradingViewCli.psm1 or pass --workspace NAME.');
+  const file = resolveWorkspace(name), workspace = loadWorkspace(file);
+  await checkLayout(workspace);
+  return selectWorkspace(name);
+}
+export async function resetWorkspace(name,{id,operation,reservationId}={}) {
+  const record=workspaceNameRecord(name),row=readReservations().find(row=>row.file===record.file);
+  if(record.pending&&ownerAlive(record))throw workspaceError('WORKSPACE_BUSY','Preparation owner is alive or unverifiable.');
+  const publicId=record.file&&existsSync(record.file)?JSON.parse(readFileSync(record.file,'utf8')).id:null;
+  if(record.pending&&!row&&!publicId){if(!reservationId||reservationId!==record.token)throw workspaceError('WORKSPACE_OWNERSHIP_LOST','Pass the exact dead preparation reservation ID.');}
+  else if(!id||id!==(record.id||row?.id||publicId))throw workspaceError('WORKSPACE_OWNERSHIP_LOST','Reset requires the exact workspace ID from list/show.');
+  if(row) {
+    if(row.operation&&ownerAlive({...row.operation,token:row.operation.id}))throw workspaceError('WORKSPACE_BUSY','An active operation cannot be reset.');
+    const inventory=await workspaceInventory();
+    if(!inventory.targets.some(target=>target.target===row.target))abandonWorkspace(row.file,{workspaceId:id,operationId:operation});
+    else if(row.operation||row.interrupted)throw workspaceError('WORKSPACE_RECOVERY_REQUIRED','Recover the inspectable interrupted operation before resetting its name.');
+    else if(!existsSync(row.file)) {
+      await withSharedTarget(async()=>{configureTarget(row.target);const snapshot=await raw(await getClient(),pageCall('readWorkspacePage',{pine:false}));if(snapshot.pending)throw workspaceError('WORKSPACE_NATIVE_BUSY','Inspect and wait for native quiescence before resetting a lost handle.');});
+      abandonWorkspace(row.file,{workspaceId:id});
+    } else await closeWorkspace(row.file);
+  }
+  forgetWorkspaceName(name,record);return {success:true,reset:true,workspace_id:id,artifacts_preserved:true,desktop_changed:false};
+}
+export async function openLayout({ name, create = false } = {}) {
+  const inventory = await getDesktopInventory();
+  const previous_target = inventory.tabs.find(tab => tab.active)?.id || null;
+  if (!create) {
+    const layouts = await layoutList();
+    const exact = layouts.layouts.filter(layout => String(layout.id) === name);
+    if (exact.length === 1) name = exact[0].name;
+    const matches=layouts.layouts.filter(layout=>layout.name.toLowerCase()===name.toLowerCase());
+    if(matches.length>1)throw workspaceError('LAYOUT_AMBIGUOUS','Saved layout name is ambiguous; use its exact ID.');
+  }
+  const result = await newTab({ layout: create ? 'new' : name, name: create ? name : undefined });
+  if(create)recordCreatedLayout(result);
+  return { ...result, previous_target, foreground_changed: true };
+}
+export async function reconnectWorkspace(name, { target, generation, pine, detach = false } = {}) {
+  const file = resolveWorkspace(name), selected = loadWorkspace(file);
+  if (!generation || generation !== selected.binding?.nonce) throw workspaceError('WORKSPACE_GENERATION_CHANGED', 'Pass --generation from workspace show to acknowledge exactly the recorded generation.');
+  const resources = await acquireResources(['app', `layout:${selected.layout}`, `workspace:${selected.id}`, ...(pine || selected.pine ? [`document:${pine || selected.pine}`] : [])], { command: 'workspace reconnect', workspace_id: selected.id });
+  let lease,changedResources=false;
+  try {
+    lease = acquireWorkspace(file);
+    const inventory = await workspaceInventory();
+    if (!target) {
+      const matches = inventory.targets.filter(item => item.layout === selected.layout);
+      if (matches.length !== 1) throw workspaceError('WORKSPACE_TARGET_REQUIRED', 'Open the saved dedicated layout with layout open, then pass its exact --target. No automatic tab recreation occurs.');
+      target = matches[0].target;
+    }
+    const prospective = { ...selected, target, pine: detach ? null : pine || selected.pine };
+    await checkLayout(prospective);
+    const browser = await browserIdentity();
+    const client = await CDP({ host: CDP_HOST, port: CDP_PORT, target });
+    try {
+      const snapshot = await raw(client, pageCall('readWorkspacePage', { pine: Boolean(prospective.pine) }));
+      if (snapshot.layout !== prospective.layout || (prospective.pine && snapshot.pine !== prospective.pine)) throw workspaceError('WORKSPACE_IDENTITY_MISMATCH', 'New target must already display the owned saved layout and exact document.');
+      if(prospective.pine&&snapshot.draft===true)throw workspaceError('WORKSPACE_SAVED_DOCUMENT_REQUIRED','Save the dedicated draft as a document before attaching it; no native save was dispatched.');
+      if (snapshot.pending) throw workspaceError('WORKSPACE_NATIVE_BUSY', 'Wait for the target to settle before reconnecting.');
+      lease.checkpoint({phase:'reconnecting',command:'workspace reconnect',target_id:target,old_generation:generation,layout:selected.layout,pine:prospective.pine});
+      lease.reassign({ target, pine: prospective.pine, expectedGeneration: generation });
+      changedResources=true;
+      const binding = await raw(client, pageCall('bindWorkspacePage', lease.workspace, randomUUID()));
+      // Old study IDs, report revisions and source proofs are never reused.
+      await raw(client, '(() => { delete window.__tvCliCompilation; delete window.__tvCliPineCompile; return true; })()');
+      lease.saveBinding({ ...binding, browser, source_proof: null });
+      noteWorkspaceState(file,'idle');
+      lease.finish({ success: true, result: { rebound: true, results_invalidated: true } });
+      return { success: true, workspace_id: selected.id, target, generation: binding.nonce, results_invalidated: true, foreground_changed: false };
+    } finally { await client.close(); }
+  } catch (error) { if (lease) lease.finish({ success: false, interrupted: changedResources || error.recovery_required===true, error: error.message }); throw error; }
+  finally { resources.release(); }
+}
 async function permitFor(command, values, positionals) {
   if (command === 'pine set') {
     const source = values.file ? readFileSync(values.file, 'utf8') : await readInput();
@@ -102,7 +207,15 @@ async function permitFor(command, values, positionals) {
   if (command === 'indicator set') {
     const inputs = JSON.parse(values.inputs || '{}');
     if (['pineId', 'pineVersion', 'text'].some(key => Object.hasOwn(inputs, key))) throw workspaceError('WORKSPACE_INPUT_FORBIDDEN', 'Compiled document identity inputs cannot be edited.');
-    return { inputs };
+    return { inputs,study_id:positionals[0] };
+  }
+  if(command==='indicator add')return {add_study:true};
+  if(command==='indicator remove')return {remove_study:positionals[0]};
+  if(command==='pane focus')return {pane_index:Number(positionals[0])};
+  if(command==='pane symbol')return {pane_index:Number(positionals[0]),symbol:positionals[1]};
+  if(command==='pane layout') {
+    const aliases={single:'s','1':'s','1x1':'s','2x1':'2h','1x2':'2v','2x2':'4',grid:'4',quad:'4','3x1':'3h','1x3':'3v'};
+    const value=positionals[0].toLowerCase().replace(/\s+/g,'');return {pane_layout:aliases[value]||value};
   }
   if (['pine compile', 'pine raw-compile'].includes(command)) return { compile: true };
   if (command === 'pine save') return { save: true };
@@ -116,10 +229,27 @@ async function readInput() {
 }
 
 export async function runWorkspace(file, command, values, positionals, handler, { _deps } = {}) {
-  if (!WORKSPACE_COMMANDS.has(command)) throw workspaceError('WORKSPACE_COMMAND_UNSUPPORTED', `Command ${command} cannot run independently in a workspace.`);
-  if (command === 'quote' && positionals.length) throw workspaceError('WORKSPACE_COMMAND_UNSUPPORTED', 'Workspace quote reads the owned chart only; a symbol switch is not a pure read.');
+  synchronizeLegacyNamespace();
+  if (!workspaceRequired(command)) throw workspaceError('WORKSPACE_COMMAND_UNSUPPORTED', `Command ${command} cannot run independently in a workspace.`);
+  const selected = loadWorkspace(file);
+  assertLegacyCompatibility({target:selected.target});
+  if (['pine new', 'pine open'].includes(command)) throw workspaceError('WORKSPACE_COMMAND_UNSUPPORTED', 'Create or open a dedicated saved document in this tab, then use workspace attach. Workspace calls cannot replace an unowned editor document.');
+  if (PINE_COMMANDS.has(command) && !selected.pine) throw workspaceError('WORKSPACE_PINE_REQUIRED', 'This chart-only workspace has no owned Pine document. Use workspace attach with a dedicated saved document.');
+  if ((FOREGROUND_COMMANDS.has(command) && command !== 'tab switch') || (command === 'screenshot' && values.method !== 'api')) {
+    const inventory = await withSharedSession(() => getDesktopInventory());
+    if (!inventory.tabs.some(tab => tab.id === selected.target && tab.active)) throw workspaceError('FOREGROUND_REQUIRED', 'Select this workspace tab in Desktop before using shared UI commands.');
+    if (command === 'layout switch') throw workspaceError('WORKSPACE_COMMAND_UNSUPPORTED', 'Use layout open and create/select its workspace; registered saved layouts cannot be silently replaced.');
+  }
+  if (command === 'tab close' && !selected.created_by_cli) throw workspaceError('WORKSPACE_TAB_NOT_OWNED', 'Only tabs created by this CLI can be closed. Release preserves preexisting tabs.');
+  if (command === 'tab switch') {
+    const inventory = await withSharedSession(() => getDesktopInventory());
+    if (positionals[0] !== undefined && inventory.tabs[Number(positionals[0])]?.id !== selected.target) throw workspaceError('WORKSPACE_TARGET_MISMATCH', 'Legacy tab index does not identify the selected workspace.');
+  }
+  if (command.startsWith('tab ')) values.workspaceTarget = selected.target;
+  if(command==='stream ohlcv')values.workspaceOwned=true;
   if (WORKSPACE_READS.has(command) && pureRead(command, values, positionals)) {
     const workspace = loadWorkspace(file);
+    if (workspaceStatus(file).interrupted) throw workspaceError('WORKSPACE_RECOVERY_REQUIRED', 'Observation cannot adopt an interrupted result. Inspect workspace show and recover the exact operation.');
     const observer = { workspace, observe: true, endpoint_key: workspace.endpoint_key, assertOwner: () => loadWorkspace(file) };
     return withWorkspaceSession(observer, async () => {
       await (_deps?.checkLayout || checkLayout)(workspace);
@@ -127,29 +257,48 @@ export async function runWorkspace(file, command, values, positionals, handler, 
       configureTarget(workspace.target);
       const client = await (_deps?.getClient || getClient)(), inspect = _deps?.raw || raw;
       const before = await inspect(client, pageCall('guardWorkspacePage', owner(workspace), { observe: true }));
-      if (command === 'indicator get' && positionals[0] !== before.studies[0]?.id) throw workspaceError('WORKSPACE_STUDY_MISMATCH', 'Read only the owned study.');
+      if(command==='screenshot'&&values.method!=='api'&&(before.viewport?.width===0||before.viewport?.height===0))throw workspaceError('DESKTOP_VIEWPORT_UNAVAILABLE','Restore the existing Desktop window before CDP capture; the owned viewport is zero.');
+      if (workspace.pine && command === 'indicator get' && positionals[0] !== before.studies[0]?.id) throw workspaceError('WORKSPACE_STUDY_MISMATCH', 'Read only the owned study.');
       const result = await handler(values, positionals);
+      if (command.startsWith('stream ') && result === undefined) return;
       const after = await inspect(client, pageCall('guardWorkspacePage', owner(workspace), { observe: true }));
       const stable = sourceHash(before.source) === sourceHash(after.source)
         && JSON.stringify(before.context) === JSON.stringify(after.context)
         && JSON.stringify(before.studies.map(study => [study.id, study.inputs])) === JSON.stringify(after.studies.map(study => [study.id, study.inputs]));
-      if (!stable) throw workspaceError('WORKSPACE_OBSERVATION_CHANGED', 'Source, inputs or chart context changed during this observation; retry after the active operation settles.');
+      if (!stable && command !== 'workspace wait') throw workspaceError('WORKSPACE_OBSERVATION_CHANGED', 'Source, inputs or chart context changed during this observation; retry after the active operation settles.');
+      let reportEpoch;
+      if (['data strategy', 'data trades', 'data ledger', 'data equity'].includes(command) && result?.success) {
+        const epoch = await inspect(client, 'window.__tvCliCompilation && ({source_hash:window.__tvCliCompilation.source_hash,report_verified:window.__tvCliCompilation.report_verified,phase:window.__tvCliCompilation.phase,inputs_fingerprint:window.__tvCliCompilation.inputs_fingerprint,accepted_cycle:window.__tvCliCompilation.accepted_cycle,calculation:window.__tvCliCompilation.calculation&&({cycle:window.__tvCliCompilation.calculation.cycle,events:window.__tvCliCompilation.calculation.events,completed:window.__tvCliCompilation.calculation.completed})})');
+        reportEpoch=epoch;
+        const proof = workspace.binding.source_proof;
+        const verified = epoch?.source_hash === sourceHash(after.source) || (proof?.hash === sourceHash(after.source) && after.modified === false
+          && proof.version === String(after.version) && (proof.applied_version || proof.version) === String(after.studies[0]?.inputs.find(input => input.id === 'pineVersion')?.value));
+        if (!verified || epoch?.report_verified !== true || epoch.phase !== 'ready' || after.calculating || after.studies[0]?.status !== 2
+          || epoch.inputs_fingerprint !== JSON.stringify(after.studies[0]?.inputs) || result.strategy_id !== after.studies[0]?.id) throw workspaceError('REPORT_UNVERIFIED', 'Report does not match verified source, inputs and completed calculation.');
+      }
       const study = after.studies[0], proof = workspace.binding.source_proof;
       const persistedApplied = Boolean(proof?.hash === sourceHash(after.source) && after.modified === false
         && proof.version === String(after.version)
         && (proof.applied_version || proof.version) === String(study?.inputs.find(input => input.id === 'pineVersion')?.value));
-      return { ...result, provenance: { workspace_id: workspace.id, observation: true, target: workspace.target,
+      if (result === undefined) return;
+      return { ...result, ...(['data strategy','data trades','data ledger','data equity'].includes(command) ? {report_revision:result.report_revision || (result.success?sourceHash(JSON.stringify(result)):null),calculation_pending:after.calculating} : {}), provenance: { workspace_id: workspace.id, observation: true, target: workspace.target,
+        ...(reportEpoch?{calculation:{phase:reportEpoch.phase,accepted_cycle:reportEpoch.accepted_cycle,cycle:reportEpoch.calculation?.cycle,events:reportEpoch.calculation?.events,completed:reportEpoch.calculation?.completed?{cycle:reportEpoch.calculation.completed.cycle,key_hash:sourceHash(reportEpoch.calculation.completed.key)}:null}}:{}),
         source_hash: sourceHash(after.source), source_scope: 'editor', persisted_applied_source_verified: persistedApplied,
         study: study ? { id: study.id, status: study.status, compiled_hash: sourceHash(JSON.stringify(study.inputs)) } : null,
         context: after.context, page_generation: workspace.binding.nonce,
-        changed_during_read: false } };
+        changed_during_read: !stable } };
     });
   }
-  const permit = await permitFor(command, values, positionals), lease = acquireWorkspace(file), workspace = lease.workspace;
+  const permit = await permitFor(command, values, positionals);
+  if(command==='quote'&&positionals[0])permit.symbols=[positionals[0],selected.binding?.snapshot?.context?.symbol].filter(Boolean);
+  const resourceLease = await (_deps?.acquireResources||acquireResources)(resourceKinds(command, values, positionals).map(kind => kind === 'app' ? 'app' : `${kind}:${kind === 'layout' ? selected.layout : kind === 'document' ? selected.pine : selected.id}`), { command, workspace_id: selected.id, timeout: values['lock-timeout-ms'] });
+  let lease;
+  try { lease = (_deps?.acquireWorkspace||acquireWorkspace)(file,{command}); } catch (error) { resourceLease.release(); throw error; }
+  const workspace = lease.workspace;
   let started = false;
-  let handlerStarted = false, client, finalState;
+  let handlerStarted = false, client, finalState, completedResult;
   const inspect = _deps?.raw || raw;
-  return withWorkspaceSession(lease, async () => {
+  try { return await withWorkspaceSession(lease, async () => {
     try {
       if (!workspace.binding) throw workspaceError('WORKSPACE_NOT_BOUND', 'Initialization did not finish; recover explicitly.');
       await (_deps?.checkLayout || checkLayout)(workspace);
@@ -158,13 +307,22 @@ export async function runWorkspace(file, command, values, positionals, handler, 
       client = await (_deps?.getClient || getClient)();
       const before = await inspect(client, pageCall('startWorkspacePage', owner(workspace), lease.operation, permit));
       started = true;
-      if (command.startsWith('indicator ') && before.studies[0]?.id !== positionals[0]) throw workspaceError('WORKSPACE_STUDY_MISMATCH', 'Indicator ID must identify the owned study.');
+      if(FOREGROUND_COMMANDS.has(command)&&command!=='tab switch'&&(before.viewport?.width===0||before.viewport?.height===0))throw workspaceError('DESKTOP_VIEWPORT_UNAVAILABLE','Restore the existing Desktop window before UI input; the owned viewport is zero.');
+      if (workspace.pine && command.startsWith('indicator ') && command !== 'indicator add' && before.studies[0]?.id !== positionals[0]) throw workspaceError('WORKSPACE_STUDY_MISMATCH', 'Indicator ID must identify the owned study.');
       const reportRead = ['data strategy', 'data trades', 'data ledger', 'data equity'].includes(command);
       if (reportRead && (before.calculating || before.studies[0]?.status !== 2)) throw workspaceError('REPORT_PENDING', 'Owned strategy calculation is not complete.');
       lease.checkpoint({ phase: 'running', command, before, permit });
       handlerStarted = true;
-      const result = await handler(values, positionals);
-      const after = await inspect(client, pageCall('finishWorkspacePage', owner(workspace), lease.operation));
+      const result = await (command.startsWith('tab ') ? withSharedTarget(() => handler(values, positionals)) : handler(values, positionals));
+      if (command === 'tab switch') client = await (_deps?.getClient || getClient)();
+      if(command==='tab close'&&result.success) {
+        const inventory=await workspaceInventory();
+        if(inventory.targets.some(item=>item.target===workspace.target))throw workspaceError('WORKSPACE_CLOSE_UNVERIFIED','The owned target is still inspectable after close.');
+        noteWorkspaceState(file,'target_lost');lease.saveBinding({...workspace.binding,source_proof:null});
+        const output={...result,workspace_id:workspace.id,target:workspace.target,state:'target_lost',results_invalidated:true};
+        completedResult=output;lease.finish({success:true,result:output});return output;
+      }
+      const after = await inspect(client, pageCall('finishWorkspacePage', owner(workspace), lease.operation,{allowIncomplete:result?.success===false&&result?.recovery_required!==true}));
       finalState = after.snapshot;
       const hash = sourceHash(after.snapshot.source);
       const persistedProof = workspace.binding.source_proof;
@@ -179,27 +337,31 @@ export async function runWorkspace(file, command, values, positionals, handler, 
       const success = result?.success !== false && result?.compiled !== false && result?.has_errors !== true;
       const source_proof = command === 'pine save' && result?.saved ? { hash, version: String(after.snapshot.version) } : workspace.binding.source_proof;
       lease.saveBinding({ ...workspace.binding, snapshot: after.snapshot, source_proof });
+      noteWorkspaceState(file,after.snapshot.calculating?'calculating':'idle');
       const study = after.snapshot.studies[0];
       const calculation = after.calculation ? { ...after.calculation, inputs_fingerprint: undefined,
         inputs_hash: after.calculation.inputs_fingerprint ? sourceHash(after.calculation.inputs_fingerprint) : null,
         completed: after.calculation.completed ? { cycle: after.calculation.completed.cycle, key_hash: sourceHash(after.calculation.completed.key) } : null } : null;
       const provenance = { workspace_id: workspace.id, operation_id: lease.operation, target: workspace.target, layout: workspace.layout, pine: workspace.pine,
+        locks: { waited_ms: resourceLease.waited_ms, waited_for:resourceLease.waited_for, resources: resourceLease.resources, command: resourceLease.command },
         page_generation: workspace.binding.nonce, source_hash: sourceHash(after.snapshot.source), context: after.snapshot.context,
         study: study ? { ...study, inputs: study.inputs.filter(input => input.id !== 'text'), compiled_hash: sourceHash(JSON.stringify(study.inputs)) } : null, calculation, native_events: after.events };
       const output = { ...result, provenance };
       lease.checkpoint({ phase: success ? 'complete' : 'failed', command, before, after: after.snapshot, provenance });
-      lease.finish({ success, result: output, interrupted: false }); return output;
+      completedResult=output;lease.finish({ success, result: output, interrupted: false }); return output;
     } catch (error) {
-      let interrupted = ['WORKSPACE_EXTERNAL_CHANGE', 'WORKSPACE_PAGE_BUSY', 'CDP_TIMEOUT'].includes(error.code) || (handlerStarted && !finalState);
+      if(completedResult!==undefined)error.details={...error.details,completed_result:completedResult,result_committed:false,native_outcome:'native outcome verified; metadata commit is unconfirmed, do not replay'};
+      let interrupted = ['WORKSPACE_PAGE_BUSY', 'CDP_TIMEOUT'].includes(error.code) || (handlerStarted && !finalState);
+      if(!started&&error.code==='WORKSPACE_EXTERNAL_CHANGE')noteWorkspaceState(file,'external_conflict');
       if (started && !finalState) {
         try { const after = await inspect(client, pageCall('finishWorkspacePage', owner(workspace), lease.operation)); finalState = after.snapshot; interrupted = false; }
         catch { interrupted = true; }
       }
       if (finalState) try { lease.saveBinding({ ...workspace.binding, snapshot: finalState }); } catch { interrupted = true; }
-      try { lease.finish({ success: false, interrupted, error: error.message }); } catch (cleanup) { error.details = { cleanup_error: cleanup.message }; }
+      try { lease.finish({ success: completedResult?.success===true, result:completedResult,interrupted, error: error.message }); } catch (cleanup) { error.details = {...error.details,cleanup_error: cleanup.message }; }
       throw error;
     }
-  });
+  }); } finally { try{resourceLease.release();}catch(error){if(completedResult!==undefined)error.details={...error.details,completed_result:completedResult,result_committed:true,native_outcome:'completed; repair ownership instead of replaying'};throw error;} }
 }
 
 export async function recoverWorkspace(file, { operationId, rebind = false, restoreDocument = false } = {}) {

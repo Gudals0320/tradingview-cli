@@ -78,7 +78,7 @@ export async function inspectTarget(target, expression, { _deps, mutation = fals
 export async function getDesktopInventory({ _deps } = {}) {
   const targets = _deps?.targets || await CDP.List({ host: CDP_HOST, port: CDP_PORT });
   const inspect = _deps?.inspect || inspectTarget;
-  const shells = [], identities = {};
+  const shells = [], identities = {}, errors = [];
   const probes = targets.filter(target => target.type === 'page').flatMap(target => {
     if (/\/window\/index\.html/.test(target.url || '')) return [{ target, shell: true, expression: `(${readShellState.toString()})(document, window)` }];
     if (/tradingview\.com\/chart|\/new-tab\/index\.html/.test(target.url || '')) return [{ target, expression: `(${readPageIdentity.toString()})(document, window)` }];
@@ -97,11 +97,11 @@ export async function getDesktopInventory({ _deps } = {}) {
   // Consume/close every independent probe before surfacing a deterministic error.
   for (let index = 0; index < probes.length; index++) {
     const probe = probes[index], result = results[index];
-    if (result.error) throw result.error;
+    if (result.error) { errors.push({ target_id: probe.target.id, code: result.error.code || 'TARGET_PROBE_FAILED', error: result.error.message }); continue; }
     if (probe.shell) { if (result.value) shells.push({ id: probe.target.id, state: result.value }); }
     else identities[probe.target.id] = result.value;
   }
-  return { targets, shells, tabs: resolveInventory(targets, shells, identities) };
+  return { targets, shells, tabs: resolveInventory(targets, shells, identities), partial: errors.length > 0, errors };
 }
 
 export function activeTarget(inventory) {

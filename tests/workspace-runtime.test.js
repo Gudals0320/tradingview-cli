@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto';
 const runtimeSessionRoot = mkdtempSync(join(tmpdir(), 'tv-runtime-session-'));
 process.env.TEMP = runtimeSessionRoot;
 process.env.TMP = runtimeSessionRoot;
+process.env.TV_STATE_DIR = join(runtimeSessionRoot, 'tradingview-cli-sessions');
 process.env.TV_CDP_HOST = `runtime-fixture-${randomUUID()}`;
 process.env.TV_CDP_PORT = '1';
 const { reserveWorkspace, acquireWorkspace, workspaceStatus, abandonWorkspace } = await import('../src/workspace-store.js');
@@ -25,6 +26,7 @@ function fixture() {
     if(expression.startsWith('startWorkspacePage') || expression.startsWith('guardWorkspacePage'))return snapshot;
     if(expression.startsWith('finishWorkspacePage'))return {snapshot,calculation};
     if(expression==='window.__tvCliWorkspace?.nonce')return 'generation';
+    if(expression.startsWith('window.__tvCliCompilation'))return calculation;
     throw new Error('Unexpected page operation '+expression);
   }};
   return {workspace,snapshot,calculation,deps,cleanup:()=>abandonWorkspace(workspace.file,{workspaceId:workspace.id})};
@@ -68,12 +70,27 @@ it('TTY pine set without a file refuses before operation admission or stdin cons
   const descriptor=Object.getOwnPropertyDescriptor(process.stdin,'isTTY');
   Object.defineProperty(process.stdin,'isTTY',{configurable:true,value:true});
   let calls=0;
-  try {await assert.rejects(()=>runWorkspace('unused-file','pine set',{},[],async()=>{calls++;}),{code:'PINE_SOURCE_REQUIRED'});assert.equal(calls,0);}
-  finally {if(descriptor)Object.defineProperty(process.stdin,'isTTY',descriptor);else delete process.stdin.isTTY;}
+  const f=fixture();
+  try {await assert.rejects(()=>runWorkspace(f.workspace.file,'pine set',{},[],async()=>{calls++;}),{code:'PINE_SOURCE_REQUIRED'});assert.equal(calls,0);}
+  finally {f.cleanup();if(descriptor)Object.defineProperty(process.stdin,'isTTY',descriptor);else delete process.stdin.isTTY;}
 });
 it('rejects rebind on the same page generation without adopting external state', async()=>{
   const f=fixture();try {
     await assert.rejects(()=>rebindWorkspace(f.workspace.file,f.workspace.id,{_deps:f.deps}),{code:'WORKSPACE_GENERATION_UNCHANGED'});
+    assert.equal(workspaceStatus(f.workspace.file).interrupted,null);
+  }finally{f.cleanup();}
+});
+it('a resource release failure includes the completed committed native result instead of suggesting replay',async()=>{
+  const f=fixture();try {
+    f.deps.acquireResources=async()=>({resources:['workspace:fixture'],waited_ms:0,release(){throw Object.assign(new Error('simulated cleanup failure'),{code:'LOCK_RELEASE_FAILED',details:{token:'exact-dead-token'}});}});
+    await assert.rejects(runWorkspace(f.workspace.file,'timeframe',{},['60'],async()=>({success:true,resolution:'60'}),{_deps:f.deps}),error=>error.code==='LOCK_RELEASE_FAILED'&&error.details.completed_result.success===true&&error.details.result_committed===true&&error.details.token==='exact-dead-token');
+    assert.equal(workspaceStatus(f.workspace.file).interrupted,null);
+  }finally{f.cleanup();}
+});
+it('a metadata finish failure preserves the verified native result and marks its commit unconfirmed',async()=>{
+  const f=fixture();try {
+    f.deps.acquireWorkspace=(file,options)=>{const lease=acquireWorkspace(file,options),finish=lease.finish;let first=true;lease.finish=value=>{if(first){first=false;throw Object.assign(new Error('metadata write failed'),{code:'RESULT_COMMIT_FAILED'});}return finish(value);};return lease;};
+    await assert.rejects(runWorkspace(f.workspace.file,'timeframe',{},['60'],async()=>({success:true,resolution:'60'}),{_deps:f.deps}),error=>error.code==='RESULT_COMMIT_FAILED'&&error.details.completed_result.success===true&&error.details.result_committed===false);
     assert.equal(workspaceStatus(f.workspace.file).interrupted,null);
   }finally{f.cleanup();}
 });

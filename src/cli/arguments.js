@@ -3,13 +3,18 @@ import { alertCondition } from '../core/alerts.js';
 
 // A command without an entry accepts no positional arguments.
 export const POSITIONALS = new Map([
+  ['workspace reconnect', [1, 1]], ['workspace attach', [1, 1]], ['workspace detach', [1, 1]],
+  ['workspace reset',[1,1]],
+  ['workspace create', [1, 1]], ['workspace select', [1, 1]], ['workspace import', [1, 1]], ['workspace show', [1, 1]],
+  ['layout create', [1, Infinity]], ['layout open', [1, Infinity]],
+  ['layout select',[1,1]],
   ['help', [0, 2]], ['quote', [0, 1]], ['symbol', [0, 1]], ['timeframe', [0, 1]], ['type', [0, 1]],
   ['search', [1, Infinity]], ['scroll', [1, 1]], ['data indicator', [1, 1]],
   ['indicator add', [1, Infinity]], ['indicator remove', [1, 1]],
   ['indicator toggle', [1, 1]], ['indicator set', [1, 1]], ['indicator get', [1, 1]],
   ['layout switch', [1, Infinity]], ['pane layout', [1, 1]], ['pane focus', [1, 1]],
   ['pane symbol', [2, 2]], ['pine new', [0, 1]], ['pine open', [1, Infinity]],
-  ['tab switch', [1, 1]], ['draw get', [1, 1]], ['draw remove', [1, 1]],
+  ['tab switch', [0, 1]], ['draw get', [1, 1]], ['draw remove', [1, 1]],
   ['replay trade', [1, 1]], ['stream ohlcv', [1, Infinity]],
   ['watchlist add', [1, 1]], ['watchlist add-bulk', [1, Infinity]], ['watchlist remove', [1, Infinity]],
   ['ui keyboard', [1, 1]], ['ui scroll', [0, 1]], ['ui find', [1, Infinity]],
@@ -44,7 +49,7 @@ export function validateArguments(command, values, positionals) {
       throw new Error('--inputs must be a non-empty JSON object.');
     }
   }
-  if (['pane focus', 'pane symbol', 'tab switch'].includes(command)) requireInteger(positionals[0], 'index', 0);
+  if (['pane focus', 'pane symbol', 'tab switch'].includes(command) && positionals[0] !== undefined) requireInteger(positionals[0], 'index', 0);
   if (command === 'ui mouse') positionals.forEach(value => requireFinite(value, 'coordinate'));
   if (command === 'alert create') {
     requireFinite(values.price, '--price');

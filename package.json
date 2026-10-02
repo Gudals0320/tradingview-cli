@@ -1,6 +1,6 @@
 {
   "name": "tradingview-cli",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Personal TradingView Desktop CLI with Pine development and repeatable experiments",
   "type": "module",
   "bin": {
@@ -14,7 +14,9 @@
     "test:e2e": "npm run smoke:desktop",
     "test:all": "node --test tests/*.test.js",
     "test:network": "node scripts/test-unit.mjs --network",
-    "smoke:desktop": "node scripts/smoke-desktop.mjs"
+    "smoke:desktop": "node scripts/smoke-workspaces-desktop.mjs",
+    "smoke:protection": "node scripts/smoke-workspace-protection.mjs",
+    "smoke:lifetime": "node scripts/smoke-workspace-lifetime.mjs"
   },
   "engines": {
     "node": ">=20"

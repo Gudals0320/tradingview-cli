@@ -1,160 +1,197 @@
-# Independent CLI workspaces
+# Named workspaces
 
-A workspace reserves an exact CDP endpoint, target, saved layout and saved Pine
-document between CLI calls. Prepare separate saved layouts and documents first.
-Each layout must be open in only one target and have at most one Pine study,
-belonging to that document. Registration never switches tabs or opens a document.
-Results cover ordinary backtesting; Deep Backtesting is not supported here.
+Version 2 uses saved layout → named workspace → execution. Chart commands require
+`--workspace NAME` or the calling PowerShell process's `TV_WORKSPACE` selection.
+There is no active-tab fallback or global active-workspace setting.
 
-The initial supported environment is one local Desktop loopback endpoint. Known
-localhost/IPv4/IPv6 loopback aliases share ownership. A configured hostname alias
-cannot use legacy commands while local workspaces reserve that port. The short
-metadata admission gate is shared within the session directory so registration,
-hostname aliases and Desktop-wide launch leases cannot race; it is released before
-any Desktop work. Launch/restart is
-blocked by any registered workspace even if another port is configured.
+## Prepare and select
 
 ```powershell
-tv workspace inventory
-tv workspace init --file worker-a.tvws.json --target TARGET_A --layout LAYOUT_A --pine 'USER;DOCUMENT_A'
-tv workspace init --file worker-b.tvws.json --target TARGET_B --layout LAYOUT_B --pine 'USER;DOCUMENT_B'
-tv --workspace worker-a.tvws.json symbol BITSTAMP:BTCUSD
-tv --workspace worker-a.tvws.json timeframe 60
-tv --workspace worker-a.tvws.json pine set --file strategy.pine
-tv --workspace worker-a.tvws.json pine compile --save
-tv --workspace worker-a.tvws.json indicator set STUDY_A --inputs '{"in_0":21}'
-tv --workspace worker-a.tvws.json workspace wait
-tv --workspace worker-a.tvws.json data strategy
-tv --workspace worker-a.tvws.json data ledger --offset 0 --limit 100
-tv workspace release --file worker-a.tvws.json
+Import-Module .\scripts\TradingViewCli.psm1
+tv status
+tv layout create "Research A"
+tv layout list
+tv workspace create research-a --layout LAYOUT_URL_ID
+tv workspace select research-a
+tv state
+tv symbol BITSTAMP:BTCUSD
+tv timeframe 60
 ```
 
-Run the corresponding B calls from another OS process concurrently. There is no
-execution queue or endpoint execution lock between workspaces. A short admission
-metadata transaction retries Windows filesystem/gate contention for up to two
-seconds (finish up to three); a real resource/operation duplicate fails at once.
-The configured endpoint must stay identical. `--target` and `TV_CDP_TARGET` cannot
-override a workspace. Target loss, reload, document replacement and unexpected
-source/context/input changes fail without selecting another target.
+`layout create` creates a saved layout in a **new** tab. `layout open ID` opens an
+existing saved layout in a new tab. Both return `previous_target` and
+`foreground_changed:true`; they do not rename/replace the previous chart.
+`layout list` exposes the URL layout ID as `id`, with the numeric cloud record ID
+in `storage_id`. Duplicate names are rejected. One saved layout may be reserved by
+only one workspace and must be open in exactly one target.
 
-Legacy commands take an endpoint lease for the entire invocation. This fixes the
-previous check-only admission race, so overlapping legacy invocations may return
-`SESSION_BUSY`. While any workspace remains registered, online commands without
-`--workspace` fail with `WORKSPACE_RESERVED`, including state/status/tab/UI/eval,
-layout and launch commands and pine-batch. Use `workspace inventory` for HTTP-only
-target IDs and `workspace status --file FILE` for filesystem ownership. Filesystem
-session status and offline analysis remain available. Release reservations when
-finished. Never launch/restart Desktop to bypass reservations.
+Create another dedicated layout/workspace in another terminal. Their chart
+changes, calculations and streams can overlap. Explicit `--workspace` affects
+only that invocation. Each invocation pins its target and page generation.
+Another terminal's selection cannot retarget an operation. `tv layout select ID`
+is a PowerShell-module operation: it clears selection only on layout mismatch.
 
-Results, append-only history and per-operation journals are private files under
-`.tv-workspaces/WORKSPACE_ID/`, beside the handle file. Results include workspace,
-operation, target, layout, Pine ID, page generation, source hash, strategy inputs,
-compiled identity, context and native calculation events. Only a result marked
-`committed:true` is finalized. `workspace status` identifies its authoritative
-operation-specific result file. Calculation freshness uses the existing verified
-Pine/report lifecycle; repeating identical source does not require a new version.
+The module changes Process environment only. Importing it does not edit the
+profile or User/Machine environment. `Install-TvProfile` is an explicit,
+idempotent opt-in that preserves existing profile content. Re-import with `-Force`
+after updating. Without the module, `workspace select` fails with
+`SELECTION_REQUIRES_MODULE`; use explicit names in scripts instead.
 
-An expected compile/validation error whose final state was read remains usable.
-An unverified interruption preserves its reservation and journal and blocks new
-commands on that workspace. Other workspaces can continue. Recovery explicitly
-accepts the current isolated state; it does not restore shared Desktop state.
+## Chart-only and Pine
+
+Pine is optional at creation. Chart-only binding, observation and symbol/timeframe
+changes do not access the editor. Create/open a dedicated saved Pine document in
+the owned tab and attach it explicitly, or pass `--pine` during creation when it is
+already mounted:
 
 ```powershell
-tv workspace status --file worker-a.tvws.json
-# Only after the recorded process has died:
-tv workspace interrupt --file worker-a.tvws.json --operation EXACT_ACTIVE_OPERATION
-tv workspace recover --file worker-a.tvws.json --operation EXACT_INTERRUPTED_OPERATION
-# Same resources, new page generation; acknowledge the reload explicitly:
-tv workspace recover --file worker-a.tvws.json --operation EXACT_INTERRUPTED_OPERATION --rebind
+tv workspace show research-a
+tv workspace attach research-a --pine 'USER;DOCUMENT_A' --generation EXACT_GENERATION
+tv --workspace research-a pine set --file strategy.pine
+tv --workspace research-a pine compile --save
+tv --workspace research-a pine errors
+tv --workspace research-a workspace wait
+tv --workspace research-a data strategy
+tv --workspace research-a data ledger --offset 0 --limit 100
 ```
 
-Recovery requires the exact interrupted operation, resource identity and native
-quiescence. It retains the incomplete operation's journal/result. Failed recovery
-keeps the original interrupted operation. `--rebind` requires the same exact target,
-layout and Pine document; it cannot fall back to another tab. A reused/live PID is
-never declared dead from age alone. PID reuse may require manual inspection rather
-than unsafe automatic adoption. Stale endpoint batch journals must be recovered or
-explicitly discarded through the existing session/pine-batch recovery flow first.
+A document cannot be reserved by two workspaces. No implicit cloning occurs;
+retain/delete explicit copies deliberately. Pine workspaces isolate the owned
+document's study; unrelated built-ins do not become its result identity. Duplicate
+owned studies are rejected. `workspace detach NAME --generation GEN` converts to
+chart-only without editing/closing/saving the editor. `pine new/open` reject
+replacement through a bound workspace and explain attach.
 
-If a process dies inside the short admission transaction, inspect and explicitly
-clear its exact dead gate; reservations are preserved:
+Editor/UI operations require a usable Desktop viewport. Minimization can yield
+`PINE_VIEWPORT_UNAVAILABLE`; restore the existing window. Mounted editors can run
+while another tab is selected. UI commands and CDP screenshots require the owned
+tab selected (`FOREGROUND_REQUIRED`); `screenshot --method api` uses the background
+chart API. Arbitrary UI commands do not promise background support. GUI edits are
+outside CLI locks; foreign unsaved drafts are never silently replaced/saved.
+
+## Locks, reads and streams
+
+The admission gate covers short metadata transactions only. Resource sets are
+acquired atomically: app, saved layout, document, workspace/chart. Independent
+resources proceed independently. Conflicting writers queue FIFO within their
+conflict scope, including requests spanning several resources. Default wait is
+30 seconds, maximum 300 seconds, queue capacity 64. Override with
+`--lock-timeout-ms MS`; Ctrl+C cancels/removes a waiting ticket. Timeout diagnostics
+include command/workspace/PID/start time/token. Results publish
+`provenance.locks.waited_ms`, resources and waited-for owners.
+
+Identity probes run outside the gate and compare PID **and** process start time;
+unverifiable owners stay protected. Windows delete-pending errors are retried.
+Persistent write denial yields `ADMISSION_PERMISSION`; metadata contention yields
+`ADMISSION_BUSY`. Dead waiters are reclaimed. Dead holders without incomplete
+native records are reclaimed. `LOCK_HOLDER_DEAD` retains uncertain work: reconcile
+the operation, then clear its exact token. Release failure is `LOCK_RELEASE_FAILED`.
 
 ```powershell
-tv workspace gate-status
-tv workspace gate-clear --token EXACT_GATE_TOKEN
+tv workspace locks
+tv workspace lock-clear --token EXACT_DEAD_TOKEN
+tv --workspace research-a stream quote --interval 500
+tv --workspace research-a stream ohlcv BITSTAMP:BTCUSD@60
 ```
 
-A live/unverifiable PID or malformed gate is not cleared. Lost/copied/deleted
-handles do not release their centralized reservations. Keep the original handle path and private session store safe; credentials and
-resource bindings must not be edited by hand. Schema-2 handles carry no token or
-source; schema-1 handles migrate on their next authorized operation.
+Pure observation/status/wait does not take mutation ownership or consume another
+operation's permits. Changing data samples yield `WORKSPACE_OBSERVATION_CHANGED`;
+wait can observe an acknowledged transition. Reports retain source/input/context/
+completion checks. Ledger revisions must remain constant across pages. Interrupted
+results are not adopted. Streams validate ownership/generation every tick and exit
+on loss; samples identify workspace/target/generation.
 
-If a reload happens between commands, use `workspace rebind --file FILE --id
-EXACT_WORKSPACE_ID` to acknowledge the same idle resources in a new generation.
-Rebinding reports adopted source/context/input changes. It requires the registered
-document to be mounted and the target still to exist. When a target or handle has
-been lost, use the explicit offline escape hatch instead:
+`stream ohlcv` now observes requested **existing owned-layout panes**, emitting one
+frame with `feeds`; it does not provision/reassign other targets. Prepare panes
+with workspace pane commands, or use separate workspaces. The old reassignment
+option fails with migration guidance. Stop streams yourself or impose a timeout.
+
+## Lifetime and recovery
+
+There is no daemon: each call checks browser generation, target and page nonce.
+Idle/running/interrupted/disconnected/target_lost and external-change errors differ.
+Only a successful CDP inventory with an absent target proves target loss.
+Unreachable CDP is `WORKSPACE_DISCONNECTED` (exit 2). Neither condition automatically
+launches/kills/reloads/recreates tabs. Release preserves saved resources and tabs.
 
 ```powershell
-tv workspace abandon --file FILE --id EXACT_WORKSPACE_ID --operation EXACT_INTERRUPTED_OPERATION
+tv workspace show research-a
+tv --workspace research-a workspace interrupt --operation EXACT_DEAD_OPERATION
+tv --workspace research-a workspace recover --operation EXACT_INTERRUPTED_OPERATION
+tv layout open LAYOUT_URL_ID
+tv workspace reconnect research-a --target NEW_TARGET --generation OLD_GENERATION
 ```
 
-An idle reservation needs only the exact workspace ID. An active operation must
-have a nonexistent PID and its exact operation ID; an interrupted operation also
-requires its exact ID. Abandon preserves private journals/results and records
-`incomplete:true`, releases only this workspace and does not touch Desktop. A new
-workspace can then explicitly register newly provisioned resources. Initialization
-checks HTTP inventory before reservation and rolls back a failed bind.
+Reconnect compares the exact old generation. The replacement must already show
+the same saved layout/document. Competing reconnects cannot both commit. Old study
+IDs, source proofs and report verification are invalidated; compile again. Rebind
+acknowledges the same target's new generation. Recovery's
+`--rebind --restore-document` restores recorded document/source only when it cannot
+overwrite a foreign modified draft. Saved resources/CLI state remain available;
+arbitrary unsaved GUI state after app/tab termination is not guaranteed.
 
-Desktop can reopen the globally most recent Pine document after a reload. If its
-editor is mounted and unmodified, `workspace rebind --file FILE --id ID
---restore-document` explicitly reopens the registered document's recorded version
-on that exact target. Modified foreign drafts and pending actions are refused.
-Interrupted recovery uses `--rebind --restore-document` with the exact operation
-ID. No tab is activated and another workspace's document is not saved or edited.
-Recent-document selection is shared: after restoring A, a later reload of B may
-open A's document. B rejects that identity and uses the same explicit restoration
-procedure. Already loaded other workspaces keep their documents and sources.
+`workspace reset NAME --id ID` explicitly releases a quiescent or proven-lost
+workspace and removes its name while preserving artifacts. It never recreates
+tabs and refuses disconnected endpoints/live owners. A dead preparation without
+a workspace can be reset with its exact `--reservation-id` from list. Released
+names remain visible as released until reset; reusing the name creates a fresh ID.
 
-Init, recover and rebind may read the user's own saved script versions from
-pine-facade with the target's existing authenticated session. This verifies editor
-source and the version actually applied to the chart, even when a saved layout
-restores an older version. If the reads fail, there is no persisted-source proof;
-verified compilation can still establish report identity. An edited document
-whose chart study has an older version saves the requested edits once and applies
-them explicitly to that study version.
+Incomplete journals/results are preserved. Recorded panes restrict recovery;
+whole-layout effects retain broader validation. Unknown legacy effects fence app
+operations; recorded targets also fence matching workspaces. Unrelated targets can
+continue. Session recovery distinguishes absent targets from unreachable CDP.
+Exact lost-target discard requires reachable CDP and all recorded targets absent.
+Offline abandonment requires exact workspace/operation IDs and preserves artifacts.
 
-Synchronous page expressions have guards in the same turn. Async expressions have
-guards before dispatch and after completion; native actions run in between. During
-compilation, changing the owned study's input schema/defaults can be a native
-effect of changing source. Those changes are permitted along with compiled
-identity changes. An external edit to that same study during compilation can be
-indistinguishable from a native input change. Do not edit reserved resources in
-the GUI during execution. Other document, source and context changes are checked;
-the CLI cannot physically exclude external software from Desktop.
+```powershell
+tv --workspace research-a workspace release
+tv --workspace research-a workspace abandon --id EXACT_ID --operation EXACT_OPERATION
+tv session status
+tv session recover --run-id EXACT_RUN
+tv session discard --target-lost --run-id EXACT_RUN
+```
 
-The allowlist is deliberately narrow. Shell, arbitrary eval, layout switching,
-document creation/opening, alerts, watchlists, replay and other shared commands
-are legacy-only. The policy coverage test requires explicit classification of
-every new CLI adapter. The generated full command matrix is in
-[workspace-commands.md](workspace-commands.md).
+Do not reload/force-clear live ownership/repeat uncertain mutations. `tab switch`
+selects the named target; an optional legacy index must match. `tab close` closes
+only a CLI-created owned tab and refuses discard dialogs. Bound `layout switch`
+is retired: open/select another workspace. Killing `launch` is blocked while
+workspaces are registered; explicit `launch --no-kill` uses app ownership. No
+automatic launch. Stopping a CLI process/stream does not close Desktop or resources.
 
-Dedicated target viewport/focus emulation can keep an already mounted editor
-usable while its tab is inactive. Initial editor mounting may require selecting
-the dedicated tab during preparation. Prepare before registration and keep the
-same emulation on both targets; alternating tab focus during execution is not an
-independent workflow. Validation must disclose preparation, saving and cleanup
-costs as well as warmed calculation throughput.
+## Persistent storage and migration
 
+Default: `%LOCALAPPDATA%\tradingview-cli` on Windows, `$XDG_STATE_HOME/tradingview-cli`
+(or `~/.local/state/tradingview-cli`) on Unix. `TV_STATE_DIR` overrides it. Names,
+private bindings, ownership, journals/history/results survive TEMP cleanup. Public
+schema-2 handles contain no credentials/source. Private Windows ACL grants only
+the user, SYSTEM and Administrators; POSIX uses 0700/0600. This is not encryption.
 
-Safe collection reads (`ohlcv`, `values`, bare `quote`, `data lines/labels/tables/boxes`)
-can observe an owned target while its operation is active. They use an observation
-check that never consumes the operation's baseline or permits. Source/context/input
-instability fails closed; provenance identifies the captured target/context/source.
-A workspace quote cannot switch symbols. Pine and watchlist reads require their
-panels to be explicitly prepared before registration.
+Before upgrading, finish/recover old runs and **release the old reservation using
+the old CLI**. Keep its handle/private artifacts. After updating:
 
-`workspace status` remains offline and read-only and now prints exact next_commands
-for dead-owner interruption, recovery or idle release. Live/unverifiable owner PIDs
-remain protected. See [operation-contracts.md](operation-contracts.md) for storage,
-Windows ACL, migration, phases, permit rules and raw-evidence retention.
+```powershell
+tv workspace import research-a --file worker-a.tvws.json
+tv workspace show research-a
+tv --workspace research-a workspace rebind --id EXACT_ID
+```
+
+Schema-1/2 import is idempotent and copies old artifacts without deleting/moving
+the old TEMP store. Use `--legacy-state DIRECTORY` if needed. Imported proofs/
+generation are invalidated. Unreleased old reservations are rejected. Old live
+leases yield `LEGACY_CLI_ACTIVE`; old journals fence their recorded targets/app
+effects. Update every terminal: old/new CLIs cannot share one live old reservation.
+
+Reservation-only mirrors in the old temporary registry prevent ordinary old CLI
+admission while modern workspaces are registered. They contain no modern owner
+credential/source and preserve original old rows. Both registries use the old gate
+before the persistent gate, only for short metadata registration. Lost mirrors are
+resynchronized before execution. `session status` includes legacy diagnostics;
+use `session recover/discard --legacy-state DIRECTORY` to reconcile an old journal
+with the current scoped recovery code. All terminals should use the same state
+directory for a Desktop endpoint.
+
+File references remain a deprecated migration path with JSON result warnings. A
+reference matching both a name and local file is rejected. `--target` and
+`TV_CDP_TARGET` are preparation/migration selectors and cannot replace workspace
+selection for chart work. Update scripts to names and replace the old active-tab
+batch entry point with `examples/workspace-batch.mjs`.

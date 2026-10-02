@@ -1,7 +1,7 @@
 import CDP from '../src/cdp.js';
 import { CDP_HOST, CDP_PORT } from '../src/config.js';
 import { getDesktopInventory, inspectTarget } from '../src/desktop.js';
-import { withReadOnlySession } from '../src/session.js';
+import { withSharedSession } from '../src/session.js';
 import { performance } from 'node:perf_hooks';
 import { writeFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
@@ -19,7 +19,7 @@ async function trial(count, warmup = false) {
   const start = performance.now();
   const result = { chart_targets: count, warmup };
   try {
-    const inventory = await withReadOnlySession(() => getDesktopInventory({ _deps: { targets: selected,
+    const inventory = await withSharedSession(() => getDesktopInventory({ _deps: { targets: selected,
       inspect: async (target, expression) => {
         probes++; active++; maximum = Math.max(maximum, active);
         try { return await inspectTarget(target, expression); } finally { active--; }

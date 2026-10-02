@@ -18,7 +18,7 @@ function page({loading=false, calculating=false, unreadable=false}={}) {
   const series={bars:()=>({firstIndex:()=>0,lastIndex:()=>0,valueAt:()=>[1]}),isLoading:()=>false};
   const model=(pending,sources=[])=>({mainSeries:()=>({...series,isLoading:()=>pending}),model:()=>({dataSources:()=>sources})});
   const active={symbol:()=> 'X:A',resolution:()=> '1',chartType:()=>1,_chartWidget:{model:()=>model(false)}};
-  const inactive={model:()=>unreadable?{}:model(loading,calculating?[{id:()=> 'study',status:()=>({type:1})}]:[])};
+  const inactive={model:()=>unreadable?{}:model(loading,calculating?[{id:()=> 'study',metaInfo:()=>({isTVScriptStrategy:true}),status:()=>({type:1})}]:[])};
   return {TradingViewApi:{_activeChartWidgetWV:{value:()=>active},_chartWidgetCollection:{getAll:()=>[active,inactive],metaInfo:{uid:{value:()=> 'QA'}}}}};
 }
 const document={querySelectorAll:()=>[]};
@@ -84,6 +84,11 @@ it('uncertain native layout expansion aborts fallback, provisioning and new tabs
 });
 
 it('recovery checks inactive loading/calculation/unreadable panes and every historical target',async()=>{
+  {
+    const options=fixtureOptions(),lease=acquireSession(options);lease.checkpoint({native_quiescence_required:true,target_id:'QA',target_panes:{QA:[0]}});lease.release();
+    const pages=new Map([['QA',page({loading:true,calculating:true})]]);
+    assert.equal((await recoverSession({runId:lease.run_id,_deps:recoveryDeps(options,pages)})).recovered,true,'Recorded pane0 recovery ignores unrelated pane1 loading/calculation.');
+  }
   for(const state of [{loading:true},{calculating:true},{unreadable:true}]) {
     const options=fixtureOptions(),lease=acquireSession(options);lease.checkpoint({native_quiescence_required:true,target_id:'QA'});lease.release();
     const pages=new Map([['QA',page(state)]]),closed=[];

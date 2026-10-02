@@ -23,6 +23,23 @@ function fixture() {
   return { resource, window, chart, inputs, editor, controller, call, owner: { ...resource, nonce: 'nonce' } };
 }
 describe('atomic workspace page guards', () => {
+  it('a draft identity cannot masquerade as a saved Pine resource',()=>{
+    const f=fixture();f.controller.isDraft=()=>true;
+    assert.throws(()=>f.call('bindWorkspacePage',f.resource,'new'),/WORKSPACE_SAVED_DOCUMENT_REQUIRED/);
+    assert.equal(f.window.__tvCliWorkspace.nonce,'nonce');
+  });
+  it('binds a chart-only workspace without querying any Pine editor and permits symbol changes', () => {
+    const f=fixture();
+    const resource={...f.resource,pine:null};
+    f.window.__tvCliWorkspace=null;
+    // Editor/controller reads would throw: chart-only operations must not touch a GUI draft.
+    f.controller.getScriptIdVersion=()=>{throw new Error('foreign editor touched');};
+    const binding=f.call('bindWorkspacePage',resource,'chart-only');
+    assert.equal(binding.snapshot.pine,null);assert.equal(binding.snapshot.source,'');
+    const owner={...resource,nonce:'chart-only'};
+    f.call('startWorkspacePage',owner,'chart-op',{symbol:'ETHUSD'});f.chart.symbol=()=> 'ETHUSD';
+    assert.equal(f.call('finishWorkspacePage',owner,'chart-op').snapshot.context.symbol,'ETHUSD');
+  });
   it('observation preserves an active operation baseline and pending permits byte for byte', () => {
     const f = fixture(); f.call('startWorkspacePage', f.owner, 'op', { source: 'requested', inputs: { in_0: 21 } });
     f.editor.setValue('requested'); f.inputs[2].value = 21;
@@ -39,6 +56,8 @@ describe('atomic workspace page guards', () => {
     assert.equal(f.call('guardWorkspacePage', f.owner).studies.length, 0);
     assert.throws(() => f.call('finishWorkspacePage', f.owner, 'op'), /WORKSPACE_STUDY_MISSING/);
     assert.equal(f.window.__tvCliWorkspace.operation, 'op');
+    const failure=f.call('finishWorkspacePage',f.owner,'op',{allowIncomplete:true});
+    assert.equal(failure.snapshot.studies.length,0,'A known completed compile failure may retain an empty chart without fabricating a recovery fence.');
   });
   it('detects source, layout and nonce changes before any action', () => {
     for (const change of [f => f.editor.setValue('external'), f => { f.window.__tvCliWorkspace.nonce = 'other'; },

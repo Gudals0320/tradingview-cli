@@ -4,15 +4,16 @@
  */
 import { readFileSync } from 'node:fs';
 import { POSITIONALS } from './arguments.js';
-import { commandScope, invocationClass, MIXED_RULES, DESKTOP_REQUIREMENTS, OFFLINE_LEASE_COMMANDS } from './policy.js';
+import { commandScope, invocationClass, MIXED_RULES, DESKTOP_REQUIREMENTS, OFFLINE_LEASE_COMMANDS, resourceKinds, workspaceRequired, FOREGROUND_COMMANDS } from './policy.js';
 
 const { version } = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
 
 const SCOPES = {
-  workspace: 'Runs under --workspace FILE or as an exclusive legacy call.',
+  workspace: 'Requires an explicit workspace name or terminal-local selection. Never falls back to the active tab.',
   offline: 'Routed without the endpoint lease or a CDP client; see desktop and endpoint_lease for handlers that still need them.',
   'workspace-admin': 'Workspace administration on the reserved CDP target.',
-  legacy: 'Exclusive legacy call only: holds the endpoint lease; rejected under --workspace.',
+  preparation: 'Layout and workspace preparation, available before selection.',
+  'app-shared': 'App/account shared operation. Uses the app resource lock when changing shared state.',
 };
 
 const INVOCATIONS = {
@@ -21,6 +22,7 @@ const INVOCATIONS = {
   native: 'Dispatches native Desktop changes that may outlive the CLI.',
   offline: 'Does not touch the Desktop chart.',
   'workspace-admin': 'Manages workspace reservations.',
+  preparation: 'Prepares saved layouts or validates workspace selection.',
 };
 
 const DESKTOP = {
@@ -33,15 +35,15 @@ const DESKTOP = {
 const LEASES = {
   true: 'Holds the shared endpoint lease; overlapping lease holders fail with SESSION_BUSY.',
   false: 'Does not hold the endpoint lease.',
-  without_workspace: 'Holds the endpoint lease unless run with --workspace FILE, which relies on workspace ownership instead.',
 };
 
 // Only `help` changes format with an option; every other adapter emits JSON or JSONL.
 const OUTPUT_RULES = new Map([['help', 'JSON with --json; plain text otherwise.']]);
 
 function endpointLease(name, scope) {
-  if (scope === 'legacy') return true;
-  if (scope === 'workspace') return 'without_workspace';
+  if(workspaceRequired(name))return false;
+  if (scope === 'app-shared') return invocationClass(name) !== 'pure';
+  if(scope==='preparation'&&invocationClass(name)==='native')return true;
   return OFFLINE_LEASE_COMMANDS.has(name);
 }
 
@@ -65,6 +67,10 @@ function describe(name, adapter) {
     invocation,
     desktop: DESKTOP_REQUIREMENTS.get(name) || (scope === 'offline' ? 'none' : 'cdp'),
     endpoint_lease: endpointLease(name, scope),
+    workspace_required: workspaceRequired(name),
+    locks: resourceKinds(name),
+    foreground: name==='screenshot'?'conditional':name==='tab switch'?'changes':FOREGROUND_COMMANDS.has(name) ? 'required' : ['layout create', 'layout open', 'tab new'].includes(name) ? 'changes' : 'background',
+    ...(name==='screenshot'?{foreground_when:'CDP capture requires the owned tab to be selected and a nonzero viewport; --method api targets the owned chart in the background.'}:{}),
     read_only: invocation === 'pure' ? true : invocation === 'mixed' ? 'conditional' : invocation === 'native' ? false : null,
     ...(MIXED_RULES.has(name) ? { read_only_when: MIXED_RULES.get(name) } : {}),
     output: OUTPUT_RULES.has(name) ? 'conditional' : name.startsWith('stream ') ? 'jsonl' : 'json',
@@ -83,18 +89,22 @@ export function buildCatalog(commands, filter = []) {
   }
   return {
     success: true,
-    catalog_version: 1,
+    catalog_version: 2,
     cli: { name: 'tv', version },
-    usage: 'tv [--target CDP_ID | --workspace FILE] <command> [subcommand] [args] [options]',
+    usage: 'tv [--workspace NAME] <command> [subcommand] [args] [options]',
     global_options: [
-      { name: '--target', value: 'CDP_ID', description: 'Run against this CDP page target (see `tv tab list`).' },
-      { name: '--workspace', value: 'FILE', description: 'Run inside a reserved workspace (see docs/workspaces.md).' },
+      { name: '--target', value: 'CDP_ID', description: 'Preparation-only legacy target selection. Register a named workspace for chart work.' },
+      { name: '--workspace', value: 'NAME', description: 'Explicit workspace for this invocation; takes priority over TV_WORKSPACE. Legacy handles are deprecated.' },
+      { name: '--lock-timeout-ms', value: 'MS', description: 'Bounded resource wait: default 30000, maximum 300000; SIGINT cancels and removes the ticket.' },
     ],
     environment: [
       { name: 'TV_CDP_HOST', default: '127.0.0.1', description: 'CDP host.' },
       { name: 'TV_CDP_PORT', default: 9222, description: 'CDP port (1..65535).' },
       { name: 'TV_CDP_TIMEOUT_MS', default: 15000, description: 'Per-request CDP timeout (100..120000). A timeout does not cancel native work.' },
       { name: 'TV_CDP_TARGET', default: null, description: 'Default CDP page target; cannot be combined with --workspace.' },
+      { name: 'TV_WORKSPACE', default: null, description: 'Calling terminal workspace selection, set by the PowerShell module.' },
+      { name: 'TV_LAYOUT', default: null, description: 'Calling terminal selected saved layout, set with its workspace.' },
+      { name: 'TV_STATE_DIR', default: null, description: 'Persistent private state directory override; defaults to LOCALAPPDATA or XDG state home.' },
     ],
     output: {
       stdout: 'One JSON object per call; stream commands emit JSONL until interrupted; see each command\'s output.',
@@ -110,6 +120,7 @@ export function buildCatalog(commands, filter = []) {
     invocations: INVOCATIONS,
     desktop_values: DESKTOP,
     endpoint_lease_values: LEASES,
+    ownership_fields: { workspace_required: 'Selection must resolve before any chart access.', locks: 'Resource kinds acquired together; reads use no mutation lock. Mixed commands depend on arguments.', foreground: 'background targets the owned page; required verifies the selected Desktop tab; changes opens/selects tabs.' },
     read_only_values: {
       true: 'Pure read.',
       false: 'Changes Desktop state.',

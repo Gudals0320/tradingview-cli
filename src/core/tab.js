@@ -20,7 +20,7 @@ import { assertSessionAccess, nativeCheckpoint } from '../session.js';
  */
 export async function list() {
   const inventory = await getDesktopInventory();
-  return { success: true, tab_count: inventory.tabs.length, tabs: inventory.tabs };
+  return { success: true, tab_count: inventory.tabs.length, tabs: inventory.tabs, partial: inventory.partial, errors: inventory.errors };
 }
 
 /**
@@ -41,7 +41,7 @@ async function withShell(fn) {
   const client = await CDP({ host: CDP_HOST, port: CDP_PORT, target: candidates[0].id });
   try {
     return await fn(async (expression, { mutation = false } = {}) => {
-      if (mutation) nativeCheckpoint(null, configuredTarget() || inventory.tabs.find(tab => tab.active)?.id);
+      if (mutation) nativeCheckpoint(null, configuredTarget() || inventory.tabs.find(tab => tab.active)?.id,{effect_scope:'app'});
       const result = await client.Runtime.evaluate({ expression, returnByValue: true, awaitPromise: true });
       if (result.exceptionDetails) throw new Error(result.exceptionDetails.text || 'Shell operation failed');
       return result.result?.value;
@@ -74,7 +74,7 @@ async function withTarget(targetId, fn) {
   try {
     c = await CDP({ host: CDP_HOST, port: CDP_PORT, target: targetId });
     return await fn(async (expression, { mutation = false } = {}) => {
-      if (mutation) nativeCheckpoint(null, targetId);
+      if (mutation) nativeCheckpoint(null, targetId,{effect_scope:'app'});
       const response = await c.Runtime.evaluate({ expression, returnByValue: true });
       if (response.exceptionDetails) throw new Error(response.exceptionDetails.exception?.description || response.exceptionDetails.text || 'Target evaluation failed');
       return response.result?.value;
@@ -213,13 +213,17 @@ export async function newTab({ layout, name, reconnect = true } = {}) {
     action: wantNew ? 'new_layout_created' : 'layout_opened_in_new_tab',
     layout: picked,
     chart_id: chartTarget.url.match(/\/chart\/([^/?]+)/)?.[1] || null,
+    target: chartTarget.id,
   };
 }
 
 /**
  * Close the currently active tab by clicking its close button in the shell.
  */
-export async function closeTab() {
+export async function closeTab({ target_id } = {}) {
+  const inventory = target_id ? await getDesktopInventory() : null;
+  const owned = target_id ? inventory.tabs.find(tab => tab.id === target_id && tab.resolved) : null;
+  if (target_id && !owned?.shell_tab_id) throw new Error('Exact owned tab is unavailable.');
   const initialTargets = await CDP.List({ host: CDP_HOST, port: CDP_PORT });
   const before = await withShell((evalIn) => evalIn(`document.querySelectorAll('.tabs-container .tab').length`));
   if (before <= 1) {
@@ -229,7 +233,7 @@ export async function closeTab() {
   const result = await withShell(async (evalIn) => {
     const clicked = await evalIn(`
       (function() {
-        var active = document.querySelector('.tabs-container .tab.active');
+        var active = ${target_id ? `document.getElementById(${JSON.stringify(owned.shell_tab_id)})` : "document.querySelector('.tabs-container .tab.active')"};
         if (!active) return false;
         // The close container div has no handler — the real clickable is the button inside it.
         var close = active.querySelector('[class*="close"] button') || active.querySelector('button[class*="close"]') || active.querySelector('[class*="close"]');
