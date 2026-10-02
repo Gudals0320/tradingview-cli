@@ -87,6 +87,13 @@ it('a resource release failure includes the completed committed native result in
     assert.equal(workspaceStatus(f.workspace.file).interrupted,null);
   }finally{f.cleanup();}
 });
+it('a metadata finish failure preserves the verified native result and marks its commit unconfirmed',async()=>{
+  const f=fixture();try {
+    f.deps.acquireWorkspace=(file,options)=>{const lease=acquireWorkspace(file,options),finish=lease.finish;let first=true;lease.finish=value=>{if(first){first=false;throw Object.assign(new Error('metadata write failed'),{code:'RESULT_COMMIT_FAILED'});}return finish(value);};return lease;};
+    await assert.rejects(runWorkspace(f.workspace.file,'timeframe',{},['60'],async()=>({success:true,resolution:'60'}),{_deps:f.deps}),error=>error.code==='RESULT_COMMIT_FAILED'&&error.details.completed_result.success===true&&error.details.result_committed===false);
+    assert.equal(workspaceStatus(f.workspace.file).interrupted,null);
+  }finally{f.cleanup();}
+});
 it('binds fresh input-only reports to a separately verified applied saved version', async()=>{
   const f=fixture();try {
     f.snapshot.version=9;f.snapshot.studies[0].inputs.find(input=>input.id==='pineVersion').value=3;
