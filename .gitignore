@@ -9,4 +9,3 @@ results/
 # Persistent owner tokens and private workspace draft/recovery artifacts.
 .tv-workspaces/
 *.tvws.json
-qa/parallel/issue-14/live/worker-*.json

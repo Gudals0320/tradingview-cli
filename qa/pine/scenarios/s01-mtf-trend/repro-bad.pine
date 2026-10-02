@@ -1,3 +1,0 @@
-//@version=6
-indicator("CLI-QA-S01 Repro SaveOnError", overlay = true)
-plot(ta.smaa(close, 10), "SMA10")

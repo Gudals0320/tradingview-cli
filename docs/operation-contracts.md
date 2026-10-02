@@ -84,10 +84,9 @@ evidence; do not publish it or assume a hash can restore a draft.
 Retain raw failed and successful trials in ignored results/ or a private external
 archive. Commit reusable fixtures/harnesses plus concise sanitized summaries and
 hashes. Never commit tokens, account data, personal source or document/target IDs.
-Historical qa/ evidence stays in existing Git history; this task does not rewrite
-history. .rgignore hides large raw evidence from ordinary code search. New raw
-evidence does not go into qa/. Natural live, live injection and offline VM/adapter
-claims must remain separately labeled.
+Historical QA evidence was removed from the working tree and remains only in Git
+history. Natural live, live injection and offline VM/adapter claims must remain
+separately labeled.
 
 Phase and permit regression coverage: pine_compile, pine_lifecycle, pine_outcome,
 pine_targets, strategy_state, workspace-page, workspace-runtime, lifetime and

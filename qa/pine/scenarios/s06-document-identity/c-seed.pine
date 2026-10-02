@@ -1,8 +1,0 @@
-//@version=6
-indicator("CLI-QA-S06-Sentinel-C", overlay=true)
-// 변경금지 C: 한글 "보존", C:\QA\C, 마지막 줄바꿈까지 고정.
-identity(float value) =>
-    value
-string note = "C \"보존\" C:\\QA\\C\n두 줄"
-plot(identity(close), title="C 보존값", color=color.gray)
-// SENTINEL-C-IMMUTABLE

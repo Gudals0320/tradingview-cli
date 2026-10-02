@@ -1,3 +1,0 @@
-//@version=6
-indicator("CLI-QA-20261001 Invalid")
-plot(qa_missing_function(close))
