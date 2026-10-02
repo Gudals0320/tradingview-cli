@@ -6,6 +6,7 @@ import { readChartContext, symbolMatches, normalizeTimeframe } from '../chart-co
 import { nativeCheckpoint, nativeQuiescent } from '../session.js';
 import { waitForChartReady } from '../wait.js';
 import { reportExpression, STRATEGY_PAGE_CODE } from '../strategy-state.js';
+import { createHash } from 'node:crypto';
 
 const MAX_OHLCV_BARS = 500;
 const MAX_TRADES = 20;
@@ -27,11 +28,22 @@ async function readData(expression, _deps = {}) {
   const inspect = _deps.evaluate || evaluate;
   const result = await inspect(`(() => {
     const readContext = ${readChartContext.toString()};
-    const context = readContext(window), data = (${expression}), after = readContext(window);
-    if (!context || !after || context.symbol !== after.symbol || context.resolution !== after.resolution
-      || context.chart_type !== after.chart_type) throw new Error('DATA_CONTEXT_CHANGED: Chart changed during extraction.');
-    return { data, context };
+    let context = null;
+    try {
+      context = readContext(window);
+      const data = (${expression}), after = readContext(window);
+      if (!context || !after || context.symbol !== after.symbol || context.resolution !== after.resolution
+        || context.chart_type !== after.chart_type) throw new Error('DATA_CONTEXT_CHANGED: Chart changed during extraction.');
+      return { data, context };
+    } catch (error) {
+      return { extraction_error: { code: error.code || String(error.message).match(/^([A-Z_]+):/)?.[1] || 'DATA_EXTRACTION_FAILED',
+        message: error.message, details: { context, study_id: error.study_id ?? null, study_name: error.study_name ?? null, bar_index: error.bar_index ?? null } } };
+    }
   })()`);
+  if (result?.extraction_error) {
+    const { code, message, details } = result.extraction_error;
+    throw Object.assign(new Error(message), { code, details });
+  }
   if (!result || !result.context) throw new Error('Chart context unavailable.');
   if (result.context.loading) throw Object.assign(new Error('Chart data is loading; retry after it becomes ready.'), { code: 'DATA_NOT_READY' });
   if (result.context.feed_error) throw Object.assign(new Error('Chart feed failed: ' + result.context.feed_error), { code: 'DATA_FEED_ERROR' });
@@ -72,14 +84,14 @@ function buildGraphicsJS(collectionName, mapKey, filter) {
             var outer = pc.${collectionName};
             if (outer) {
               var inner = outer.get('${mapKey}');
-              if (inner) {
+              if (inner && typeof inner.get === 'function') {
                 var coll = inner.get(false);
                 if (coll && coll._primitivesDataById && coll._primitivesDataById.size > 0) {
                   coll._primitivesDataById.forEach(function(v, id) { items.push({id: id, raw: v}); });
                 }
-              }
+              } else if (inner && '${collectionName}' !== 'dwgtablecells') throw new Error('Unsupported graphics collection shape.');
             }
-          } catch(e) {}
+          } catch(e) { throw new Error('Graphics collection read failed: ' + e.message); }
           if (items.length === 0 && '${collectionName}' === 'dwgtablecells') {
             try {
               var tcOuter = pc.dwgtablecells;
@@ -89,10 +101,13 @@ function buildGraphicsJS(collectionName, mapKey, filter) {
                   tcColl._primitivesDataById.forEach(function(v, id) { items.push({id: id, raw: v}); });
                 }
               }
-            } catch(e) {}
+            } catch(e) { throw new Error('Table collection read failed: ' + e.message); }
           }
           if (items.length > 0) results.push({name: name, count: items.length, items: items});
-        } catch(e) {}
+        } catch(e) {
+          var studyId = null; try { studyId = s.id?.() ?? null; } catch {}
+          throw Object.assign(new Error('GRAPHICS_EXTRACTION_FAILED: ' + e.message), { code:'GRAPHICS_EXTRACTION_FAILED', study_id:studyId, study_name:name || null });
+        }
       }
       return { studies: results, matched_studies: matched };
     })()
@@ -110,7 +125,8 @@ export async function getOhlcv({ count, summary, _deps } = {}) {
         var start = Math.max(bars.firstIndex(), end - ${limit} + 1);
         for (var i = start; i <= end; i++) {
           var v = bars.valueAt(i);
-          if (v) result.push({time: v[0], open: v[1], high: v[2], low: v[3], close: v[4], volume: v[5] || 0});
+          if (!v) throw Object.assign(new Error('OHLCV_EXTRACTION_FAILED: Missing bar inside requested range.'), { code:'OHLCV_EXTRACTION_FAILED', bar_index:i });
+          result.push({time: v[0], open: v[1], high: v[2], low: v[3], close: v[4], volume: v[5] ?? null});
         }
         return {bars: result, total_bars: bars.size(), source: 'direct_bars'};
       })()
@@ -129,19 +145,23 @@ export async function getOhlcv({ count, summary, _deps } = {}) {
     const first = bars[0];
     const last = bars[bars.length - 1];
     return {
-      success: true, context, requested: limit, applied: bars.length, truncated: bars.length < limit, bar_count: bars.length,
+      success: true, context, requested: limit, applied: bars.length, limit: MAX_OHLCV_BARS,
+      truncated: data.total_bars > bars.length, insufficient_history: bars.length < limit,
+      total_available: data.total_bars, bar_count: bars.length,
       period: { from: first.time, to: last.time },
       open: first.open, close: last.close,
       high: Math.max(...highs), low: Math.min(...lows),
       range: roundPrice(Math.max(...highs) - Math.min(...lows)),
       change: roundPrice(last.close - first.open),
       change_pct: Math.round(((last.close - first.open) / first.open) * 10000) / 100 + '%',
-      avg_volume: Math.round(volumes.reduce((a, b) => a + b, 0) / volumes.length),
+      avg_volume: volumes.every(Number.isFinite) ? Math.round(volumes.reduce((a, b) => a + b, 0) / volumes.length) : null,
       last_5_bars: bars.slice(-5),
     };
   }
 
-  return { success: true, context, requested: limit, applied: data.bars.length, truncated: data.bars.length < limit, bar_count: data.bars.length, total_available: data.total_bars, source: data.source, bars: data.bars };
+  return { success: true, context, requested: limit, applied: data.bars.length, limit: MAX_OHLCV_BARS,
+    truncated: data.total_bars > data.bars.length, insufficient_history: data.bars.length < limit,
+    bar_count: data.bars.length, total_available: data.total_bars, source: data.source, bars: data.bars };
 }
 
 export async function getIndicator({ entity_id }) {
@@ -184,11 +204,12 @@ export async function getTrades({ max_trades = 20, strategy_id, _deps } = {}) {
     if (!summary.success) return summary;
     const found = pageStrategies(window).find(item => item.id === summary.strategy_id);
     let orders = found.source.ordersData?.(); if (orders?.value) orders = orders.value();
-    if (!Array.isArray(orders)) return {success:false,error:'Strategy orders unavailable.'};
+    if (!Array.isArray(orders)) return {success:false,code:'ORDERS_UNAVAILABLE',error:'Strategy orders unavailable.'};
     const trades = orders.slice(-${limit}).map(order => ({ id:order.id,type:order.tp,
       side:order.b?'buy':'sell',entry:order.e,price:order.p,qty:order.q,
       order_seq:order.tm,time_index:order.tm }));
     return {success:true,strategy_id:summary.strategy_id,compilation_token:summary.compilation_token,
+      source_hash:summary.source_hash,strategy_inputs:summary.strategy_inputs,
       trade_count:trades.length,total_orders:orders.length,source:'internal_api',trades,orders:trades,
       record_kind:'orders',context:summary.context,requested:${max_trades},applied:trades.length,limit:${limit},truncated:orders.length>trades.length,
       units:{order_seq:'ordinal',time_index:'deprecated ordinal alias'}};
@@ -196,22 +217,38 @@ export async function getTrades({ max_trades = 20, strategy_id, _deps } = {}) {
 }
 
 /** Paginated trade ledger, preserving native fields alongside explicit UTC timestamps. */
-export async function getTradeLedger({ offset = 0, limit = 100, strategy_id, _deps } = {}) {
-  if (!Number.isInteger(offset) || offset < 0 || !Number.isInteger(limit) || limit < 1 || limit > 500) throw new Error('Require offset >= 0 and limit 1..500.');
+export async function getTradeLedger({ offset = 0, limit = 100, strategy_id, report_revision, _deps } = {}) {
+  if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isInteger(limit) || limit < 1 || limit > 500 || !Number.isSafeInteger(offset + limit)) throw new Error('Require safe offset >= 0 and limit 1..500.');
   const inspect = _deps?.evaluate || evaluate;
-  return inspect(`(() => { ${STRATEGY_PAGE_CODE};
+  const result = await inspect(`(() => { ${STRATEGY_PAGE_CODE};
     const summary = readStrategyReport(window, ${JSON.stringify({ strategy_id })});
     if (!summary.success) return summary;
     const item = pageStrategies(window).find(strategy => strategy.id === summary.strategy_id);
     const ledger = item.report.trades;
-    if (!Array.isArray(ledger)) return { success: false, error: 'Trade ledger unavailable in this build.' };
-    const time = value => value == null ? null : new Date(value < 1e11 ? value * 1000 : value).toISOString();
+    if (!Array.isArray(ledger)) return { success: false, code:'LEDGER_UNAVAILABLE', error: 'Trade ledger unavailable in this build.' };
+    const time = strategyTime;
     const trades = ledger.slice(${offset}, ${offset + limit}).map((trade, index) => ({
       trade_seq: index + ${offset}, entry_time: time(trade.e?.tm), exit_time: time(trade.x?.tm),
+      open: !trade.x, timestamp_errors: ['e','x'].filter(key => trade[key]?.tm != null && time(trade[key].tm) == null),
       entry_bar: trade.e?.b ?? null, exit_bar: trade.x?.b ?? null, raw: trade }));
     return { success: true, strategy_id: summary.strategy_id, currency: summary.currency, total_trades: ledger.length,
-      offset: ${offset}, limit: ${limit}, trades, has_more: ${offset + limit} < ledger.length };
+      compilation_token:summary.compilation_token,source_hash:summary.source_hash,strategy_inputs:summary.strategy_inputs,
+      context:summary.context,backtest_window:summary.backtest_window,loaded_window:summary.loaded_window,trade_window:summary.trade_window,
+      record_kind:'trade_ledger',order:'native_ordinal_ascending',
+      units:{time_fields:'ISO-8601 UTC',raw_time:'native tm; magnitude < 1e11 interpreted as seconds, otherwise milliseconds'},
+      _snapshot:JSON.stringify({strategy_id:summary.strategy_id,token:summary.compilation_token,source_hash:summary.source_hash,
+        inputs:summary.strategy_inputs,symbol:summary.context.symbol,resolution:summary.context.resolution,chart_type:summary.context.chart_type,
+        performance:item.report.performance,settings:item.report.settings,trades:ledger}),
+      offset: ${offset}, limit: ${limit}, trades, has_more: ${offset + limit} < ledger.length,
+      next_offset: ${offset + limit} < ledger.length ? ${offset} + trades.length : null };
   })()`);
+  if (!result.success) return result;
+  const { _snapshot, ...page } = result;
+  const revision = createHash('sha256').update(_snapshot).digest('hex');
+  if (report_revision && report_revision !== revision) return { success: false, code: 'REPORT_CHANGED',
+    error: 'Strategy report changed during pagination; restart collection at offset 0.',
+    expected_revision: report_revision, report_revision: revision, strategy_id: page.strategy_id };
+  return { ...page, report_revision: revision };
 }
 
 export async function getEquity({ strategy_id, _deps } = {}) {
@@ -359,7 +396,7 @@ export async function getStudyValues({ _deps } = {}) {
       var results = [];
       for (var si = 0; si < sources.length; si++) {
         var s = sources[si];
-        if (!s.metaInfo) continue;
+        if (!s.metaInfo || typeof s.dataWindowView !== 'function') continue;
         try {
           var meta = s.metaInfo();
           var name = meta.description || meta.shortDescription || '';
@@ -376,7 +413,7 @@ export async function getStudyValues({ _deps } = {}) {
                 }
               }
             }
-          } catch(e) {}
+          } catch(e) { throw new Error('Data window read failed: ' + e.message); }
           // Include id + inputs so multiple instances of the same indicator
           // (e.g. two EMAs with different lengths) are distinguishable (upstream#143).
           var id = null;
@@ -384,7 +421,10 @@ export async function getStudyValues({ _deps } = {}) {
           var inputs = null;
           try { var ip = s.inputs ? s.inputs() : null; if (ip && Object.keys(ip).length) inputs = Object.fromEntries(Object.entries(ip).filter(([key,value]) => key !== 'text' && !(typeof value === 'string' && value.length > 500))); } catch(e) {}
           if (Object.keys(values).length > 0) results.push({ id: id, name: name, inputs: inputs, values: values });
-        } catch(e) {}
+        } catch(e) {
+          var studyId = null; try { studyId = s.id?.() ?? null; } catch {}
+          throw Object.assign(new Error('VALUES_EXTRACTION_FAILED: ' + e.message), { code:'VALUES_EXTRACTION_FAILED', study_id:studyId, study_name:name || null });
+        }
       }
       return results;
     })()

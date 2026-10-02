@@ -17,7 +17,7 @@ register('pine', {
       handler: () => core.getSource(),
     }],
     ['set', {
-      description: 'Set Pine Script source (reads stdin or --file)',
+      description: 'Set Pine source from stdin or --file; changed drafts invalidate prior report verification',
       options: {
         file: { type: 'string', short: 'f', description: 'Read source from file' },
       },
@@ -83,14 +83,14 @@ register('pine', {
       handler: opts => core.save({ expect_script_id: opts['expect-script-id'] }),
     }],
     ['new', {
-      description: 'Create a new blank Pine Script (indicator, strategy, library)',
+      description: 'Create a new Pine script; changed editor content invalidates prior report verification',
       handler: (opts, positionals) => {
         const type = positionals[0] || 'indicator';
         return core.newScript({ type });
       },
     }],
     ['open', {
-      description: 'Open a saved Pine Script by name',
+      description: 'Open saved Pine by name; changed editor content invalidates prior report verification',
       handler: (opts, positionals) => {
         if (!positionals[0]) throw new Error('Script name required. Usage: tv pine open "My Script"');
         return core.openScript({ name: positionals.join(' ') });

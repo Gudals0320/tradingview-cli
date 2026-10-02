@@ -63,6 +63,8 @@ tv data ledger --offset 0 --limit 100
 | `SAVE_REQUIRED` | The saved script has unsaved edits. Use `pine save` or `pine compile --save`. |
 | `PINE_COMPILE_ERROR` | Fix the source using the returned diagnostics and locations. |
 | `REPORT_UNVERIFIED` | Run `pine compile` for that strategy or change an input with `indicator set`. |
+| `REPORT_INVALIDATED` | CLI editor content or external compiled identity changed; compile the requested source again. |
+| `REPORT_CHANGED` | Discard collected ledger pages and restart at offset 0 with the new `report_revision`. |
 | `REPORT_PENDING` / `REPORT_TIMEOUT` | The report is not verified yet. Wait, then read again; `calculation_pending:true` means the calculation is still running. |
 | `PINE_EDITOR_REQUIRED` | Run `tv ui panel pine-editor open`, then retry. |
 | `WATCHLIST_PANEL_REQUIRED` | Run `tv ui panel watchlist open`, then retry. |
