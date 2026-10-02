@@ -1,4 +1,0 @@
-//@version=6
-indicator("CLI-QA Large Edit Sentinel 20261001")
-// This separate saved document must remain unchanged throughout the edit.
-plot(close, "Sentinel close")

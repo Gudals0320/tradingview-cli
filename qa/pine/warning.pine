@@ -1,6 +1,0 @@
-//@version=6
-indicator("CLI-QA-20261001 Warning")
-float value = na
-if close > open
-    value := ta.sma(close, 10)
-plot(value)

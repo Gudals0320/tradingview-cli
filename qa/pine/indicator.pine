@@ -1,6 +1,0 @@
-//@version=6
-indicator("CLI-QA-20261001 Indicator", overlay=true)
-// UTF-8 round trip: 한글, "quotes", 'single quotes', backslash \
-plot(ta.sma(close, 10), "QA SMA", color=color.orange)
-if barstate.islastconfirmedhistory
-    log.info("CLI-QA-PINE-LOG-20261001")

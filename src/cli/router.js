@@ -17,7 +17,7 @@ export function register(name, config) {
   commands.set(name, config);
 }
 
-function printHelp() {
+export function printHelp() {
   console.log('Usage: tv [--target CDP_ID | --workspace FILE] <command> [options]\n');
   console.log('Commands:');
   const maxLen = Math.max(...[...commands.keys()].map(k => k.length));
@@ -30,12 +30,13 @@ function printHelp() {
     }
   }
   console.log('\nRun "tv <command> --help" for command-specific options.');
+  console.log('Run "tv help --json" for a machine-readable command catalog.');
   console.log('\nDISCLAIMER');
   console.log('  Not affiliated with TradingView Inc.');
   console.log('  Use subject to TradingView\'s Terms of Use: tradingview.com/policies');
 }
 
-function printCommandHelp(name, cmd) {
+export function printCommandHelp(name, cmd) {
   if (cmd.subcommands) {
     console.log(`Usage: tv ${name} <subcommand> [options]\n`);
     console.log('Subcommands:');
@@ -50,6 +51,19 @@ function printCommandHelp(name, cmd) {
   if (Object.keys(opts).length > 0) {
     console.log('\nOptions:');
     for (const [k, v] of Object.entries(opts)) {
+      const flag = v.short ? `-${v.short}, --${k}` : `    --${k}`;
+      console.log(`  ${flag.padEnd(20)}${v.description || ''}`);
+    }
+  }
+}
+
+export function printSubcommandHelp(name, subName, sub) {
+  const options = sub.options || {};
+  console.log(`Usage: tv ${name} ${subName} [options]\n`);
+  console.log(sub.description);
+  if (Object.keys(options).length > 0) {
+    console.log('\nOptions:');
+    for (const [k, v] of Object.entries(options)) {
       const flag = v.short ? `-${v.short}, --${k}` : `    --${k}`;
       console.log(`  ${flag.padEnd(20)}${v.description || ''}`);
     }
@@ -75,6 +89,8 @@ export async function run(argv) {
   }
 
   const cmdName = args[0];
+  // Help never touches a workspace, matching `tv --workspace FILE <command> --help`.
+  if (cmdName === 'help') workspaceFile = null;
   const offline = cmdName === 'update' || cmdName === 'session' || cmdName === 'workspace'
     || (cmdName === 'pine' && ['analyze', 'check'].includes(args[1]));
   // These handlers only inspect existing state. Data/Pine reads can open panels
@@ -113,15 +129,7 @@ export async function run(argv) {
         strict: true,
       });
       if (values.help) {
-        console.log(`Usage: tv ${cmdName} ${subName} [options]\n`);
-        console.log(sub.description);
-        if (Object.keys(options).length > 0) {
-          console.log('\nOptions:');
-          for (const [k, v] of Object.entries(options)) {
-            const flag = v.short ? `-${v.short}, --${k}` : `    --${k}`;
-            console.log(`  ${flag.padEnd(20)}${v.description || ''}`);
-          }
-        }
+        printSubcommandHelp(cmdName, subName, sub);
         process.exit(0);
       }
       validateArguments(`${cmdName} ${subName}`, values, positionals);

@@ -3,7 +3,7 @@ import { alertCondition } from '../core/alerts.js';
 
 // A command without an entry accepts no positional arguments.
 export const POSITIONALS = new Map([
-  ['quote', [0, 1]], ['symbol', [0, 1]], ['timeframe', [0, 1]], ['type', [0, 1]],
+  ['help', [0, 2]], ['quote', [0, 1]], ['symbol', [0, 1]], ['timeframe', [0, 1]], ['type', [0, 1]],
   ['search', [1, Infinity]], ['scroll', [1, 1]], ['data indicator', [1, 1]],
   ['indicator add', [1, Infinity]], ['indicator remove', [1, 1]],
   ['indicator toggle', [1, 1]], ['indicator set', [1, 1]], ['indicator get', [1, 1]],

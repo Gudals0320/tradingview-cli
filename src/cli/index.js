@@ -12,7 +12,7 @@
 // structured error contract as command failures.
 try {
   for (const name of ['health', 'chart', 'data', 'pine', 'capture', 'replay', 'drawing',
-    'alerts', 'watchlist', 'layout', 'indicator', 'ui', 'pane', 'tab', 'stream', 'session', 'workspace']) {
+    'alerts', 'watchlist', 'layout', 'indicator', 'ui', 'pane', 'tab', 'stream', 'session', 'workspace', 'help']) {
     await import(`./commands/${name}.js`);
   }
   const { run } = await import('./router.js');

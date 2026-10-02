@@ -12,12 +12,14 @@ register('workspace', {
   subcommands: new Map([
     ['inventory', { description: 'HTTP-only target/layout inventory (no page execution)', handler: workspaceInventory }],
     ['gate-status', { description: 'Inspect admission metadata ownership', handler: () => admissionGateStatus() }],
-    ['gate-clear', { description: 'Clear an exact dead admission gate; retain all reservations', options: { token: { type: 'string' }, 'repair-token': { type: 'string' } }, handler: opts => clearAdmissionGate(opts.token, { repairToken: opts['repair-token'] }) }],
+    ['gate-clear', { description: 'Clear an exact dead admission gate; retain all reservations', options: { token: { type: 'string', description: 'Exact dead admission gate token from gate-status' }, 'repair-token': { type: 'string', description: 'Exact dead repair token from gate-status' } }, handler: opts => clearAdmissionGate(opts.token, { repairToken: opts['repair-token'] }) }],
     ['init', { description: 'Reserve pre-provisioned independent saved resources', options: {
-      file, target: { type: 'string' }, layout: { type: 'string' }, pine: { type: 'string' },
+      file, target: { type: 'string', description: 'CDP target to reserve (see workspace inventory)' },
+      layout: { type: 'string', description: 'Saved layout open in that target' },
+      pine: { type: 'string', description: "Saved Pine document as 'USER;DOCUMENT'" },
     }, handler: opts => initWorkspace(opts) }],
     ['status', { description: 'Inspect filesystem ownership without touching Desktop', options: { file }, handler: opts => workspaceStatus(opts.file) }],
-    ['rebind', { description: 'Acknowledge a new generation of the same idle resources', options: { file, id: { type: 'string' }, 'restore-document': { type: 'boolean', description: 'Reopen the exact recorded document after reload; reject foreign drafts' } }, handler: opts => rebindWorkspace(opts.file, opts.id, { restoreDocument: opts['restore-document'] }) }],
+    ['rebind', { description: 'Acknowledge a new generation of the same idle resources', options: { file, id: { type: 'string', description: 'Exact workspace ID' }, 'restore-document': { type: 'boolean', description: 'Reopen the exact recorded document after reload; reject foreign drafts' } }, handler: opts => rebindWorkspace(opts.file, opts.id, { restoreDocument: opts['restore-document'] }) }],
     ['interrupt', { description: 'Mark an exact operation interrupted after its PID has died', options: { file, operation }, handler: opts => markInterrupted(opts.file, opts.operation) }],
     ['recover', { description: 'Reconcile current isolated state after an interrupted operation', options: { file, operation,
       rebind: { type: 'boolean', description: 'Acknowledge a new generation of the same resources' },
@@ -26,7 +28,7 @@ register('workspace', {
     ['release', { description: 'Release idle resources; preserve artifacts', options: { file }, handler: opts => closeWorkspace(opts.file) }],
     ['abandon', { description: 'Explicit offline release after target/handle loss; preserve incomplete artifacts', options: { file, operation, id: { type: 'string', description: 'Exact workspace ID' } },
       handler: opts => abandonWorkspace(opts.file, { workspaceId: opts.id, operationId: opts.operation }) }],
-    ['wait', { description: 'Wait for this workspace strategy calculation (use --workspace FILE)', options: { timeout: { type: 'string' } }, handler: async opts => {
+    ['wait', { description: 'Wait for this workspace strategy calculation (use --workspace FILE)', options: { timeout: { type: 'string', description: 'Milliseconds to wait (default 30000, max 300000)' } }, handler: async opts => {
       const timeout = Number(opts.timeout || 30000), start = Date.now();
       if (!Number.isFinite(timeout) || timeout < 1 || timeout > 300000) throw new Error('timeout must be 1..300000 ms.');
       do {

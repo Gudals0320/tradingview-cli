@@ -185,6 +185,8 @@ Pine 작업은 usable Monaco와 native controller를 모두 필요로 합니다.
 
 현재 옵션은 `tv --help`, `tv <명령> --help`, `tv <명령> <하위 명령> --help`로 확인할 수 있습니다.
 
+`tv help --json`은 모든 명령의 옵션·위치 인자·읽기 전용 여부·출력 형식을 JSON 카탈로그로 출력합니다. `tv help --json pine`처럼 명령 이름으로 범위를 좁힐 수 있습니다. AI 에이전트용 사용 규칙은 [AGENTS.md](AGENTS.md)에 정리되어 있습니다.
+
 전용 실험 레이아웃을 선택하고 소스·결과를 확인한 뒤 원래 상태를 복원하는 사용법은 [Pine 배치 예제](examples/README.md)를 참고하세요.
 
 ## 명령 목록
