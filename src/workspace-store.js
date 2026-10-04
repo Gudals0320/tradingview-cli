@@ -240,7 +240,7 @@ export function workspaceStatus(file, options = {}) {
     aliveOwner = ownerAlive(row.operation);
   }
   const nextCommands = row.operation
-    ? aliveOwner ? [] : [`tv workspace interrupt --file ${quotedFile} --operation ${row.operation.id}`]
+    ? aliveOwner ? [] : [`tv --workspace ${reference} workspace interrupt --operation ${row.operation.id}`]
     : row.connection_state === 'target_lost' ? lostCommands
       : row.interrupted ? [`tv --workspace ${reference} workspace recover --operation ${row.interrupted.operation_id}${workspace.binding ? '' : ' --rebind'}`]
       : workspace.binding ? [`tv --workspace ${reference} state`, `tv --workspace ${reference} workspace release`]

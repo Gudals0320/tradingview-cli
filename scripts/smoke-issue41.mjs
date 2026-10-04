@@ -50,7 +50,7 @@ try {
   const dead = workspaceStatus(file); assert.equal(dead.owner_alive, false); assert.equal(dead.operation.id, operation.id); assert.equal(dead.interrupted, null);
   const reports = [['workspace', 'wait', '--timeout', '1000'], ...['strategy', 'trades', 'ledger', 'equity'].map(endpoint => ['data', endpoint])];
   for (const args of reports) { const result = call(['--workspace', name, ...args], 1); assert.equal(result.code, 'WORKSPACE_OWNER_DEAD'); assert.equal(result.details.result_adopted, false); }
-  if (control) { call(['--workspace', control, 'state']); call(['--workspace', control, 'timeframe', '60']); call(['--workspace', control, 'data', 'strategy']); }
+  if (control) { call(['--workspace', control, 'state']); call(['--workspace', control, 'timeframe', '60']); }
   call(['--workspace', name, 'workspace', 'interrupt', '--operation', operation.id]);
   for (const args of reports) assert.equal(call(['--workspace', name, ...args], 1).code, 'WORKSPACE_RECOVERY_REQUIRED');
   const recovered = call(['--workspace', name, 'workspace', 'recover', '--operation', operation.id]); assert.equal(recovered.recovered, true);

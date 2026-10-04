@@ -11,7 +11,7 @@ function call(args, expected) {
 }
 call(['status'], 0);
 const old = call(['--workspace', name, 'pine', 'compile', '--save'], 0).value.strategy_id;
-const foreign = call(['--workspace', control, 'pine', 'compile', '--save'], 0).value.strategy_id;
+const foreign = call(['--workspace', control, 'state'], 0).value.studies.find(study => study.name === 'CLI_I41_42_44_B_20261004')?.id;
 assert.ok(old && foreign && old !== foreign);
 const revision = call(['--workspace', name, 'data', 'ledger', '--limit', '1'], 0).value.report_revision;
 for (const [label, id] of [['unknown', 'no-such-qa-id'], ['foreign-workspace', foreign]]) for (const endpoint of ['strategy', 'trades', 'ledger', 'equity']) {
