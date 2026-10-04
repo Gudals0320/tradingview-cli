@@ -293,13 +293,21 @@ export function splitMarkers(markers) {
 }
 
 export function readStrategyReport(window, options = {}) {
+  const strategies = pageStrategies(window);
+  if (options.strategy_id && !strategies.some(item => item.id === options.strategy_id)) {
+    const current = window.__tvCliCompilation?.strategy_id;
+    return { success: false, code: 'STUDY_NOT_FOUND', error: 'Requested strategy study ID is absent; re-read its current ID before retrying.',
+      details: { requested_strategy_id: options.strategy_id, current_strategy_id: strategies.some(item => item.id === current) ? current : null,
+        next_action: 'Read the owned current strategy ID using state or workspace wait; never retry a removed ID as calculation pending.' } };
+  }
   const compile = compilationState(window);
   if (['pending', 'failed', 'invalidated'].includes(compile.phase)) return { success: false,
     error: compile.error || 'Fresh strategy report is still pending after compilation.',
     code: compile.phase === 'pending' ? 'REPORT_PENDING' : compile.phase === 'invalidated' ? 'REPORT_INVALIDATED' : compile.code || 'STRATEGY_RUNTIME_ERROR' };
-  const strategies = pageStrategies(window);
   const id = options.strategy_id || (!options.strategy && compile.phase === 'ready' ? compile.strategy_id : null);
   const matching = strategies.filter((item) => (!id || item.id === id) && (!options.strategy || item.name === options.strategy));
+  if (matching.length > 1) return { success: false, code: 'REPORT_AMBIGUOUS', error: 'Strategy report is ambiguous; specify the owned current strategy ID.' };
+  if (matching[0]?.runtime_error) return { success: false, code: 'STRATEGY_RUNTIME_ERROR', error: String(matching[0].runtime_error) };
   const ready = matching.filter((item) => reportIsComplete(item.report));
   if (ready.length !== 1) return { success: false, error: ready.length > 1 ? 'Strategy report is ambiguous; specify a strategy ID.' : 'Requested strategy report is not ready.', code: 'REPORT_PENDING' };
   const found = ready[0], report = found.report;

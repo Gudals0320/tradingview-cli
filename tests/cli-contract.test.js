@@ -11,18 +11,19 @@ import WebSocket from 'ws';
 import CDP from 'chrome-remote-interface';
 import { acquireSession, sessionPaths, sessionStatus } from '../src/session.js';
 import { reserveWorkspace, acquireWorkspace, noteWorkspaceState, workspaceStatus, loadWorkspace } from '../src/workspace-store.js';
-import { registerWorkspaceName } from '../src/workspace-registry.js';
+import { registerWorkspaceName, recordCreatedLayout } from '../src/workspace-registry.js';
 import { sourceHash } from '../src/session.js';
 import { runInNewContext } from 'node:vm';
 import { WORKSPACE_PAGE_CODE } from '../src/workspace-page.js';
 import { beginCompilation } from '../src/strategy-state.js';
+import { reportPage } from './fixtures/report-page.mjs';
 
 const CLI = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
 
 // Exercise the real entry point, parser, router and filesystem ownership code.
 // An isolated HTTP endpoint counts unexpected Desktop access; no real Desktop,
 // external API, user target, or user workspace is used by these tests.
-async function fixture(t, pageResult, { pine = 'owned-document', snapshotFactory, epochFactory } = {}) {
+async function fixture(t, pageResult, { pine = 'owned-document', snapshotFactory, epochFactory, createdByCli = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'tv-cli-contract-'));
   const requests = [], sockets = new Set();
   let connections = 0;
@@ -69,7 +70,7 @@ async function fixture(t, pageResult, { pine = 'owned-document', snapshotFactory
   delete env.TV_CDP_TARGET;
   delete env.TV_WORKSPACE;
   if (pageResult) {
-    const workspace = reserveWorkspace({file:join(root,'contract.json'),target:'fixture-target',layout:'fixture-layout',pine},options);
+    const workspace = reserveWorkspace({file:join(root,'contract.json'),target:'fixture-target',layout:'fixture-layout',pine,created_by_cli:createdByCli},options);
     const lease = acquireWorkspace(workspace.file,options); lease.saveBinding({nonce:'fixture-generation',browser:'fixture-browser'});lease.finish({success:true});
     registerWorkspaceName('contract',workspace.file,options);
   }
@@ -267,6 +268,91 @@ it('BOM file and stdin fail at the real entry point before any Desktop access or
     assert.equal(f.requests.length, 0); assert.deepEqual(snapshot(f.options.directory), before);
     const state = workspaceStatus(join(f.root, 'contract.json'), f.options);
     assert.equal(state.operation, null); assert.equal(state.interrupted, null);
+  }
+});
+
+async function reportFixture(t, onExpression) {
+  const page = reportPage();
+  const f = await fixture(t, async expression => { const value = await page.evaluate(expression); await onExpression?.(expression); return value; }, { snapshotFactory: page.snapshot, epochFactory: page.epoch });
+  page.bind(loadWorkspace(join(f.root, 'contract.json'), f.options)); page.compile();
+  return { ...f, page };
+}
+async function operationOwner(f) {
+  const module = new URL('../src/workspace-store.js', import.meta.url).href;
+  const script = `import {acquireWorkspace} from ${JSON.stringify(module)};const lease=acquireWorkspace(${JSON.stringify(join(f.root, 'contract.json'))},{...${JSON.stringify(f.options)},command:'pine compile'});console.log(JSON.stringify({id:lease.operation,pid:process.pid}));process.stdin.once('data',()=>{lease.finish({success:true,result:{success:true}});process.stdin.pause();});`;
+  const child = spawn(process.execPath, ['--input-type=module', '-e', script], { stdio: ['pipe', 'pipe', 'pipe'] });
+  const stopped = once(child, 'close'); let buffer = '', stderr = '';
+  child.stderr.on('data', chunk => stderr += chunk);
+  const ready = new Promise((resolve, reject) => {
+    child.once('error', reject); child.once('close', () => { if (!buffer.includes('\n')) reject(new Error(stderr)); });
+    child.stdout.on('data', chunk => { buffer += chunk; if (buffer.includes('\n')) resolve(JSON.parse(buffer.trim())); });
+  });
+  const identity = await ready;
+  return { child, identity, async kill() { child.kill('SIGKILL'); await stopped; }, async finish() { child.stdin.end('finish'); await stopped; } };
+}
+
+it('report/wait real entry points reject dead owners before or during production report evaluation without adopting/deleting records', async t => {
+  for (const phase of ['before', 'during']) for (const args of [['workspace', 'wait', '--timeout', '1000'], ['data', 'strategy'], ['data', 'trades'], ['data', 'ledger'], ['data', 'equity']]) {
+    let owner, killed = false;
+    const f = await reportFixture(t, async expression => {
+      if (phase === 'during' && owner && !killed && (expression.includes('function readStrategyReport') || expression.includes('function compilationState'))) { killed = true; await owner.kill(); }
+    });
+    owner = await operationOwner(f);
+    if (phase === 'before') { killed = true; await owner.kill(); }
+    const records = snapshot(f.options.directory);
+    const error = jsonError(await f.run(['--workspace', 'contract', ...args]), /terminated/, 'WORKSPACE_OWNER_DEAD');
+    assert.equal(error.details.operation.id, owner.identity.id); assert.equal(error.details.result_adopted, false);
+    assert.ok(error.details.next_commands.includes(`tv --workspace 'contract' workspace interrupt --operation ${owner.identity.id}`));
+    assert.equal(workspaceStatus(join(f.root, 'contract.json'), f.options).operation.id, owner.identity.id);
+    assert.deepEqual(snapshot(f.options.directory), records);
+  }
+});
+
+it('real report observations preserve living-owner continuity and accept only its exact committed completion', async t => {
+  const f = await reportFixture(t), owner = await operationOwner(f);
+  const ready = jsonResult(await f.run(['--workspace', 'contract', 'data', 'strategy']));
+  assert.equal(ready.success, true); assert.equal(workspaceStatus(join(f.root, 'contract.json'), f.options).operation.id, owner.identity.id);
+  const waiting = f.run(['--workspace', 'contract', 'workspace', 'wait', '--timeout', '5000']);
+  await new Promise(resolve => setTimeout(resolve, 300)); await owner.finish();
+  assert.equal(jsonResult(await waiting).phase, 'ready');
+  const live = await operationOwner(f);
+  const other = reserveWorkspace({ file: join(f.root, 'other.json'), target: 'other-target', layout: 'other-layout' }, f.options);
+  const lease = acquireWorkspace(other.file, f.options); lease.finish({ success: true });
+  assert.equal(jsonResult(await f.run(['--workspace', 'contract', 'data', 'ledger'])).success, true);
+  await live.finish();
+});
+
+it('four real report entry points distinguish unknown/removed/foreign/valid IDs and keep pending/zero/equity contracts', async t => {
+  const f = await reportFixture(t); f.page.foreign();
+  const endpoints = ['strategy', 'trades', 'ledger', 'equity'];
+  for (const [id, code] of [['unknown-id', 'STUDY_NOT_FOUND'], ['other-workspace-id', 'STUDY_NOT_FOUND'], ['foreign-chart-study', 'WORKSPACE_STUDY_MISMATCH']]) for (const endpoint of endpoints) {
+    const error = jsonError(await f.run(['--workspace', 'contract', 'data', endpoint, '--strategy-id', id]), /strategy/, code);
+    assert.equal(error.details.requested_strategy_id, id); assert.equal(error.details.current_strategy_id, 'owned-study');
+    assert.equal(error.details.calculation_pending, false); assert.ok(error.details.next_commands.includes("tv --workspace 'contract' state"));
+  }
+  f.page.replace('replacement-study'); f.page.compile('replacement-text');
+  for (const endpoint of endpoints) jsonError(await f.run(['--workspace', 'contract', 'data', endpoint, '--strategy-id', 'owned-study']), /absent/, 'STUDY_NOT_FOUND');
+  for (const endpoint of endpoints) {
+    const result = jsonResult(await f.run(['--workspace', 'contract', 'data', endpoint, '--strategy-id', 'replacement-study']), endpoint === 'equity' ? 1 : 0);
+    assert.equal(result.code, endpoint === 'equity' ? 'EQUITY_UNAVAILABLE' : undefined);
+  }
+  f.page.zero(); f.page.compile('zero-text');
+  const ledger = jsonResult(await f.run(['--workspace', 'contract', 'data', 'ledger', '--strategy-id', 'replacement-study']));
+  assert.equal(ledger.total_trades, 0); assert.deepEqual(ledger.trades, []);
+  f.page.pending();
+  for (const endpoint of endpoints) assert.equal(jsonResult(await f.run(['--workspace', 'contract', 'data', endpoint, '--strategy-id', 'replacement-study']), 1).code, 'REPORT_PENDING');
+  for (const endpoint of endpoints) jsonError(await f.run(['--workspace', 'contract', 'data', endpoint, '--strategy-id', 'unknown-id']), /absent/, 'STUDY_NOT_FOUND');
+});
+
+it('existing GUI and legacy boolean/ledger workspaces fail close before Desktop access with preserved records', async t => {
+  for (const legacy of [false, true]) {
+    const f = await fixture(t, () => ({}), { pine: null, createdByCli: legacy });
+    if (legacy) recordCreatedLayout({ chart_id: 'fixture-layout', target: 'fixture-target' }, f.options);
+    const records = snapshot(f.options.directory);
+    const error = jsonError(await f.run(['--workspace', 'contract', 'tab', 'close']), /creation proof/, 'WORKSPACE_TAB_NOT_OWNED');
+    assert.equal(error.details.reason, legacy ? 'legacy_ownership_unverified' : 'tab_lifecycle_unverified');
+    assert.ok(error.details.next_commands.includes("tv --workspace 'contract' workspace release"));
+    assert.equal(f.requests.length, 0); assert.deepEqual(snapshot(f.options.directory), records);
   }
 });
 

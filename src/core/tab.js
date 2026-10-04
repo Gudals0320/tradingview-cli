@@ -91,15 +91,39 @@ async function withTarget(targetId, fn) {
  *   layout: '<name>' -> open the saved layout whose title contains <name>
  * Reuses an already-open landing tab instead of opening another one.
  */
+export function verifiedTabOwnership({ layout, target, browser, browserAfter, landing, createdLanding, createdShellTab, shellTab, initialTargets, origin, initialShellTabs = [], finalShellTabs = [] }) {
+  // Create-layout replaces its newly born placeholder shell tab in Desktop 3.4.1.
+  // Accept only one replacement, with every pre-call tab still present.
+  const added = finalShellTabs.filter(id => !initialShellTabs.includes(id));
+  const replaced = Boolean(origin === 'create' && createdShellTab && initialShellTabs.length && !finalShellTabs.includes(createdShellTab)
+    && initialShellTabs.every(id => finalShellTabs.includes(id)) && added.length === 1 && added[0] === shellTab);
+  const owned = Boolean(createdLanding && createdShellTab && (shellTab === createdShellTab || replaced) && browser && browser === browserAfter
+    && landing && target && layout && !initialTargets.includes(landing) && !initialTargets.includes(target));
+  return { owned, origin, layout, target, browser_generation: browser,
+    reason: owned ? 'new_cli_tab_verified' : !createdLanding ? 'reused_landing' : 'tab_creation_unverified',
+    observed: { created_landing: createdLanding, created_shell_tab: createdShellTab, resolved_shell_tab: shellTab,
+      landing_absent_before: !initialTargets.includes(landing), target_absent_before: !initialTargets.includes(target), browser_unchanged: Boolean(browser && browser === browserAfter), shell_replacement_verified: replaced },
+    ...(owned ? { proof: { landing_target: landing, shell_tab_id: shellTab, new_tab_button: true, target_absent_before: true } } : {}) };
+}
+
 export async function newTab({ layout, layout_id, create = false, name, reconnect = true } = {}) {
+  const initialTargets = (await CDP.List({ host: CDP_HOST, port: CDP_PORT })).map(target => target.id);
+  const browser = (await CDP.Version({ host: CDP_HOST, port: CDP_PORT })).webSocketDebuggerUrl;
+  let createdLanding = false, createdShellTab = null, initialShellTabs = [];
   let landing = await findLandingTarget();
   if (!landing) {
     await withShell(async (evalIn) => {
+      const before = await evalIn(`(${readShellState.toString()})(document,window)`);
+      initialShellTabs = before.tabs.map(tab => tab.shell_tab_id);
       const clicked = await evalIn(`(${clickNewTabButton.toString()})(document)`, { mutation: true });
       if (!clicked) throw new Error('New-tab button not found in shell window.');
       await new Promise(r => setTimeout(r, 1500));
+      const after = await evalIn(`(${readShellState.toString()})(document,window)`);
+      const added = after.tabs.filter(tab => !before.tabs.some(old => old.shell_tab_id === tab.shell_tab_id));
+      if (added.length === 1 && added[0].active) createdShellTab = added[0].shell_tab_id;
     });
     landing = await waitForLandingTarget();
+    createdLanding = true;
   }
   if (!layout && !layout_id && !create) return landingTabResult(await list(), landing);
 
@@ -215,6 +239,11 @@ export async function newTab({ layout, layout_id, create = false, name, reconnec
   }
   if (!resolved?.resolved) throw new Error('Layout opened, but its Desktop tab identity is not ready. Inspect tab list before retrying.');
   await bindShellTab(chartTarget.id, resolved.shell_tab_id);
+  const finalShell = await withShell(evalIn => evalIn(`(${readShellState.toString()})(document,window)`));
+  const browserAfter = (await CDP.Version({ host: CDP_HOST, port: CDP_PORT })).webSocketDebuggerUrl;
+  const tab_ownership = verifiedTabOwnership({ layout: openedId, target: chartTarget.id, browser, browserAfter,
+    landing: landing.id, createdLanding, createdShellTab, shellTab: resolved.shell_tab_id, initialTargets, initialShellTabs,
+    finalShellTabs: finalShell.tabs.map(tab => tab.shell_tab_id), origin: create ? 'create' : 'open' });
   if (reconnect) await reconnectTo(chartTarget.id);
   return {
     success: true,
@@ -222,6 +251,7 @@ export async function newTab({ layout, layout_id, create = false, name, reconnec
     layout: picked,
     chart_id: chartTarget.url.match(/\/chart\/([^/?]+)/)?.[1] || null,
     target: chartTarget.id,
+    tab_ownership,
   };
 }
 

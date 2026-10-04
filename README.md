@@ -30,6 +30,8 @@ tv status
 있습니다. PowerShell 모듈을 쓰는 동안 저장소 진입점을 고정하려면
 `$env:TV_CLI_ENTRY = (Resolve-Path .\src\cli\index.js).Path`를 설정합니다.
 
+2.2.0 호환성: 미복구 dead operation은 모든 Desktop 관찰에서 `WORKSPACE_OWNER_DEAD`로 거부하고 `workspace show`는 진단용으로 유지합니다. 없는 strategy ID는 기다리는 대신 현재 ID를 다시 조회하세요. `layout open`이 실제로 만든 새 탭의 정확한 lifecycle만 close할 수 있습니다. 2.1 이하의 boolean-only 탭 소유권은 자동 승격하지 않으므로 `WORKSPACE_TAB_NOT_OWNED`가 나면 draft를 보존하고 reservation을 release하거나 사용자가 직접 닫은 뒤 새 CLI 탭을 여세요. 기존 landing 재사용/GUI 탭은 close 소유로 주장하지 않습니다.
+
 ```powershell
 tv update
 Import-Module .\scripts\TradingViewCli.psm1 -Force

@@ -8,6 +8,7 @@ import { normalizeTimeframe, symbolMatches } from '../src/chart-context.js';
 import { failCompilation } from '../src/strategy-state.js';
 import { canonicalPineSource } from '../src/pine-source.js';
 import { sourceHash } from '../src/session.js';
+import { reportPage } from './fixtures/report-page.mjs';
 
 function fixture() {
   let report = { performance: { all: { netProfit: 10, netProfitPercent: 0.001, totalTrades: 2, numberOfWiningTrades: 1, numberOfLosingTrades: 0 } },
@@ -39,6 +40,13 @@ function fixture() {
 }
 
 describe('Strategy report identity and metadata', () => {
+  it('missing explicit IDs are stable before pending, while ambiguity/runtime-incomplete are distinct', () => {
+    const p = reportPage(); p.foreign();
+    assert.equal(readStrategyReport(p.window).code, 'REPORT_AMBIGUOUS');
+    assert.equal(readStrategyReport(p.window, { strategy_id: 'absent' }).code, 'STUDY_NOT_FOUND');
+    const runtime = reportPage(); runtime.runtimeError();
+    assert.equal(readStrategyReport(runtime.window, { strategy_id: 'owned-study' }).code, 'STRATEGY_RUNTIME_ERROR');
+  });
   it('source setter accepts Monaco LF/CRLF/mixed/lone CR normalization and rejects all other edits', async () => {
     let reads = 0;
     await assert.rejects(setSource({ source: '\uFEFFa\n', _deps: { evaluate() { reads++; } } }), e => e.code === 'PINE_SOURCE_UNSUPPORTED_BOM' && e.details.editor_changed === false);

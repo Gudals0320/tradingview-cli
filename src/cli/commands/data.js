@@ -59,12 +59,12 @@ register('data', {
       handler: (opts) => core.getPineBoxes({ study_filter: opts.filter, verbose: opts.verbose }),
     }],
     ['strategy', {
-      description: 'Get verified native Strategy Tester metrics; missing metrics are omitted',
+      description: 'Get verified owned Strategy Tester metrics; dead owners require explicit recovery and absent strategy IDs fail without waiting',
       options: { 'strategy-id': { type: 'string', description: 'Exact current-session strategy study ID' } },
       handler: (opts) => core.getStrategyResults({ strategy_id: opts['strategy-id'] }),
     }],
     ['trades', {
-      description: 'Get recent backtest order events (not the closed/open trade ledger)',
+      description: 'Get verified owned backtest order events; dead owner and absent/foreign strategy IDs cannot be adopted',
       options: {
         max: { type: 'string', short: 'n', description: 'Requested order count (default 20, capped at 20)' },
         'strategy-id': { type: 'string', description: 'Exact current-session strategy study ID' },
@@ -72,7 +72,7 @@ register('data', {
       handler: (opts) => core.getTrades({ max_trades: opts.max ? Number(opts.max) : undefined, strategy_id: opts['strategy-id'] }),
     }],
     ['ledger', {
-      description: 'Get verified closed/open native trade ledger; use report revision across pages',
+      description: 'Get verified owned closed/open ledger; preserve revision across pages, reconcile dead owners and refresh absent strategy IDs',
       options: {
         offset: { type: 'string', description: 'First trade ordinal (default 0)' },
         limit: { type: 'string', description: 'Page size (default 100, max 500)' },
@@ -82,7 +82,7 @@ register('data', {
       handler: (opts) => core.getTradeLedger({ offset: Number(opts.offset || 0), limit: Number(opts.limit || 100), strategy_id: opts['strategy-id'], report_revision: opts['report-revision'] }),
     }],
     ['equity', {
-      description: 'Get native strategy equity if available; otherwise fail with EQUITY_UNAVAILABLE',
+      description: 'Get verified owned equity; reconcile dead owners and refresh absent IDs; unsupported data is EQUITY_UNAVAILABLE',
       options: { 'strategy-id': { type: 'string', description: 'Exact current-session strategy study ID' } },
       handler: (opts) => core.getEquity({ strategy_id: opts['strategy-id'] }),
     }],

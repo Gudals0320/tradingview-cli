@@ -55,6 +55,7 @@ async function pollLoop(fetcher, { interval = 500, dedupe = true, label = 'strea
     try {
       if(currentWorkspaceSession())await evaluate('true'); // Verify ownership/nonce before every sample, including null samples.
       const data = await fetcher();
+      currentWorkspaceSession()?.assertOwner?.(); // No dead-owner sample can be adopted after an awaited fetch.
       if (!data) { await sleep(interval); continue; }
       const workspace=currentWorkspaceSession()?.workspace;
       if(workspace)data.provenance={workspace_id:workspace.id,target:workspace.target,page_generation:workspace.binding?.nonce};

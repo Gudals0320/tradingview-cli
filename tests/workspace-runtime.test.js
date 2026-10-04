@@ -12,7 +12,8 @@ process.env.TMP = runtimeSessionRoot;
 process.env.TV_STATE_DIR = join(runtimeSessionRoot, 'tradingview-cli-sessions');
 process.env.TV_CDP_HOST = `runtime-fixture-${randomUUID()}`;
 process.env.TV_CDP_PORT = '1';
-const { reserveWorkspace, acquireWorkspace, workspaceStatus, abandonWorkspace } = await import('../src/workspace-store.js');
+const { reserveWorkspace, acquireWorkspace, workspaceStatus, abandonWorkspace, assertObservationAdmission } = await import('../src/workspace-store.js');
+const { ownerAlive } = await import('../src/process-identity.js');
 const { runWorkspace, rebindWorkspace, closeWorkspace } = await import('../src/workspace.js');
 const { sourceHash } = await import('../src/session.js');
 function fixture() {
@@ -40,6 +41,23 @@ it('an unverified report is a clean failure and the next verified read can conti
     const result=await runWorkspace(f.workspace.file,'data strategy',{},[],async()=>({success:true,strategy_id:'study'}),{_deps:f.deps});
     assert.equal(result.success,true);
   }finally{f.cleanup();}
+});
+
+it('unknown PID/identity stays protected and generation/operation/recovery races prevent result adoption', async () => {
+  assert.equal(ownerAlive({ pid: null }), true); assert.equal(ownerAlive({ pid: process.pid, process_started_at: 'unverifiable' }), true);
+  const f = fixture();
+  try {
+    const baseline = workspaceStatus(f.workspace.file);
+    for (const patch of [{ generation: 'changed' }, { operation: { id: 'new-operation' }, owner_alive: true }, { interrupted: { operation_id: 'interrupted' } }]) {
+      let reads = 0;
+      f.deps.workspaceStatus = () => ++reads === 1 ? baseline : { ...baseline, ...patch };
+      await assert.rejects(runWorkspace(f.workspace.file, 'data strategy', {}, [], async () => ({ success: true, strategy_id: 'study' }), { _deps: f.deps }), e => e.code === (patch.interrupted ? 'WORKSPACE_RECOVERY_REQUIRED' : 'WORKSPACE_OBSERVATION_CHANGED'));
+    }
+    assert.doesNotThrow(() => assertObservationAdmission({ ...baseline, operation: { id: 'unknown-owner', pid: null }, owner_alive: true }, 'worker'));
+    const pinned = { ...baseline, operation: { id: 'same-id', pid: 123, command: 'pine compile', process_started_at: 'old-start' }, owner_alive: true };
+    assert.throws(() => assertObservationAdmission({ ...pinned, operation: { ...pinned.operation, pid: 456 } }, 'worker', pinned), { code: 'WORKSPACE_OBSERVATION_CHANGED' });
+    assert.equal(workspaceStatus(f.workspace.file).interrupted, null);
+  } finally { f.cleanup(); }
 });
 
 it('queued quote builds its restore permission after admission from the latest page context', async () => {
