@@ -162,7 +162,7 @@ export async function prepareWorkspacePine(name,values={}) {
       const prepared=await preparePineDocument(request,{journal,adapter,assertDocumentAvailable:available,checkpoint:data=>lease.checkpoint({command:'workspace pine-prepare',...data})});
       available(prepared.document.id);
       if(previous?.phase==='complete'&&previous.generation===workspace.binding.nonce&&workspace.pine===prepared.document.id){
-        const result={...previous.result,reused:true};prepared.intent.phase='complete';journal.write({...prepared.intent,result});lease.finish({success:true,result});return result;
+        const result={...previous.result,reused:true,reused_mounted:prepared.intent.reused_mounted};prepared.intent.phase='complete';journal.write({...prepared.intent,result});lease.finish({success:true,result});return result;
       }
       lease.checkpoint({phase:'pine-document-attach',command:'workspace pine-prepare',pine:prepared.document.id,old_generation:values.generation,request_id:request.request_id});
       if(!workspace.pine){lease.reassign({target:workspace.target,pine:prepared.document.id,expectedGeneration:values.generation,tab_ownership:workspace.tab_ownership});resourcesChanged=true;}
@@ -171,7 +171,7 @@ export async function prepareWorkspacePine(name,values={}) {
       if(!source_proof||source_proof.hash!==prepared.source_hash)throw workspaceError('PINE_PERSISTENCE_UNVERIFIED','Attached source could not be verified against remote saved identity.');
       lease.saveBinding({...binding,browser:selected.binding.browser,source_proof});
       prepared.intent.stages.attached=true;prepared.intent.phase='complete';prepared.intent.generation=binding.nonce;
-      const result={success:true,request_id:request.request_id,document:{id:prepared.document.id,version:prepared.document.version,source_hash:prepared.source_hash},generation:binding.nonce,previous_document:prepared.intent.previous_document,stages:prepared.intent.stages,reused:!!previous,residual_resources:{saved_document:prepared.document.id,tab_preserved:true,tab_ownership_changed:false}};
+      const result={success:true,request_id:request.request_id,document:{id:prepared.document.id,version:prepared.document.version,source_hash:prepared.source_hash},generation:binding.nonce,previous_document:prepared.intent.previous_document,stages:prepared.intent.stages,open_dispatch:prepared.intent.open_dispatch||null,reused_mounted:prepared.intent.reused_mounted===true,reused:!!previous,residual_resources:{saved_document:prepared.document.id,tab_preserved:true,tab_ownership_changed:false}};
       prepared.intent.result=result;journal.write(prepared.intent);
       lease.finish({success:true,result});return result;
     });

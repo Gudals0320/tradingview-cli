@@ -38,6 +38,16 @@ it('matching names do not authorize adopting an existing document',async()=>{
   const h=make();h.saved.push({id:'preexisting',name:'QA',version:'1'});
   await assert.rejects(()=>preparePineDocument(h.request,{journal:h.journal,adapter:h.adapter,assertDocumentAvailable:h.available}),e=>e.code==='PINE_DOCUMENT_NAME_EXISTS');assert.deepEqual(h.counts(),{creates:0,opens:0});
 });
+it('exact-ID preparation verifies an already mounted saved document without a redundant native open',async()=>{
+  const h=make();h.saved.push({id:'QA;existing',name:'QA',version:'1'});h.setState({identity:{scriptIdPart:'QA;existing',version:'1'},source:h.request.source});
+  const request=preparationRequest({open:'QA;existing',requestId:'exact',generation:'g'});
+  const result=await preparePineDocument(request,{journal:h.journal,adapter:h.adapter,assertDocumentAvailable:h.available});assert.equal(result.intent.stages.created,false);assert.equal(result.intent.stages.opened,true);assert.equal(result.intent.open_dispatch,'not_needed');assert.equal(result.intent.reused_mounted,true);assert.deepEqual(h.counts(),{creates:0,opens:0});
+});
+it('same-ID source or version differences do not use the mounted-document shortcut',async()=>{
+  for(const mismatch of ['version','source']){const h=make();h.saved.push({id:'QA;existing',name:'QA',version:'1'});h.setState({identity:{scriptIdPart:'QA;existing',version:mismatch==='version'?'0':'1'},source:mismatch==='source'?'different':h.request.source});
+    const request=preparationRequest({open:'QA;existing',requestId:'exact',generation:'g'});const result=await preparePineDocument(request,{journal:h.journal,adapter:h.adapter,assertDocumentAvailable:h.available});assert.equal(result.intent.reused_mounted,false);assert.deepEqual(h.counts(),{creates:0,opens:1});
+  }
+});
 it('remote source mismatch refuses opening a response-loss candidate',async()=>{
   const h=make();h.adapter.get=async()=>({source:'foreign'});
   await assert.rejects(()=>preparePineDocument(h.request,{journal:h.journal,adapter:h.adapter,assertDocumentAvailable:h.available}),e=>e.code==='PINE_PERSISTENCE_UNVERIFIED');assert.deepEqual(h.counts(),{creates:1,opens:0});

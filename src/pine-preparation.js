@@ -114,7 +114,11 @@ export async function preparePineDocument(request,{journal,adapter,assertDocumen
   intent.verified_hash=hash;intent.stages.persistence_verified=true;intent.phase='opening';persist();
   const current=await adapter.state();
   if(current.modified!==false||current.pending)fail('PINE_FOREIGN_DRAFT','Editor became modified, unverifiable or busy; preserve it.');
-  if(!ownOpened||String(current.identity?.version)!==String(document.version)){
+  const alreadyExact=current.modified===false&&!current.draft&&!current.pending&&current.identity?.scriptIdPart===document.id&&String(current.identity?.version)===String(document.version)&&canonicalPineSource(current.source||'')===source;
+  intent.reused_mounted=alreadyExact;
+  if(alreadyExact&&!intent.open_dispatch)intent.open_dispatch='not_needed';
+  persist();
+  if(!alreadyExact){
     if(!intent.open_dispatch||intent.open_dispatch==='not_admitted'){
       intent.open_dispatch='attempted';intent.phase='opening';persist();
       checkpoint({phase:'pine-document-open',document_id:document.id,request_id:request.request_id});
