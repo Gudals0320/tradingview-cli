@@ -60,6 +60,8 @@ an unknown native operation.
 | PINE_DOCUMENT_CHANGED / PINE_PERSISTENCE_UNVERIFIED / PINE_OPEN_UNVERIFIED | Saved source or mounted identity/version/source differs. Preserve artifacts, inspect the recorded stages and reconcile the exact operation if interrupted. |
 | PINE_OPEN_UNSUPPORTED / WORKSPACE_PINE_OPEN_UNSUPPORTED | Exact-version native controller is unavailable. No fallback new/blank document is opened. |
 | PINE_OPEN_FAILED | Native exact open failed; editor_changed and current_identity report observed side effects. |
+| PINE_OPEN_BUSY | Native exact open was not admitted during another open transition. Wait for the editor to settle, then resume the same request; no new document is created. |
+| PINE_EDITOR_SETTLE_TIMEOUT | Initial mount/restore exceeded its finite wait. No document create/open was dispatched. Wait/inspect, then resume the same request. |
 | WORKSPACE_PINE_ALREADY_BOUND | Detach explicitly before preparing a different document; bound resource replacement is not implicit. |
 | PINE_COMPILE_ERROR | Fix diagnostic locations and compile requested source. |
 | REPORT_UNVERIFIED / REPORT_INVALIDATED | Compile owned source or perform verified input change; never adopt prior metrics. |

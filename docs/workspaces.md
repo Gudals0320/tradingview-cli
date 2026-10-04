@@ -24,6 +24,10 @@ or saving a document. An unmodified saved editor document may be switched and
 its ID is reported as previous_document. Document creation never grants tab-close
 ownership. New documents use the native no-overwrite save API, then exact remote
 ID/version/source verification, exact version open, and attachment.
+Open waits finitely for the native Redux result to reach Monaco; it never repeats
+the native open during that wait. A mounting editor's initial saved-document
+restore settles before a new document request is dispatched. Native skipped-open
+admission is a busy error, not a successful open.
 
 ```powershell
 tv workspace show research-a
@@ -40,6 +44,10 @@ retries with the old generation return current generation guidance; resume with
 that generation for reused:true without a new document or calculation invalidation.
 Changing a request's contents requires a new request ID. Partial attachment keeps
 the exact native operation fenced until explicit recovery. Saved artifacts remain.
+Create cannot lock a not-yet-known document ID: app/layout/workspace locks plus
+the final atomic reservation check protect that phase. Exact-ID open additionally
+takes its document lock. Legacy `pine open` now refuses a modified draft and uses
+the checked exact-version native method, avoiding silent new/blank fallback.
 
 ```powershell
 Import-Module .\scripts\TradingViewCli.psm1

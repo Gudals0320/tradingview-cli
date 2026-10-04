@@ -21,7 +21,7 @@ import { newTab } from './core/tab.js';
 import { secureDirectory } from './private-store.js';
 import { layoutList } from './core/ui.js';
 import { canonicalPineSource } from './pine-source.js';
-import { preparationRequest, preparationJournal, preparePineDocument, pinePreparationAdapter } from './pine-preparation.js';
+import { preparationRequest, preparationJournal, preparePineDocument, pinePreparationAdapter,waitPineEditorMount } from './pine-preparation.js';
 import { ensurePineEditorOpen } from './core/pine.js';
 export { WORKSPACE_COMMANDS } from './cli/policy.js';
 
@@ -157,8 +157,9 @@ export async function prepareWorkspacePine(name,values={}) {
       const available=id=>{if(readReservations().some(row=>row.id!==workspace.id&&row.pine===id))throw workspaceError('WORKSPACE_RESOURCE_RESERVED','Another workspace reserves this exact Pine document.');};
       if(values.open)available(values.open);
       // Mounting is explicit; no editor replacement or saving is performed here.
-      if(values.mount){lease.checkpoint({phase:'pine-editor-mount',command:'workspace pine-prepare'});await ensurePineEditorOpen();}
-      const prepared=await preparePineDocument(request,{journal,adapter:pinePreparationAdapter(),assertDocumentAvailable:available,checkpoint:data=>lease.checkpoint({command:'workspace pine-prepare',...data})});
+      const adapter=pinePreparationAdapter();
+      if(values.mount){lease.checkpoint({phase:'pine-editor-mount',command:'workspace pine-prepare'});await ensurePineEditorOpen();await waitPineEditorMount(adapter);}
+      const prepared=await preparePineDocument(request,{journal,adapter,assertDocumentAvailable:available,checkpoint:data=>lease.checkpoint({command:'workspace pine-prepare',...data})});
       available(prepared.document.id);
       if(previous?.phase==='complete'&&previous.generation===workspace.binding.nonce&&workspace.pine===prepared.document.id){
         const result={...previous.result,reused:true};prepared.intent.phase='complete';journal.write({...prepared.intent,result});lease.finish({success:true,result});return result;

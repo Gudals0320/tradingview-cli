@@ -35,7 +35,7 @@ export function preparationJournal(directory,requestId) {
 
 /** Native saved-document API avoids locale-sensitive save dialogs and overwrite. */
 export function pinePreparationAdapter(inspect=evaluateAsync) {
-  const state=()=>inspect(`(()=>{const c=(${findPineController.toString()})(document),e=(${findPineEditor.toString()})(document);return {mounted:!!c&&!!e,modified:c?.isModified?.()??null,draft:c?.isDraft?.()??null,identity:c?.getScriptIdVersion?.()||null,pending:!!window.__tvCliPinePrepare?.pending,source:e?.editor.getValue()??null};})()`);
+  const state=()=>inspect(`(()=>{const c=(${findPineController.toString()})(document),e=(${findPineEditor.toString()})(document),store=c?._editorStore?.getStore?.().getState?.();return {mounted:!!c&&!!e,modified:c?.isModified?.()??null,draft:c?.isDraft?.()??null,identity:c?.getScriptIdVersion?.()||null,pending:!!window.__tvCliPinePrepare?.pending||Object.keys(store?.ui?.pendingRequests||{}).length>0||['pending','loading'].includes(store?.openScript?.status),source:e?.editor.getValue()??null};})()`);
   return {state,
     list:()=>inspect(`fetch('https://pine-facade.tradingview.com/pine-facade/list/?filter=saved',{credentials:'include'}).then(async r=>{if(!r.ok)throw Error('PINE_LIST_FAILED: HTTP '+r.status);const rows=await r.json();if(!Array.isArray(rows))throw Error('PINE_LIST_FAILED: Invalid saved list');return rows.map(s=>({id:s.scriptIdPart,name:s.scriptName||s.scriptTitle,version:s.version}));})`),
     get:(id,version)=>inspect(`fetch('https://pine-facade.tradingview.com/pine-facade/get/'+encodeURIComponent(${JSON.stringify(id)})+'/'+encodeURIComponent(${JSON.stringify(version)}),{credentials:'include'}).then(async r=>{if(!r.ok)throw Error('PINE_DOCUMENT_NOT_FOUND: HTTP '+r.status);return r.json();})`),
@@ -45,12 +45,22 @@ export function pinePreparationAdapter(inspect=evaluateAsync) {
       if(error.message.includes('Saving one more script is not available on the current plan')){error.code='PINE_CREATION_REJECTED';error.creation_rejected=true;}
       throw error;
     }},
-    open:document=>inspect(`(async()=>{const c=(${findPineController.toString()})(document);if(!c||c.isModified?.())throw Error('PINE_FOREIGN_DRAFT: Preserve existing draft');const target={scriptIdPart:${JSON.stringify(document.id)},version:${JSON.stringify(document.version)}};if(typeof c._initScriptVersion!=='function')throw Error('PINE_OPEN_UNSUPPORTED: Exact-version native controller unavailable');await c._initScriptVersion(target);return true;})()`,{mutation:true}),
+    open:async document=>{const result=await inspect(`(async()=>{const c=(${findPineController.toString()})(document);if(!c||c.isModified?.()!==false)throw Error('PINE_FOREIGN_DRAFT: Preserve existing draft');const target={scriptIdPart:${JSON.stringify(document.id)},version:${JSON.stringify(document.version)}};if(typeof c._initScriptVersion!=='function')return {success:false,code:'PINE_OPEN_UNSUPPORTED',error:'Exact-version native controller unavailable',details:{editor_changed:false,current_identity:c.getScriptIdVersion()}};await c.awaitEditorReady?.();const result=await c._initScriptVersion(target);if(result?.meta?.condition)return {success:false,code:'PINE_OPEN_BUSY',error:'Native open was not admitted; wait and resume the same request',details:{editor_changed:false,current_identity:c.getScriptIdVersion()}};return {success:true};})()`,{mutation:true});
+      if(result?.success===false)fail(result.code,result.error,result.details);return result;
+    },
   };
 }
 
+export async function waitPineEditorMount(adapter,{timeout=10000,now=Date.now,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms))}={}){
+  const start=now();let state=await adapter.state();
+  const settling=()=>state.mounted&&state.modified!==true&&(state.pending||!state.identity?.scriptIdPart&&state.draft!==true);
+  while(settling()&&now()-start<timeout){await sleep(100);state=await adapter.state();}
+  if(settling())fail('PINE_EDITOR_SETTLE_TIMEOUT','Initial Pine editor restore did not settle; no document create/open was dispatched.',{document_action_dispatched:false,editor_changed:'mount_only',current_identity:state.identity});
+  return state;
+}
+
 /** Unknown creation is reconciled by exact before/after identities, never replayed. */
-export async function preparePineDocument(request,{journal,adapter,assertDocumentAvailable,checkpoint=()=>{}}) {
+export async function preparePineDocument(request,{journal,adapter,assertDocumentAvailable,checkpoint=()=>{},sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),now=Date.now,timeout=10000}) {
   let intent=journal.read();
   if(intent&&intent.fingerprint!==request.fingerprint)fail('PINE_REQUEST_CONFLICT','Request ID already describes a different preparation.');
   const persist=()=>journal.write(intent);
@@ -105,10 +115,19 @@ export async function preparePineDocument(request,{journal,adapter,assertDocumen
   const current=await adapter.state();
   if(current.modified!==false||current.pending)fail('PINE_FOREIGN_DRAFT','Editor became modified, unverifiable or busy; preserve it.');
   if(!ownOpened||String(current.identity?.version)!==String(document.version)){
-    checkpoint({phase:'pine-document-open',document_id:document.id,request_id:request.request_id});await adapter.open(document);
+    if(!intent.open_dispatch||intent.open_dispatch==='not_admitted'){
+      intent.open_dispatch='attempted';intent.phase='opening';persist();
+      checkpoint({phase:'pine-document-open',document_id:document.id,request_id:request.request_id});
+      try{await adapter.open(document);intent.open_dispatch='completed';intent.phase='open_wait';persist();}
+      catch(error){intent.open_dispatch=['PINE_OPEN_BUSY','PINE_OPEN_UNSUPPORTED'].includes(error.code)?'not_admitted':'unknown';persist();throw error;}
+    }
   }
-  const opened=await adapter.state();
-  if(opened.modified||opened.draft||opened.identity?.scriptIdPart!==document.id||String(opened.identity?.version)!==String(document.version)||canonicalPineSource(opened.source||'')!==source)fail('PINE_OPEN_UNVERIFIED','Mounted document identity/version/source does not match the verified remote document.');
+  const matches=state=>state.modified===false&&!state.draft&&!state.pending&&state.identity?.scriptIdPart===document.id&&String(state.identity?.version)===String(document.version)&&canonicalPineSource(state.source||'')===source;
+  let opened=await adapter.state();const start=now();
+  // Redux completion may precede Monaco's React commit. Observe it finitely;
+  // this wait never repeats the native open or repairs an identity by writing.
+  while(!matches(opened)&&opened.modified!==true&&now()-start<timeout){await sleep(100);opened=await adapter.state();}
+  if(!matches(opened))fail('PINE_OPEN_UNVERIFIED','Mounted document identity/version/source does not match the verified remote document.',{native_open_replayed:false,open_dispatch:intent.open_dispatch,current_identity:opened.identity,editor_changed:opened.source!==before.source});
   intent.stages.opened=true;intent.phase='attaching';persist();
   return {intent,document,source,source_hash:hash};
 }

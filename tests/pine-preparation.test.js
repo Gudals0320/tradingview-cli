@@ -1,6 +1,6 @@
 import { it } from 'node:test';
 import assert from 'node:assert/strict';
-import { preparePineDocument,preparationRequest } from '../src/pine-preparation.js';
+import { preparePineDocument,preparationRequest,waitPineEditorMount } from '../src/pine-preparation.js';
 const make=()=>{
   let state={mounted:true,modified:false,draft:false,identity:{},source:''},saved=[],intent=null,creates=0,opens=0;
   const request=preparationRequest({create:'QA',requestId:'stable',generation:'g',source:'//@version=6\nstrategy("QA")\n'});
@@ -45,6 +45,24 @@ it('remote source mismatch refuses opening a response-loss candidate',async()=>{
 it('changed remote version is not silently reopened or rolled back during resume',async()=>{
   const h=make();await preparePineDocument(h.request,{journal:h.journal,adapter:h.adapter,assertDocumentAvailable:h.available});h.saved[0].version='2';
   await assert.rejects(()=>preparePineDocument(h.request,{journal:h.journal,adapter:h.adapter,assertDocumentAvailable:h.available}),e=>e.code==='PINE_DOCUMENT_CHANGED');assert.deepEqual(h.counts(),{creates:1,opens:1});
+});
+it('native Redux completion waits for the actual editor commit without replaying open',async()=>{
+  const h=make(),state=h.adapter.state,open=h.adapter.open;let pendingReads=0,opened=false,clock=0;
+  h.adapter.open=async d=>{await open(d);opened=true;};
+  h.adapter.state=async()=>{const actual=await state();return opened&&pendingReads++<3?{...actual,source:'previous saved source'}:actual;};
+  const result=await preparePineDocument(h.request,{journal:h.journal,adapter:h.adapter,assertDocumentAvailable:h.available,now:()=>clock,sleep:async()=>{clock+=100;}});
+  assert.equal(result.intent.stages.opened,true);assert.deepEqual(h.counts(),{creates:1,opens:1});assert.equal(clock,300);
+});
+it('editor readback timeout preserves the dispatch proof and resume never opens twice',async()=>{
+  const h=make(),state=h.adapter.state,open=h.adapter.open;let clock=0,stall=true;
+  h.adapter.open=async d=>{await open(d);};h.adapter.state=async()=>{const actual=await state();return actual.identity.scriptIdPart&&stall?{...actual,source:'old mounted source'}:actual;};
+  const deps={journal:h.journal,adapter:h.adapter,assertDocumentAvailable:h.available,timeout:300,now:()=>clock,sleep:async()=>{clock+=100;}};
+  await assert.rejects(()=>preparePineDocument(h.request,deps),e=>e.code==='PINE_OPEN_UNVERIFIED'&&e.details.native_open_replayed===false);assert.equal(h.getIntent().phase,'open_wait');assert.equal(h.getIntent().open_dispatch,'completed');
+  stall=false;await preparePineDocument(h.request,deps);assert.deepEqual(h.counts(),{creates:1,opens:1});
+});
+it('initial mount timeout is finite and dispatches no document action',async()=>{
+  const h=make();let clock=0;h.setState({identity:{},draft:false,pending:true});
+  await assert.rejects(()=>waitPineEditorMount(h.adapter,{timeout:300,now:()=>clock,sleep:async()=>{clock+=100;}}),e=>e.code==='PINE_EDITOR_SETTLE_TIMEOUT'&&e.details.document_action_dispatched===false);assert.equal(clock,300);assert.deepEqual(h.counts(),{creates:0,opens:0});
 });
 it('request ID conflict and full validation prevent replay; generation may change on explicit resume',async()=>{
   const h=make();await preparePineDocument(h.request,{journal:h.journal,adapter:h.adapter,assertDocumentAvailable:h.available});
