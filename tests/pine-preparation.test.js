@@ -64,6 +64,10 @@ it('initial mount timeout is finite and dispatches no document action',async()=>
   const h=make();let clock=0;h.setState({identity:{},draft:false,pending:true});
   await assert.rejects(()=>waitPineEditorMount(h.adapter,{timeout:300,now:()=>clock,sleep:async()=>{clock+=100;}}),e=>e.code==='PINE_EDITOR_SETTLE_TIMEOUT'&&e.details.document_action_dispatched===false);assert.equal(clock,300);assert.deepEqual(h.counts(),{creates:0,opens:0});
 });
+it('an actually empty idle editor settles without inventing a saved document or a timeout',async()=>{
+  const h=make();h.setState({identity:{},source:'',draft:false,pending:false,open_status:'idle'});let sleeps=0;
+  const state=await waitPineEditorMount(h.adapter,{sleep:async()=>{sleeps++;}});assert.equal(state.mounted,true);assert.equal(sleeps,0);assert.deepEqual(h.counts(),{creates:0,opens:0});
+});
 it('request ID conflict and full validation prevent replay; generation may change on explicit resume',async()=>{
   const h=make();await preparePineDocument(h.request,{journal:h.journal,adapter:h.adapter,assertDocumentAvailable:h.available});
   await assert.rejects(()=>preparePineDocument({...h.request,fingerprint:'different'},{journal:h.journal,adapter:h.adapter,assertDocumentAvailable:h.available}),e=>e.code==='PINE_REQUEST_CONFLICT');

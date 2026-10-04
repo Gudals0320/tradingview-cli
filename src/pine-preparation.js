@@ -35,7 +35,7 @@ export function preparationJournal(directory,requestId) {
 
 /** Native saved-document API avoids locale-sensitive save dialogs and overwrite. */
 export function pinePreparationAdapter(inspect=evaluateAsync) {
-  const state=()=>inspect(`(()=>{const c=(${findPineController.toString()})(document),e=(${findPineEditor.toString()})(document),store=c?._editorStore?.getStore?.().getState?.();return {mounted:!!c&&!!e,modified:c?.isModified?.()??null,draft:c?.isDraft?.()??null,identity:c?.getScriptIdVersion?.()||null,pending:!!window.__tvCliPinePrepare?.pending||Object.keys(store?.ui?.pendingRequests||{}).length>0||['pending','loading'].includes(store?.openScript?.status),source:e?.editor.getValue()??null};})()`);
+  const state=()=>inspect(`(()=>{const c=(${findPineController.toString()})(document),e=(${findPineEditor.toString()})(document),store=c?._editorStore?.getStore?.().getState?.();return {mounted:!!c&&!!e,modified:c?.isModified?.()??null,draft:c?.isDraft?.()??null,identity:c?.getScriptIdVersion?.()||null,open_status:store?.openScript?.status??null,pending:!!window.__tvCliPinePrepare?.pending||Object.keys(store?.ui?.pendingRequests||{}).length>0||['pending','loading'].includes(store?.openScript?.status),source:e?.editor.getValue()??null};})()`);
   return {state,
     list:()=>inspect(`fetch('https://pine-facade.tradingview.com/pine-facade/list/?filter=saved',{credentials:'include'}).then(async r=>{if(!r.ok)throw Error('PINE_LIST_FAILED: HTTP '+r.status);const rows=await r.json();if(!Array.isArray(rows))throw Error('PINE_LIST_FAILED: Invalid saved list');return rows.map(s=>({id:s.scriptIdPart,name:s.scriptName||s.scriptTitle,version:s.version}));})`),
     get:(id,version)=>inspect(`fetch('https://pine-facade.tradingview.com/pine-facade/get/'+encodeURIComponent(${JSON.stringify(id)})+'/'+encodeURIComponent(${JSON.stringify(version)}),{credentials:'include'}).then(async r=>{if(!r.ok)throw Error('PINE_DOCUMENT_NOT_FOUND: HTTP '+r.status);return r.json();})`),
@@ -53,9 +53,9 @@ export function pinePreparationAdapter(inspect=evaluateAsync) {
 
 export async function waitPineEditorMount(adapter,{timeout=10000,now=Date.now,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms))}={}){
   const start=now();let state=await adapter.state();
-  const settling=()=>state.mounted&&state.modified!==true&&(state.pending||!state.identity?.scriptIdPart&&state.draft!==true);
+  const settling=()=>state.mounted&&state.modified!==true&&(state.pending||!state.identity?.scriptIdPart&&state.draft!==true&&!['idle','none'].includes(state.open_status));
   while(settling()&&now()-start<timeout){await sleep(100);state=await adapter.state();}
-  if(settling())fail('PINE_EDITOR_SETTLE_TIMEOUT','Initial Pine editor restore did not settle; no document create/open was dispatched.',{document_action_dispatched:false,editor_changed:'mount_only',current_identity:state.identity});
+  if(settling())fail('PINE_EDITOR_SETTLE_TIMEOUT','Initial Pine editor restore did not settle; no document create/open was dispatched.',{document_action_dispatched:false,editor_changed:false,mount_performed:true,current_identity:state.identity});
   return state;
 }
 

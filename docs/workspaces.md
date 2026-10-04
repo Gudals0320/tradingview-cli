@@ -44,6 +44,10 @@ retries with the old generation return current generation guidance; resume with
 that generation for reused:true without a new document or calculation invalidation.
 Changing a request's contents requires a new request ID. Partial attachment keeps
 the exact native operation fenced until explicit recovery. Saved artifacts remain.
+If native open outcome is unknown, the error provides an exact --open command
+with a new request ID for the already verified saved document. Inspect/wait and
+recover any interrupted native operation first. This explicit path creates no
+second document and never implicitly replays the uncertain open.
 Create cannot lock a not-yet-known document ID: app/layout/workspace locks plus
 the final atomic reservation check protect that phase. Exact-ID open additionally
 takes its document lock. Legacy `pine open` now refuses a modified draft and uses

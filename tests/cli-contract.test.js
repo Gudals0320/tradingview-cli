@@ -39,6 +39,15 @@ it('real Pine preparation refuses a foreign draft before saving and reports unch
   const result=jsonError(await f.run(['workspace','pine-prepare','contract','--create','QA fixture','--request-id','request-draft','--generation','fixture-generation']),/editor draft is preserved/,'PINE_FOREIGN_DRAFT');
   assert.equal(result.code,'PINE_FOREIGN_DRAFT');assert.equal(result.details.stages,null);assert.equal(result.details.residual_resources.saved_document,null);assert.equal(page.creates(),0);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
 });
+it('real unknown open provides an exact new open request, which recovers without creating another document',async t=>{
+  const page=preparationPage(),f=await fixture(t,expression=>page.evaluate(expression),{pine:null,snapshotFactory:page.snapshot});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.setOpenFailure(true);
+  const args=['workspace','pine-prepare','contract','--create','QA fixture','--request-id','unknown-open','--generation','fixture-generation'];
+  const error=jsonError(await f.run(args),/native open response unknown/);
+  assert.ok(error.details.next_commands.at(-1).includes("--open 'QA;fixture'"));assert.ok(error.details.next_commands.at(-1).includes('--request-id open-recovery-'));assert.equal(page.creates(),1);
+  page.setOpenFailure(false);const opened=jsonResult(await f.run(['workspace','pine-prepare','contract','--open','QA;fixture','--request-id','safe-open-after-unknown','--generation','fixture-generation']));
+  assert.equal(opened.stages.created,false);assert.equal(opened.stages.attached,true);assert.equal(opened.document.id,'QA;fixture');assert.equal(page.creates(),1);
+});
 
 // Exercise the real entry point, parser, router and filesystem ownership code.
 // An isolated HTTP endpoint counts unexpected Desktop access; no real Desktop,

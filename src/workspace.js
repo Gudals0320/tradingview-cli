@@ -180,6 +180,11 @@ export async function prepareWorkspacePine(name,values={}) {
       const interrupted=resourcesChanged||pending||error.code==='CDP_TIMEOUT'||error.recovery_required===true;
       lease.finish({success:false,interrupted,error:error.message});
       error.details={...error.details,request_id:request.request_id,stages:journal.read()?.stages||null,residual_resources:{saved_document:journal.read()?.document?.id||null,tab_preserved:true},recovery_required:interrupted};
+      if(journal.read()?.open_dispatch==='unknown'){
+        const quoted=`'${name.replace(/'/g,"''")}'`,documentId=journal.read().document.id,newRequest=`open-recovery-${sourceHash(request.request_id).slice(0,24)}`;
+        error.details.next_commands=[`tv workspace show ${quoted}`,...(interrupted?[`tv --workspace ${quoted} workspace recover --operation ${lease.operation}`]:[]),`tv workspace pine-prepare ${quoted} --open '${documentId.replace(/'/g,"''")}' --request-id ${newRequest} --generation CURRENT_GENERATION_FROM_SHOW`];
+        error.details.next_action='Do not replay uncertain create/open. After exact native quiescence and required recovery, open this verified saved document with the shown new request ID and current generation; no new document is created.';
+      }
     }throw error;
   }finally{resources.release();}
 }
