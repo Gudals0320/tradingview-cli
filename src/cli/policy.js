@@ -34,7 +34,7 @@ export const OFFLINE_COMMANDS = new Set(['help', 'update', 'search', 'pine analy
 // reach Desktop or take the endpoint lease themselves; published by `tv help --json`.
 export const DESKTOP_REQUIREMENTS = new Map([['launch', 'launches'], ['session recover', 'cdp'], ['workspace inventory', 'cdp_http']]);
 export const OFFLINE_LEASE_COMMANDS = new Set(['session recover', 'session discard']);
-export const ADMIN_COMMANDS = new Set(['workspace init', 'workspace recover', 'workspace rebind', 'workspace release']);
+export const ADMIN_COMMANDS = new Set(['workspace init', 'workspace recover', 'workspace rebind', 'workspace release', 'workspace pine-prepare']);
 // Only these commands dispatch native changes which may outlive the CLI.
 // Pure collection and observation never create a recovery journal.
 export const NATIVE_COMMANDS = new Set(['launch', 'range', 'scroll', 'pine set', 'pine compile', 'pine raw-compile',
@@ -43,6 +43,7 @@ export const NATIVE_COMMANDS = new Set(['launch', 'range', 'scroll', 'pine set',
   'alert create', 'alert delete', 'draw shape', 'draw remove', 'draw clear', 'replay start', 'replay step',
   'replay stop', 'replay autoplay', 'replay trade', 'watchlist add', 'watchlist add-bulk', 'watchlist remove',
   'ui click', 'ui keyboard', 'ui hover', 'ui scroll', 'ui eval', 'ui type', 'ui panel', 'ui fullscreen', 'ui mouse']);
+NATIVE_COMMANDS.add('workspace pine-prepare');
 export function commandMutates(command, values, positionals) {
   if (['symbol', 'timeframe', 'type', 'quote'].includes(command)) return positionals.length > 0;
   if (command === 'range') return values.from !== undefined;
@@ -97,6 +98,7 @@ export const PINE_COMMANDS = new Set(['pine get', 'pine set', 'pine compile', 'p
 export const FOREGROUND_COMMANDS = new Set([...APP_COMMANDS].filter(name => name.startsWith('ui ') || ['tab close', 'tab switch', 'layout switch'].includes(name)));
 export function workspaceRequired(command) { return commandScope(command) === 'workspace' || FOREGROUND_COMMANDS.has(command) || command === 'stream ohlcv' || command.startsWith('watchlist ') || command.startsWith('alert '); }
 export function resourceKinds(command, values = {}, positionals = []) {
+  if(command==='workspace pine-prepare')return ['app','layout','workspace','document'];
   const scope = commandScope(command);
   if (pureRead(command, values, positionals)) return [];
   const kinds = [];

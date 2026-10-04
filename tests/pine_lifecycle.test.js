@@ -15,11 +15,12 @@ function fixture() {
   let source = 'original B', id = 'B';
   const editor = { getValue: () => source, setValue: value => { source = value; }, getModel: () => ({}) };
   const controller = { _editorStore: {}, _editorRef: { current: { _editor: editor, _monaco: { editor: {} } } },
-    getScriptIdVersion: () => id ? { scriptIdPart: id } : null,
+    getScriptIdVersion: () => id ? { scriptIdPart: id,version:2 } : null,isModified:()=>false,
     openNewScript: async () => { await Promise.resolve(); id = null; source = 'async template'; },
     setScript: async value => { source = value; },
     openScript: async value => { id = value.scriptIdPart; source = 'saved A\r\n'; },
   };
+  controller._initScriptVersion=value=>controller.openScript(value);
   const container = { offsetParent: {}, __reactFiber$qa: { memoizedProps: { value: controller } } };
   const document = { querySelectorAll: selector => selector.startsWith('button') ? [] : [container] };
   const fetch = async url => ({ json: async () => url.includes('list/')
@@ -216,7 +217,7 @@ it('open changes the document identity as well as source', async () => {
 });
 it('open prioritizes the exact saved name over another document with the same title', async () => {
   const f=fixture();f.context.fetch=async url=>({json:async()=>url.includes('list/')
-    ? [{scriptIdPart:'Q',scriptName:'Q',scriptTitle:'A'},{scriptIdPart:'A',scriptName:'A',scriptTitle:'A'}]
+    ? [{scriptIdPart:'Q',scriptName:'Q',scriptTitle:'A',version:2},{scriptIdPart:'A',scriptName:'A',scriptTitle:'A',version:2}]
     : {source:'saved A\n'}});
   await openScript({name:'A',_deps:f});assert.equal(f.read().id,'A');
 });
@@ -233,4 +234,9 @@ it('open fails when the native controller silently opens a different document', 
   const f = fixture(); f.controller.openScript = async () => {};
   await assert.rejects(openScript({ name: 'A', _deps: f }), /identity\/source/);
   assert.equal(f.read().source, 'original B');
+});
+it('exact open rejects unsupported native versions or foreign drafts without fallback writes',async()=>{
+  for(const kind of ['unsupported','draft']){const f=fixture();let calls=0;f.controller.openScript=async()=>{calls++;};if(kind==='unsupported')delete f.controller._initScriptVersion;else f.controller.isModified=()=>true;
+    await assert.rejects(()=>openScript({name:'A',_deps:f}),e=>e.code===(kind==='unsupported'?'PINE_OPEN_UNSUPPORTED':'PINE_FOREIGN_DRAFT')&&e.details.editor_changed===false);assert.equal(calls,0);assert.equal(f.read().source,'original B');
+  }
 });

@@ -12,9 +12,34 @@ An explicit missing/removed/other-page strategy ID is `STUDY_NOT_FOUND`, even wh
 
 Saved layout creation and tab ownership are separate. Create/open records exact target+browser lifecycle only after a fresh landing, actual new-tab button, unique native shell transition, absent pre-call CDP target and verified saved ID. Desktop 3.4.1 create replaces its new placeholder shell tab; that is accepted only when every old tab remains and one exact new shell tab replaces the fresh placeholder. Reused landing, existing GUI tabs, mismatches and unverified outcomes never receive close proof. Reconnect/attach recheck the new exact target, so a GUI reopen does not inherit an old CLI boolean.
 
-Compatibility policy: pre-2.2 boolean-only ownership and the old created-layout ledger are not promoted because they cannot prove landing/browser lifecycle. `WORKSPACE_TAB_NOT_OWNED` with `legacy_ownership_unverified` offers exact release (tab/artifact preservation). Save drafts and manually close the intended tab if desired, or release/reset and open a fresh dedicated CLI tab. The CLI never automatically discards the unsaved dialog or a foreign draft. Currently installed 2.1.0 is not updated by this development PR.
+Compatibility policy: pre-2.2 boolean-only ownership and the old created-layout ledger are not promoted because they cannot prove landing/browser lifecycle. `WORKSPACE_TAB_NOT_OWNED` with `legacy_ownership_unverified` offers exact release (tab/artifact preservation). Save drafts and manually close the intended tab if desired, or release/reset and open a fresh dedicated CLI tab. The CLI never automatically discards the unsaved dialog or a foreign draft.
 
 ## Prepare and select
+
+Chart-only document preparation is explicit and separate from `pine new/open`.
+Use the current generation and a stable request ID. `--mount` explicitly opens
+the editor; a missing editor without it, foreign modified draft, another
+workspace's document reservation, or stale generation refuses before replacing
+or saving a document. An unmodified saved editor document may be switched and
+its ID is reported as previous_document. Document creation never grants tab-close
+ownership. New documents use the native no-overwrite save API, then exact remote
+ID/version/source verification, exact version open, and attachment.
+
+```powershell
+tv workspace show research-a
+tv workspace pine-prepare research-a --create 'Research A Strategy' --file strategy.pine --request-id research-a-document --generation EXACT_GENERATION --mount
+tv workspace pine-prepare research-b --open 'USER;DOCUMENT_B' --request-id research-b-document --generation EXACT_GENERATION --mount
+```
+
+Private intent records retain the pre-call ID set, request fingerprint and stage
+results. Unknown creation is never resent. Exactly one new named candidate must
+also match the requested saved source hash before adoption; zero/multiple remain
+unknown. A proven native pre-dispatch paywall rejection plus no candidate is
+rejected_known and may safely retry the same request. Completed response-loss
+retries with the old generation return current generation guidance; resume with
+that generation for reused:true without a new document or calculation invalidation.
+Changing a request's contents requires a new request ID. Partial attachment keeps
+the exact native operation fenced until explicit recovery. Saved artifacts remain.
 
 ```powershell
 Import-Module .\scripts\TradingViewCli.psm1

@@ -50,6 +50,17 @@ an unknown native operation.
 | RECOVERY_TARGET_LOST | Reachable CDP proved targets absent; exact discard archives incomplete outcomes without claiming restoration. |
 | RECOVERY_TARGET_UNCONFIRMED | No chart pages are inspectable; wait for Desktop startup and re-read inventory rather than inferring termination. |
 | SAVE_REQUIRED | Save owned document or explicitly compile --save; unsaved source is not an applied report. |
+| PINE_PREPARATION_INPUT | Choose create or exact-ID open, stable request ID and current generation; invalid input causes no Desktop mutation. |
+| PINE_REQUEST_CONFLICT | This request ID describes other contents. Inspect its private intent and use a different request ID for new contents. |
+| PINE_DOCUMENT_NAME_EXISTS | Existing exact name is not adopted by create. Select its exact saved ID explicitly. |
+| PINE_CREATION_UNKNOWN | Preserve candidates and resume the same request; never blindly resend creation or infer ownership by name alone. |
+| PINE_CREATION_REJECTED | Observed native pre-dispatch rejection plus no new candidate. Resolve the plan condition, then retry the same request. |
+| PINE_FOREIGN_DRAFT | Modified editor remains unchanged. Save or decide its disposition yourself before preparation. |
+| PINE_DOCUMENT_NOT_FOUND | Exact saved ID is absent; inspect the saved list without guessing a name match. |
+| PINE_DOCUMENT_CHANGED / PINE_PERSISTENCE_UNVERIFIED / PINE_OPEN_UNVERIFIED | Saved source or mounted identity/version/source differs. Preserve artifacts, inspect the recorded stages and reconcile the exact operation if interrupted. |
+| PINE_OPEN_UNSUPPORTED / WORKSPACE_PINE_OPEN_UNSUPPORTED | Exact-version native controller is unavailable. No fallback new/blank document is opened. |
+| PINE_OPEN_FAILED | Native exact open failed; editor_changed and current_identity report observed side effects. |
+| WORKSPACE_PINE_ALREADY_BOUND | Detach explicitly before preparing a different document; bound resource replacement is not implicit. |
 | PINE_COMPILE_ERROR | Fix diagnostic locations and compile requested source. |
 | REPORT_UNVERIFIED / REPORT_INVALIDATED | Compile owned source or perform verified input change; never adopt prior metrics. |
 | REPORT_PENDING / REPORT_TIMEOUT / STRATEGY_CALCULATION_PENDING | Wait for existing calculation; normal waiting does not imply cancellation/manual recovery. |

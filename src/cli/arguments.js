@@ -3,6 +3,7 @@ import { alertCondition } from '../core/alerts.js';
 
 // A command without an entry accepts no positional arguments.
 export const POSITIONALS = new Map([
+  ['workspace pine-prepare',[1,1]],
   ['workspace reconnect', [1, 1]], ['workspace attach', [1, 1]], ['workspace detach', [1, 1]],
   ['workspace reset',[1,1]],
   ['workspace create', [1, 1]], ['workspace select', [1, 1]], ['workspace import', [1, 1]], ['workspace show', [1, 1]],

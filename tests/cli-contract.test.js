@@ -18,8 +18,27 @@ import { WORKSPACE_PAGE_CODE } from '../src/workspace-page.js';
 import { beginCompilation } from '../src/strategy-state.js';
 import { reportPage } from './fixtures/report-page.mjs';
 import { resourceLockStatus } from '../src/resource-lock.js';
+import { preparationPage } from './fixtures/preparation-page.mjs';
 
 const CLI = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
+
+it('real Pine preparation reassigns then binds, retains browser proof, and resumes without duplicate creation',async t=>{
+  const page=preparationPage();
+  const f=await fixture(t,expression=>page.evaluate(expression),{pine:null,snapshotFactory:page.snapshot});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);
+  const args=['workspace','pine-prepare','contract','--create','QA fixture','--request-id','request-one','--generation','fixture-generation'];
+  const first=jsonResult(await f.run(args));
+  assert.equal(first.document.id,'QA;fixture');assert.equal(first.document.version,'1.0');assert.deepEqual(first.stages,{created:true,persistence_verified:true,opened:true,attached:true});assert.equal(first.residual_resources.tab_ownership_changed,false);
+  const bound=loadWorkspace(ws.file,f.options);assert.equal(bound.binding.browser,'fixture-browser');assert.equal(bound.pine,'QA;fixture');assert.equal(bound.binding.nonce,first.generation);assert.equal(page.creates(),1);
+  const stale=jsonError(await f.run(args),/current --generation/,'WORKSPACE_GENERATION_CHANGED');assert.equal(stale.details.preparation_phase,'complete');assert.equal(stale.details.current_generation,first.generation);
+  const resumed=jsonResult(await f.run([...args.slice(0,-1),first.generation]));assert.equal(resumed.reused,true);assert.equal(resumed.generation,first.generation);assert.equal(page.creates(),1);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+});
+it('real Pine preparation refuses a foreign draft before saving and reports unchanged stages',async t=>{
+  const page=preparationPage(),f=await fixture(t,expression=>page.evaluate(expression),{pine:null,snapshotFactory:page.snapshot});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.setModified(true);
+  const result=jsonError(await f.run(['workspace','pine-prepare','contract','--create','QA fixture','--request-id','request-draft','--generation','fixture-generation']),/editor draft is preserved/,'PINE_FOREIGN_DRAFT');
+  assert.equal(result.code,'PINE_FOREIGN_DRAFT');assert.equal(result.details.stages,null);assert.equal(result.details.residual_resources.saved_document,null);assert.equal(page.creates(),0);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+});
 
 // Exercise the real entry point, parser, router and filesystem ownership code.
 // An isolated HTTP endpoint counts unexpected Desktop access; no real Desktop,

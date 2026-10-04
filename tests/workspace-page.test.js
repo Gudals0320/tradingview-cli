@@ -118,6 +118,7 @@ describe('atomic workspace page guards', () => {
       const f=fixture();let documentId='foreign',opened=0;
       f.controller.getScriptIdVersion=()=>({scriptIdPart:documentId,version:1});f.controller.isModified=()=>modified;
       f.controller.openScript=async request=>{assert.equal(request.scriptIdPart,'pine');assert.equal(request.version,1);documentId=request.scriptIdPart;opened++;};
+      f.controller._initScriptVersion=request=>f.controller.openScript(request);
       const resource={...f.resource,binding:{snapshot:{version:1}}};
       if(modified){await assert.rejects(()=>f.call('restoreWorkspaceDocument',resource),/FOREIGN_DRAFT/);assert.equal(opened,0);}
       else{assert.equal((await f.call('restoreWorkspaceDocument',resource)).restored_document,true);assert.equal(opened,1);}
@@ -132,5 +133,10 @@ describe('atomic workspace page guards', () => {
       if (modified) { await assert.rejects(f.call('restoreWorkspaceDocument', resource), /FOREIGN_DRAFT/); assert.equal(writes, 0); }
       else { assert.equal((await f.call('restoreWorkspaceDocument', resource)).restored_draft, true); assert.equal(f.editor.getValue(), 'private recorded draft'); assert.equal(writes, 1); }
     }
+  });
+  it('document restore never invokes fallback open when exact-version native support is absent',async()=>{
+    const f=fixture();f.controller.getScriptIdVersion=()=>({scriptIdPart:'foreign',version:1});f.controller.isModified=()=>false;
+    let calls=0;f.controller.openScript=()=>{calls++;};
+    await assert.rejects(()=>f.call('restoreWorkspaceDocument',{...f.resource,binding:{snapshot:{version:1}}}),/WORKSPACE_PINE_OPEN_UNSUPPORTED/);assert.equal(calls,0);
   });
 });

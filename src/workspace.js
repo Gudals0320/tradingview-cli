@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { readFileSync,existsSync } from 'node:fs';
 import { CDP_HOST, CDP_PORT } from './config.js';
-import { acquireWorkspace, reserveWorkspace, releaseWorkspace, workspaceError, loadWorkspace, workspaceStatus, noteWorkspaceState, assertObservationAdmission, workspaceWaitTimeout } from './workspace-store.js';
+import { acquireWorkspace, reserveWorkspace, releaseWorkspace, workspaceError, loadWorkspace, workspaceStatus, noteWorkspaceState, assertObservationAdmission, workspaceWaitTimeout, workspaceArtifactDirectory } from './workspace-store.js';
 import { withWorkspaceSession, sourceHash, canonicalSessionHost, assertLegacyCompatibility } from './session.js';
 import { configureTarget, getClient } from './connection.js';
 import { WORKSPACE_PAGE_CODE } from './workspace-page.js';
@@ -21,6 +21,8 @@ import { newTab } from './core/tab.js';
 import { secureDirectory } from './private-store.js';
 import { layoutList } from './core/ui.js';
 import { canonicalPineSource } from './pine-source.js';
+import { preparationRequest, preparationJournal, preparePineDocument, pinePreparationAdapter } from './pine-preparation.js';
+import { ensurePineEditorOpen } from './core/pine.js';
 export { WORKSPACE_COMMANDS } from './cli/policy.js';
 
 async function raw(client, expression) {
@@ -132,6 +134,53 @@ export async function verifyWorkspaceSelection(name) {
   const file = resolveWorkspace(name), workspace = loadWorkspace(file);
   await checkLayout(workspace);
   return selectWorkspace(name);
+}
+
+/** Explicit document preparation never relaxes pine new/open replacement guards. */
+export async function prepareWorkspacePine(name,values={}) {
+  const file=resolveWorkspace(name),selected=loadWorkspace(file);
+  const request=preparationRequest({create:values.create,open:values.open,type:values.type,source:values.file?readFileSync(values.file,'utf8'):undefined,requestId:values['request-id'],generation:values.generation});
+  const journal=preparationJournal(workspaceArtifactDirectory(selected),request.request_id),previous=journal.read();
+  if(selected.binding?.nonce!==values.generation)throw Object.assign(workspaceError('WORKSPACE_GENERATION_CHANGED','Pass the exact current --generation from workspace show.'),{details:{request_id:request.request_id,preparation_phase:previous?.phase||null,current_generation:selected.binding?.nonce||null,next_action:'Inspect workspace show, then resume this same request with the current generation; a completed request returns reused:true.'}});
+  if(selected.pine&&!(previous?.document?.id===selected.pine&&previous.fingerprint===request.fingerprint))throw workspaceError('WORKSPACE_PINE_ALREADY_BOUND','Detach explicitly before preparing a different document.');
+  const resources=await acquireResources(['app',`layout:${selected.layout}`,`workspace:${selected.id}`,...(values.open?[`document:${values.open}`]:[])],{command:'workspace pine-prepare',workspace_id:selected.id,timeout:values['lock-timeout-ms']});
+  let lease,resourcesChanged=false;
+  try{
+    lease=acquireWorkspace(file,{command:'workspace pine-prepare'});
+    return await withWorkspaceSession(lease,async()=>{
+      const workspace=lease.workspace;
+      if(workspace.binding?.nonce!==values.generation||workspace.pine!==selected.pine)throw workspaceError('WORKSPACE_GENERATION_CHANGED','Resources changed while waiting.');
+      await checkLayout(workspace);
+      if(await browserIdentity()!==workspace.binding.browser)throw workspaceError('WORKSPACE_GENERATION_CHANGED','Desktop browser changed.');
+      configureTarget(workspace.target);const client=await getClient();
+      await raw(client,pageCall('guardWorkspacePage',owner(workspace)));
+      const available=id=>{if(readReservations().some(row=>row.id!==workspace.id&&row.pine===id))throw workspaceError('WORKSPACE_RESOURCE_RESERVED','Another workspace reserves this exact Pine document.');};
+      if(values.open)available(values.open);
+      // Mounting is explicit; no editor replacement or saving is performed here.
+      if(values.mount){lease.checkpoint({phase:'pine-editor-mount',command:'workspace pine-prepare'});await ensurePineEditorOpen();}
+      const prepared=await preparePineDocument(request,{journal,adapter:pinePreparationAdapter(),assertDocumentAvailable:available,checkpoint:data=>lease.checkpoint({command:'workspace pine-prepare',...data})});
+      available(prepared.document.id);
+      if(previous?.phase==='complete'&&previous.generation===workspace.binding.nonce&&workspace.pine===prepared.document.id){
+        const result={...previous.result,reused:true};prepared.intent.phase='complete';journal.write({...prepared.intent,result});lease.finish({success:true,result});return result;
+      }
+      lease.checkpoint({phase:'pine-document-attach',command:'workspace pine-prepare',pine:prepared.document.id,old_generation:values.generation,request_id:request.request_id});
+      if(!workspace.pine){lease.reassign({target:workspace.target,pine:prepared.document.id,expectedGeneration:values.generation,tab_ownership:workspace.tab_ownership});resourcesChanged=true;}
+      const binding=await raw(client,pageCall('bindWorkspacePage',lease.workspace,randomUUID()));
+      const source_proof=await sourceProof(client,binding.snapshot);
+      if(!source_proof||source_proof.hash!==prepared.source_hash)throw workspaceError('PINE_PERSISTENCE_UNVERIFIED','Attached source could not be verified against remote saved identity.');
+      lease.saveBinding({...binding,browser:selected.binding.browser,source_proof});
+      prepared.intent.stages.attached=true;prepared.intent.phase='complete';prepared.intent.generation=binding.nonce;
+      const result={success:true,request_id:request.request_id,document:{id:prepared.document.id,version:prepared.document.version,source_hash:prepared.source_hash},generation:binding.nonce,previous_document:prepared.intent.previous_document,stages:prepared.intent.stages,reused:!!previous,residual_resources:{saved_document:prepared.document.id,tab_preserved:true,tab_ownership_changed:false}};
+      prepared.intent.result=result;journal.write(prepared.intent);
+      lease.finish({success:true,result});return result;
+    });
+  }catch(error){
+    if(lease){let pending=true;try{pending=await withWorkspaceSession(lease,async()=>{configureTarget(lease.workspace.target);return await raw(await getClient(),'readWorkspacePage(window,document,{pine:false}).pending');});}catch{/* Unreadable native state stays fenced. */}
+      const interrupted=resourcesChanged||pending||error.code==='CDP_TIMEOUT'||error.recovery_required===true;
+      lease.finish({success:false,interrupted,error:error.message});
+      error.details={...error.details,request_id:request.request_id,stages:journal.read()?.stages||null,residual_resources:{saved_document:journal.read()?.document?.id||null,tab_preserved:true},recovery_required:interrupted};
+    }throw error;
+  }finally{resources.release();}
 }
 export async function resetWorkspace(name,{id,operation,reservationId}={}) {
   const record=workspaceNameRecord(name),row=readReservations().find(row=>row.file===record.file);

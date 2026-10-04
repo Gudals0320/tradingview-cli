@@ -62,11 +62,12 @@ export async function restoreWorkspaceDocument(window, document, resource) {
     if (controller.isModified?.() !== false) throw new Error('WORKSPACE_FOREIGN_DRAFT: Refusing to discard an unowned modified document.');
     const version = resource.binding?.snapshot?.version;
     if (!version) throw new Error('WORKSPACE_VERSION_REQUIRED: Recorded owned document version is unavailable.');
-    await trackNativeOperation(window, `${resource.id}-restore-document`, () => controller.openScript({ scriptIdPart: resource.pine, version }));
+    if(typeof controller._initScriptVersion!=='function')throw new Error('WORKSPACE_PINE_OPEN_UNSUPPORTED: Exact-version native controller unavailable; editor_changed:false.');
+    await trackNativeOperation(window, `${resource.id}-restore-document`, () => controller._initScriptVersion({ scriptIdPart: resource.pine, version }));
     if (chart !== window.TradingViewApi._activeChartWidgetWV.value()) throw new Error('WORKSPACE_GENERATION_CHANGED: Chart changed during document restore.');
   }
   const after = readWorkspacePage(window, document);
-  if (after.layout !== resource.layout || after.pine !== resource.pine) throw new Error('WORKSPACE_IDENTITY_MISMATCH: Restored document did not match the registered resources.');
+  if (after.layout !== resource.layout || after.pine !== resource.pine || String(after.version)!==String(resource.binding?.snapshot?.version)) throw new Error('WORKSPACE_IDENTITY_MISMATCH: Restored document identity/version did not match the registered resources.');
   const recorded = resource.binding?.snapshot;
   let restoredDraft = false;
   if (recorded?.modified === true && typeof recorded.source === 'string' && after.source !== recorded.source) {

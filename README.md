@@ -93,13 +93,16 @@ tv workspace show research-a
 
 ## Pine과 백테스트
 
-Pine 문서는 기본 생성 조건이 아닙니다. 전용 탭에서 별도의 저장 문서를 준비하고
-해당 문서를 에디터에 연 뒤 현재 generation을 확인해 붙입니다. 이미 준비됐으면
+Pine 문서는 기본 생성 조건이 아닙니다. chart-only workspace에서 명시적으로 새 저장
+문서를 준비하거나 정확한 저장 ID를 엽니다. 현재 generation과 재호출에 사용할 고정
+request ID가 필요합니다. `--mount`는 에디터만 열며 기존 수정 draft를 저장/폐기하지
+않습니다. 이미 준비됐으면
 `workspace create`에 `--pine 'USER;DOCUMENT'`를 지정해도 됩니다.
 
 ```powershell
 tv pine list
 tv workspace show research-a
+tv workspace pine-prepare research-a --create 'Research A Strategy' --file strategy.pine --request-id research-a-document --generation EXACT_GENERATION --mount
 tv workspace attach research-a --pine 'USER;DOCUMENT_A' --generation EXACT_GENERATION
 tv --workspace research-a pine set --file strategy.pine
 tv --workspace research-a pine compile --save
@@ -114,6 +117,13 @@ tv --workspace research-a data ledger --offset 0 --limit 100
 바인딩된 `pine new/open`은 문서 교체를 거부합니다. 전용 문서를 준비한 뒤 attach하거나,
 `workspace detach NAME --generation GEN`으로 차트-only로 전환합니다. GUI 수정 draft를
 몰래 버리거나 저장하지 않습니다. GUI 입력 변경은 CLI 잠금을 따르지 않습니다.
+
+`pine-prepare`는 생성/원격 저장 검증/열기/연결 결과와 ID·버전·generation을 반환합니다.
+기존 문서는 chart-only workspace에서 `--create` 대신 `--open 'USER;DOCUMENT_A'`로
+선택합니다. 수정되지 않은 저장 문서 전환은 previous_document에 기록됩니다. 문서
+생성은 탭 종료 소유권을 부여하지 않습니다. 응답 유실은 같은 request ID로 재개하며
+0개/여러 후보는 불명으로 보존합니다. 완료 뒤 옛 generation 재호출은 현재 generation
+안내와 함께 거부하며, 새 generation으로 재호출하면 중복 생성 없이 재사용합니다.
 
 `pine analyze`는 offline 휴리스틱이고 `pine check`는 차트 없이 서버에서 검사합니다.
 컴파일 완료·전략 계산·저장된 소스 일치·결과 검증은 별개입니다. 이미 검증된 동일

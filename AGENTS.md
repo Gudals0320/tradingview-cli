@@ -73,6 +73,7 @@ resources implicitly. Use attach or open/select a different workspace.
 
 ```bash
 tv workspace show agent-research
+tv workspace pine-prepare agent-research --create 'Agent Strategy' --file strategy.pine --request-id agent-strategy-document --generation EXACT_GENERATION --mount
 tv workspace attach agent-research --pine 'USER;DOCUMENT' --generation EXACT_GENERATION
 tv pine analyze --file strategy.pine
 tv pine check --file strategy.pine

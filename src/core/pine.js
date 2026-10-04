@@ -688,14 +688,16 @@ export async function openScript({ name, _deps }) {
               var controller = ${FIND_CONTROLLER};
               if (!controller) throw new Error('Pine document controller unavailable; cannot safely open a script.');
               const before = (${FIND_MONACO})?.editor.getValue();
-              return Promise.resolve().then(() => controller.openScript({scriptIdPart:id, version:ver})).then(function() {
+              if(typeof controller._initScriptVersion!=='function')return {error:'PINE_OPEN_UNSUPPORTED: Exact-version native controller unavailable',code:'PINE_OPEN_UNSUPPORTED',details:{editor_changed:false}};
+              if(controller.isModified?.()!==false)return {error:'PINE_FOREIGN_DRAFT: Preserve modified editor draft',code:'PINE_FOREIGN_DRAFT',details:{editor_changed:false}};
+              return Promise.resolve().then(() => controller._initScriptVersion({scriptIdPart:id, version:ver})).then(function() {
                 var m = ${FIND_MONACO};
-                if (controller.getScriptIdVersion()?.scriptIdPart !== id || !m ||
+                if (controller.getScriptIdVersion()?.scriptIdPart !== id || String(controller.getScriptIdVersion()?.version)!==String(ver) || !m ||
                     m.editor.getValue().replace(/\\r\\n/g, '\\n') !== source.replace(/\\r\\n/g, '\\n')) {
                   throw new Error('Pine document identity/source did not match the requested script.');
                 }
                 return {success:true,name:match.scriptName || match.scriptTitle,id:id,lines:source.split('\\n').length};
-              }).finally(() => { if ((${FIND_MONACO})?.editor.getValue() !== before) invalidateEditedSource(window); });
+              }).catch(error=>({error:error.message,code:'PINE_OPEN_FAILED',details:{editor_changed:(${FIND_MONACO})?.editor.getValue()!==before,current_identity:controller.getScriptIdVersion()}})).finally(() => { if ((${FIND_MONACO})?.editor.getValue() !== before) invalidateEditedSource(window); });
             });
         })
         .catch(function(e) { return {error: e.message}; });
@@ -703,7 +705,7 @@ export async function openScript({ name, _deps }) {
   `, { mutation: true });
 
   if (result?.error) {
-    throw new Error(result.error);
+    throw Object.assign(new Error(result.error),{code:result.code,details:result.details});
   }
 
   return { success: true, name: result.name, script_id: result.id, lines: result.lines, source: 'internal_api', opened: true };
