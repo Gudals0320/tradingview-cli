@@ -246,6 +246,7 @@ node scripts/stress-workspace-locks.mjs 20
 tv help --json
 tv help --json pine compile
 tv help --json --brief pine compile
+tv --workspace research-a watchlist raw --list-id EXACT_LIST_ID
 ```
 
 `--brief`는 `--json`과 함께 사용합니다. 명령의 인자·workspace·잠금·foreground·읽기 조건을 유지하고 반복 설명을 줄입니다. 공통 옵션·환경·오류·출력·provenance 계약은 처음에 full catalog로 확인하고 캐시하세요. brief의 `contract.bootstrap_command`가 full 조회 명령을 안내합니다. 캐시는 `cli.version`, `catalog_version`, `catalog_fingerprint`가 바뀌면 무효화합니다. fingerprint는 필터와 무관한 전체 계약의 SHA-256입니다. 알 수 없는 명령은 stdout 없이 stderr JSON의 `UNKNOWN_COMMAND`, `details.command_path`, `details.help_command`로 안내합니다.

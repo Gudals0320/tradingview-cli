@@ -122,6 +122,10 @@ LOCK_HOLDER_DEAD: reconcile the exact interrupted native operation. ADMISSION_PE
 inspect the state directory owner/permissions. REPORT_PENDING/TIMEOUT: wait; do not
 repeat an uncertain mutation. Expected validation/read errors alone do not imply
 manual recovery. WORKSPACE_EXTERNAL_CHANGE means inspect the affected workspace.
+Auxiliary-only unknown source status is not proof of completion. Wait/inspect first.
+Only after human confirmation, session recover --acknowledge-unknown EXACT_HASH
+can archive the exact stable auxiliary unknown set while keeping outcome unknown.
+Never acknowledge automatically; busy/Pine unknown/unreadable sources are excluded.
 
 ## Repository changes
 

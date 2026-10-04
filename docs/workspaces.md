@@ -130,6 +130,12 @@ FIFO 대기한 `quote`의 복원 종목은 잠금 획득 후 page guard가 확�
 
 wait/compile/strategy/trades/ledger의 내부 input `text`는 CLI 출력에서 `{id,omitted,length,sha256}`로 요약합니다. 입력 원본은 compiled identity/fingerprint/revision/최신성 검증에 그대로 사용하며 사용자 input은 길이에 관계없이 보존합니다. 공개 raw 옵션은 제공하지 않습니다.
 
+`stream ohlcv`는 요청 feed마다 `status:ok/loading/error`를 냅니다. 모든 feed가 정상일 때만 상단 `success:true`; 일부 정상은 `partial_success:true`로 정상 feed의 가격을 유지합니다. 실패 feed에는 code와 feed 식별자만 있고 OHLCV는 없습니다. `DATA_NOT_READY`, `DATA_FEED_ERROR`, `FEED_IDENTITY_MISMATCH`, `FEED_STATE_UNREADABLE`, `WORKSPACE_FEED_MISSING/AMBIGUOUS`는 다음 poll에서 재관찰하며 상태 변화도 dedupe에서 보존합니다. 요청하지 않은 활성 pane의 loading은 정상 보조 feed를 차단하지 않습니다. SIGINT/SIGTERM 정상 종료는 exit 0이며 feed 실패 프레임 자체는 프로세스를 종료하지 않습니다; ownership/transport 실패는 stream을 종료하고 exit 1/2 오류를 반환합니다. stderr의 lifecycle/sample 오류도 JSONL입니다.
+
+`watchlist raw --list-id ID` 또는 `--list-name NAME`은 표시 목록을 바꾸지 않고 저장 원본 배열을 전체 읽습니다. 섹션·수식·거래소 표기·배율·순서·중복을 변형하지 않습니다. `raw_count`는 섹션을 포함한 전체 항목 수, `rendered_count`는 선택 목록이 현재 DOM에 표시될 때의 행 수이며 다른 목록/닫힌 패널은 null입니다. 기존 `watchlist get`은 표시 행의 가격값 계약을 유지합니다.
+
+native recovery의 Pine indicator/strategy는 status 0/1을 busy, 2를 idle, 나머지/읽기 실패를 unknown으로 판정합니다. 보조 source는 이름 대신 명시적 `isLoading` 또는 완료 상태를 검사하며 unknown은 복구를 차단합니다. `source_states`는 판정 근거와 관측 status를 보이며 원문·token을 포함하지 않습니다. 대상 부재는 서버 저장/알림 결과의 완료 증명이 아니므로 discard/reset은 기록을 보존하고 결과를 unknown으로 남깁니다.
+
 Reconnect compares the exact old generation. The replacement must already show
 the same saved layout/document. Competing reconnects cannot both commit. Old study
 IDs, source proofs and report verification are invalidated; compile again. Rebind

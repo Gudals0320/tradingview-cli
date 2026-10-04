@@ -6,7 +6,7 @@ export const WORKSPACE_COMMANDS = new Set(['state', 'symbol', 'timeframe', 'type
 export const PURE_READ_COMMANDS = new Set(['status', 'state', 'info', 'ohlcv', 'values', 'data lines', 'data labels',
   'data tables', 'data boxes', 'data strategy', 'data trades', 'data ledger', 'data equity', 'data depth',
   'data indicator', 'indicator get', 'pine get', 'pine errors', 'pine console', 'pine list', 'alert list',
-  'watchlist get', 'tab list', 'layout list', 'pane list', 'draw list', 'draw get', 'replay status', 'discover', 'ui-state', 'ui find', 'workspace wait',
+  'watchlist get', 'watchlist raw', 'tab list', 'layout list', 'pane list', 'draw list', 'draw get', 'replay status', 'discover', 'ui-state', 'ui find', 'workspace wait',
   'stream quote', 'stream bars', 'stream values', 'stream lines', 'stream labels', 'stream tables', 'stream all']);
 export const MIXED_COMMANDS = new Set(['quote', 'symbol', 'timeframe', 'type', 'range', 'screenshot', 'stream ohlcv']);
 // When a mixed command stays a pure read; published by `tv help --json`.
@@ -63,7 +63,7 @@ export const LEGACY_COMMANDS = new Set(['status', 'launch', 'range', 'scroll', '
   'replay start', 'replay step', 'replay stop', 'replay status', 'replay autoplay', 'replay trade',
   'stream quote', 'stream bars', 'stream values', 'stream lines', 'stream labels', 'stream tables', 'stream ohlcv', 'stream all',
   'tab list', 'tab new', 'tab close', 'tab switch', 'ui click', 'ui keyboard', 'ui hover', 'ui scroll', 'ui find', 'ui eval', 'ui type', 'ui panel', 'ui fullscreen', 'ui mouse',
-  'watchlist get', 'watchlist add', 'watchlist add-bulk', 'watchlist remove']);
+  'watchlist get', 'watchlist raw', 'watchlist add', 'watchlist add-bulk', 'watchlist remove']);
 export function commandScope(command) {
   if (WORKSPACE_COMMANDS.has(command)) return 'workspace';
   if (OFFLINE_COMMANDS.has(command)) return 'offline';
@@ -76,7 +76,7 @@ export function commandScope(command) {
 export const PREPARATION_COMMANDS = new Set(['status', 'tab list', 'layout list', 'layout create', 'layout open','layout select', 'workspace create', 'workspace select', 'pine list']);
 DESKTOP_REQUIREMENTS.set('layout select','none');
 for (const name of PREPARATION_COMMANDS) LEGACY_COMMANDS.delete(name);
-export const APP_COMMANDS = new Set(['launch', 'alert list', 'alert create', 'alert delete', 'watchlist get', 'watchlist add', 'watchlist add-bulk', 'watchlist remove',
+export const APP_COMMANDS = new Set(['launch', 'alert list', 'alert create', 'alert delete', 'watchlist get', 'watchlist raw', 'watchlist add', 'watchlist add-bulk', 'watchlist remove',
   'tab new', 'tab close', 'tab switch', 'layout switch', 'stream ohlcv', 'ui click', 'ui keyboard', 'ui hover', 'ui scroll', 'ui find', 'ui eval', 'ui type', 'ui panel', 'ui fullscreen', 'ui mouse']);
 for (const name of [...LEGACY_COMMANDS]) {
   if (APP_COMMANDS.has(name)) continue;
@@ -87,7 +87,7 @@ WORKSPACE_COMMANDS.add('stream ohlcv');LEGACY_COMMANDS.delete('stream ohlcv');AP
 for (const name of ['workspace list', 'workspace import', 'workspace show','workspace locks','workspace lock-clear']) OFFLINE_COMMANDS.add(name);
 for (const name of ['workspace reconnect', 'workspace attach', 'workspace detach','workspace reset']) ADMIN_COMMANDS.add(name);
 for (const name of PURE_READ_COMMANDS) if (WORKSPACE_COMMANDS.has(name)) WORKSPACE_READS.add(name);
-for (const name of ['alert list','watchlist get','ui find']) WORKSPACE_READS.add(name);
+for (const name of ['alert list','watchlist get','watchlist raw','ui find']) WORKSPACE_READS.add(name);
 for (const name of ['layout create','layout open']) NATIVE_COMMANDS.add(name);
 WORKSPACE_READS.add('workspace wait');WORKSPACE_READS.add('stream ohlcv');
 for(const name of ['symbol','timeframe','type','range','screenshot'])WORKSPACE_READS.add(name);

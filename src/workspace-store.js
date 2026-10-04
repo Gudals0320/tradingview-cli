@@ -223,11 +223,11 @@ export function workspaceStatus(file, options = {}) {
   const workspace = loadWorkspace(file, options), row = match(readReservations(options), workspace);
   const quotedFile = `'${workspace.file.replace(/'/g, "''")}'`;
   const reference = options.name ? `'${options.name.replace(/'/g, "''")}'` : quotedFile;
+  const canReconnect = Boolean(workspace.binding?.nonce && !row.interrupted);
   const lostCommands = options.name ? [
-    `tv layout open ${workspace.layout}`,
-    `tv workspace reconnect ${reference} --generation ${workspace.binding?.nonce}`,
+    ...(canReconnect ? [`tv layout open ${workspace.layout}`, `tv workspace reconnect ${reference} --generation ${workspace.binding.nonce}`] : []),
     `tv workspace reset ${reference} --id ${workspace.id}${row.interrupted ? ` --operation ${row.interrupted.operation_id}` : ''}`,
-  ] : [`tv layout open ${workspace.layout}`, `tv workspace abandon --file ${quotedFile} --id ${workspace.id}${row.interrupted ? ` --operation ${row.interrupted.operation_id}` : ''}`];
+  ] : [...(canReconnect ? [`tv layout open ${workspace.layout}`] : []), `tv workspace abandon --file ${quotedFile} --id ${workspace.id}${row.interrupted ? ` --operation ${row.interrupted.operation_id}` : ''}`];
   let aliveOwner = false;
   if (row.operation) {
     aliveOwner = ownerAlive(row.operation);
@@ -243,7 +243,9 @@ export function workspaceStatus(file, options = {}) {
     state: row.interrupted ? 'interrupted' : row.operation ? 'running' : row.connection_state || 'idle',
     bound: Boolean(workspace.binding), operation: row.operation || null, interrupted: row.interrupted || null,
     owner_alive: aliveOwner, next_commands: nextCommands, handle_schema: workspace.schema,
-    ...(row.connection_state === 'target_lost' ? { next_commands_note: 'Choose reconnect after explicitly opening the saved layout, or confirm reset/abandon to preserve artifacts and stop restoration. Reconnect without --target requires exactly one matching target.' } : {}),
+    ...(row.connection_state === 'target_lost' ? { next_commands_note: canReconnect
+      ? 'Choose reconnect after explicitly opening the saved layout, or confirm reset/abandon to preserve artifacts and stop restoration. Reconnect without --target requires exactly one matching target.'
+      : 'Outcome unknown or binding incomplete: reconnect cannot acknowledge an interrupted operation or missing generation. Confirm exact reset/abandon to archive records and stop restoration; inspect external effects before retrying.' } : {}),
     result_path: row.result_path || null, result_committed: row.result_path && existsSync(row.result_path) ? read(row.result_path).committed === true : false };
 }
 

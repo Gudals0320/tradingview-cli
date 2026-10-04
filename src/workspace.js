@@ -306,6 +306,7 @@ export async function runWorkspace(file, command, values, positionals, handler, 
   try { return await withWorkspaceSession(lease, async () => {
     try {
       if (workspace.layout !== selected.layout || workspace.pine !== selected.pine) throw workspaceError('WORKSPACE_GENERATION_CHANGED', 'Reserved resources changed while waiting; inspect the workspace before retrying.');
+      if (workspace.target !== selected.target) throw workspaceError('WORKSPACE_GENERATION_CHANGED', 'Target changed while waiting; inspect the new owned target and retry.');
       if (command.startsWith('tab ')) values.workspaceTarget = workspace.target;
       if (command === 'tab close' && !workspace.created_by_cli) throw workspaceError('WORKSPACE_TAB_NOT_OWNED', 'Only tabs created by this CLI can be closed.');
       if (!workspace.binding) throw workspaceError('WORKSPACE_NOT_BOUND', 'Initialization did not finish; recover explicitly.');
@@ -441,6 +442,6 @@ export async function closeWorkspace(file, { _deps } = {}) {
       const result = { success: true, released: true, workspace_id: workspace.id };
       lease.checkpoint({ phase: 'released', result });
       return releaseWorkspace(lease);
-    } catch (error) { try { lease.finish({ success: false, interrupted: pageProbeStarted && ['CDP_TIMEOUT', 'WORKSPACE_NATIVE_BUSY', 'WORKSPACE_PAGE_BUSY'].includes(error.code), error: error.message }); } catch { /* Original failure wins. */ } throw error; }
+    } catch (error) { try { lease.finish({ success: false, interrupted: pageProbeStarted && ['CDP_TIMEOUT', 'WORKSPACE_PAGE_BUSY'].includes(error.code), error: error.message }); } catch { /* Original failure wins. */ } throw error; }
   });
 }

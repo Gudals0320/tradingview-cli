@@ -80,7 +80,7 @@ it('release preflight failures stay clean but a page timeout or native pending r
       const preflight = !['CDP_TIMEOUT', 'WORKSPACE_NATIVE_BUSY'].includes(code);
       const deps = { checkLayout: async () => { if (preflight) throw error; }, getClient: async () => ({}), raw: async () => { throw error; } };
       await assert.rejects(closeWorkspace(f.workspace.file, { _deps: deps }), { code });
-      assert.equal(Boolean(workspaceStatus(f.workspace.file).interrupted), !preflight);
+      assert.equal(Boolean(workspaceStatus(f.workspace.file).interrupted), code === 'CDP_TIMEOUT');
     } finally {
       const state = workspaceStatus(f.workspace.file);
       abandonWorkspace(f.workspace.file, { workspaceId: f.workspace.id, operationId: state.interrupted?.operation_id });

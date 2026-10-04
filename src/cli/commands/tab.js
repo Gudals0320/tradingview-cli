@@ -11,7 +11,7 @@ register('tab', {
     ['new', {
       description: 'Open a new chart tab',
       options: {
-        layout: { type: 'string', description: 'Saved layout name, or new' },
+        layout: { type: 'string', description: 'Exact saved layout name; legacy new sentinel creates a layout. Use layout open ID for a saved layout named new/NEW.' },
         name: { type: 'string', description: 'Name for a new saved layout' },
       },
       handler: (opts) => core.newTab({ layout: opts.layout, create: opts.layout?.trim().toLowerCase() === 'new', name: opts.name }),

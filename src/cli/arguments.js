@@ -17,6 +17,7 @@ export const POSITIONALS = new Map([
   ['tab switch', [0, 1]], ['draw get', [1, 1]], ['draw remove', [1, 1]],
   ['replay trade', [1, 1]], ['stream ohlcv', [1, Infinity]],
   ['watchlist add', [1, 1]], ['watchlist add-bulk', [1, Infinity]], ['watchlist remove', [1, Infinity]],
+  ['watchlist raw', [0, 0]],
   ['ui keyboard', [1, 1]], ['ui scroll', [0, 1]], ['ui find', [1, Infinity]],
   ['ui eval', [1, Infinity]], ['ui type', [1, Infinity]], ['ui panel', [1, 2]], ['ui mouse', [2, 2]],
 ]);
@@ -27,9 +28,11 @@ export function validateArguments(command, values, positionals) {
     throw new Error(`${command} accepts ${min === max ? min : `${min} to ${max}`} positional arguments; received ${positionals.length}.`);
   }
   if (positionals.some(value => !value.trim())) throw new Error(`${command} positional arguments must not be empty.`);
-  for (const name of ['expect-script-id', 'file', 'target', 'layout', 'pine', 'name']) {
+  for (const name of ['expect-script-id', 'file', 'target', 'layout', 'pine', 'name', 'list-id', 'list-name']) {
     if (values[name] !== undefined && !values[name].trim()) throw new Error(`--${name} must not be empty.`);
   }
+  if (command === 'watchlist raw' && (values['list-id'] === undefined) === (values['list-name'] === undefined)) throw Object.assign(new Error('Pass exactly one --list-id or --list-name.'), { code: 'WATCHLIST_SELECTOR_REQUIRED' });
+  if (values['acknowledge-unknown'] !== undefined && !/^[a-f0-9]{64}$/.test(values['acknowledge-unknown'])) throw Object.assign(new Error('--acknowledge-unknown requires the exact 64-character lowercase SHA-256 from session recover.'), { code: 'UNKNOWN_ACK_MISMATCH' });
   if (command === 'indicator toggle' && values.visible && values.hidden) throw new Error('Choose --visible or --hidden, not both.');
   for (const name of ['count', 'max', 'limit', 'offset', 'interval', 'timeout', 'port', 'speed']) {
     if (values[name] === undefined) continue;

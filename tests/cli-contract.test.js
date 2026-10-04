@@ -73,18 +73,18 @@ async function fixture(t, pageResult, { pine = 'owned-document', snapshotFactory
     const lease = acquireWorkspace(workspace.file,options); lease.saveBinding({nonce:'fixture-generation',browser:'fixture-browser'});lease.finish({success:true});
     registerWorkspaceName('contract',workspace.file,options);
   }
-  function run(args, input = '') {
+  function run(args, input = '', frameCount = 0) {
     return new Promise((resolve, reject) => {
       const child = spawn(process.execPath, [CLI, ...args], {
         cwd: root, env, stdio: ['pipe', 'pipe', 'pipe'], timeout: 15000,
       });
       let stdout = '', stderr = '';
-      child.stdout.setEncoding('utf8').on('data', chunk => { stdout += chunk; });
+      child.stdout.setEncoding('utf8').on('data', chunk => { stdout += chunk; if (frameCount && stdout.trim().split('\n').length >= frameCount) child.kill('SIGTERM'); });
       child.stderr.setEncoding('utf8').on('data', chunk => { stderr += chunk; });
       child.once('error', reject);
       child.stdin.on('error', error => { if (error.code !== 'EPIPE') reject(error); });
       child.once('close', (exitCode, signal) => {
-        if (signal || exitCode === null) reject(new Error(`CLI did not finish: ${args.join(' ')} (${signal}) ${stderr}`));
+        if ((signal || exitCode === null) && !frameCount) reject(new Error(`CLI did not finish: ${args.join(' ')} (${signal}) ${stderr}`));
         else resolve({ exitCode, stdout, stderr });
       });
       child.stdin.end(input);
@@ -114,6 +114,39 @@ it('real ledger CLI carries selectors and revisions, fails changed pages with ex
   assert.ok(catalog.options.some(option => option.name === '--report-revision'));
 });
 
+it('owned-feed real JSONL executes production guards and emits readiness changes without stale prices or active-pane TypeError', async t => {
+  function pane(symbol) {
+    const state = { symbol, loading: false, error: null, actual: symbol };
+    const series = { symbol: () => state.symbol, interval: () => '60', symbolInfo: () => ({ full_name: state.actual }),
+      isLoading: () => state.loading, status: () => 3, isStatusError: () => Boolean(state.error),
+      bars: () => ({ firstIndex: () => 0, lastIndex: () => 0, valueAt: () => [1, 100, 110, 90, 105, 10] }) };
+    const model = { mainSeries: () => series, model: () => ({ dataSources: () => [] }) };
+    return { state, model: () => model, _chartWidget: { model: () => model }, symbol: () => state.symbol, resolution: () => '60', chartType: () => 1 };
+  }
+  const a = pane('EXCHANGE:AAA'), b = pane('EXCHANGE:BBB');
+  const window = { TradingViewApi: { _activeChartWidgetWV: { value: () => a }, _chartWidgetCollection: { getAll: () => [a, b], metaInfo: { uid: 'fixture-layout' } } } };
+  const document = { querySelectorAll: () => [] }, context = { window, document };
+  const snapshotFactory = () => runInNewContext(`(() => {${WORKSPACE_PAGE_CODE};return readWorkspacePage(window,document,{pine:false});})()`, context);
+  let sampleCount = 0;
+  const f = await fixture(t, async expression => {
+    const value = await runInNewContext(expression, context);
+    if (expression.includes('function readOwnedFeeds') && ++sampleCount === 1) { b.state.loading = false; b.state.error = null; b.state.actual = 'EXCHANGE:BBB'; }
+    return value;
+  }, { pine: null, snapshotFactory });
+  const workspace = loadWorkspace(join(f.root, 'contract.json'), f.options);
+  runInNewContext(`(() => {${WORKSPACE_PAGE_CODE};return bindWorkspacePage(window,document,${JSON.stringify(workspace)},'fixture-generation');})()`, context);
+  b.state.loading = true; b.state.error = 'unavailable'; b.state.actual = 'EXCHANGE:OLD';
+  const result = await f.run(['--workspace', 'contract', 'stream', 'ohlcv', 'EXCHANGE:AAA@60', 'EXCHANGE:BBB@60', '--interval', '100'], '', 2);
+  const frames = result.stdout.trim().split('\n').map(line => JSON.parse(line));
+  assert.equal(frames[0].success, false); assert.equal(frames[0].partial_success, true);
+  assert.equal(frames[0].feeds[1].code, 'DATA_FEED_ERROR'); assert.equal(frames[0].feeds[1].close, undefined);
+  assert.equal(frames[1].success, true); assert.equal(frames[1].feeds[1].close, 105);
+  assert.ok(!result.stderr.includes('TypeError')); result.stderr.trim().split('\n').forEach(line => JSON.parse(line));
+  a.state.loading = true;
+  const secondary = await f.run(['--workspace', 'contract', 'stream', 'ohlcv', 'EXCHANGE:BBB@60', '--interval', '100'], '', 1);
+  assert.equal(JSON.parse(secondary.stdout.trim()).success, true);
+});
+
 it('layout list real CLI executes production lookup for empty/list/throw/timeout/malformed responses', async t => {
   let mode = 'empty', callbacks = 0;
   const f = await fixture(t, expression => runInNewContext(expression, {
@@ -138,22 +171,31 @@ it('layout list real CLI executes production lookup for empty/list/throw/timeout
 
 it('lost chart-only and Pine releases create no interruption and suggested named reset is executable', async t => {
   for (const pine of [null, 'owned-document']) {
+    for (const variant of ['bound', 'interrupted', 'unbound']) {
     const f = await fixture(t, () => ({}), { pine });
     const file = join(f.root, 'contract.json');
+    if (variant !== 'bound') {
+      const lease = acquireWorkspace(file, f.options);
+      if (variant === 'unbound') lease.saveBinding(null);
+      lease.finish({ success: variant !== 'interrupted', interrupted: variant === 'interrupted', error: 'unknown dispatch' });
+    }
     f.targets = [];
     noteWorkspaceState(file, 'target_lost', f.options);
     const before = jsonResult(await f.run(['workspace', 'show', 'contract']));
-    assert.equal(before.state, 'target_lost'); assert.equal(before.interrupted, null);
-    jsonError(await f.run(['--workspace', 'contract', 'workspace', 'release']), /exact workspace target/, 'WORKSPACE_TARGET_LOST');
+    assert.equal(before.state, variant === 'interrupted' ? 'interrupted' : 'target_lost');
+    if (variant === 'interrupted') jsonError(await f.run(['--workspace', 'contract', 'workspace', 'release']), /recover/i, 'WORKSPACE_RECOVERY_REQUIRED');
+    else jsonError(await f.run(['--workspace', 'contract', 'workspace', 'release']), /exact workspace target/, 'WORKSPACE_TARGET_LOST');
     const after = jsonResult(await f.run(['workspace', 'show', 'contract']));
-    assert.equal(after.state, 'target_lost'); assert.equal(after.interrupted, null);
-    assert.ok(after.next_commands.includes(`tv layout open fixture-layout`));
-    assert.ok(after.next_commands.some(command => command.includes(`--generation fixture-generation`)));
-    assert.equal(workspaceStatus(file, f.options).interrupted, null);
+    assert.equal(after.state, variant === 'interrupted' ? 'interrupted' : 'target_lost');
+    assert.equal(after.next_commands.some(command => command.includes('workspace reconnect')), variant === 'bound');
+    assert.equal(after.next_commands.some(command => command.includes('undefined')), false);
+    if (variant === 'bound') assert.ok(after.next_commands.some(command => command.includes(`--generation fixture-generation`)));
+    assert.equal(Boolean(workspaceStatus(file, f.options).interrupted), variant === 'interrupted');
     const reset = after.next_commands.find(command => command.startsWith('tv workspace reset'));
     const args = reset.slice(3).match(/'[^']*'|\S+/g).map(arg => arg.replace(/^'|'$/g, ''));
     const result = jsonResult(await f.run(args));
     assert.equal(result.artifacts_preserved, true); assert.equal(result.desktop_changed, false);
+    }
   }
 });
 
