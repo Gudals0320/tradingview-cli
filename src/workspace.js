@@ -3,17 +3,17 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { readFileSync,existsSync } from 'node:fs';
 import { CDP_HOST, CDP_PORT } from './config.js';
-import { acquireWorkspace, reserveWorkspace, releaseWorkspace, workspaceError, loadWorkspace, workspaceStatus, noteWorkspaceState } from './workspace-store.js';
+import { acquireWorkspace, reserveWorkspace, releaseWorkspace, workspaceError, loadWorkspace, workspaceStatus, noteWorkspaceState, assertObservationAdmission, workspaceWaitTimeout } from './workspace-store.js';
 import { withWorkspaceSession, sourceHash, canonicalSessionHost, assertLegacyCompatibility } from './session.js';
 import { configureTarget, getClient } from './connection.js';
 import { WORKSPACE_PAGE_CODE } from './workspace-page.js';
 import { normalizeTimeframe } from './chart-context.js';
 import { WORKSPACE_READS, pureRead, PINE_COMMANDS, FOREGROUND_COMMANDS, resourceKinds, workspaceRequired } from './cli/policy.js';
-import { acquireResources } from './resource-lock.js';
+import { acquireResources, resourceLockStatus } from './resource-lock.js';
 import { getDesktopInventory } from './desktop.js';
 import { withSharedSession, withSharedTarget } from './session.js';
 import { sessionPaths,readReservations } from './session.js';
-import { registerWorkspaceName, resolveWorkspace, selectWorkspace, reserveWorkspaceName, recordCreatedLayout, wasCreatedLayout,workspaceNameRecord,forgetWorkspaceName } from './workspace-registry.js';
+import { registerWorkspaceName, resolveWorkspace, selectWorkspace, reserveWorkspaceName, recordSavedLayoutCreation, recordOwnedTab, ownedTabProof,workspaceNameRecord,forgetWorkspaceName } from './workspace-registry.js';
 import {abandonWorkspace} from './workspace-store.js';
 import {ownerAlive} from './process-identity.js';
 import {synchronizeLegacyNamespace} from './legacy-bridge.js';
@@ -57,6 +57,15 @@ async function browserIdentity() {
   return version.webSocketDebuggerUrl;
 }
 function owner(workspace) { return { id: workspace.id, token: workspace.token, nonce: workspace.binding?.nonce }; }
+function assertOwnedTab(workspace, reference) {
+  if (workspace.owned_target === workspace.target && workspace.tab_ownership?.browser_generation === workspace.binding?.browser) return;
+  const quoted = `'${String(reference).replace(/'/g, "''")}'`;
+  throw Object.assign(workspaceError('WORKSPACE_TAB_NOT_OWNED', 'The exact tab lifecycle has no verified CLI creation proof. Preserve it; release does not close tabs.'), { details: {
+    workspace_id: workspace.id, target: workspace.target, owned_target: workspace.owned_target || null,
+    reason: !workspace.owned_target && workspace.created_by_cli ? 'legacy_ownership_unverified' : 'tab_lifecycle_unverified',
+    next_commands: [`tv --workspace ${quoted} workspace release`],
+    next_action: 'Legacy boolean-only ownership is not promoted. Save any drafts and manually close the intended tab, or release/reset its reservation and open a fresh dedicated CLI tab. Never discard a foreign draft.' } });
+}
 function pageCall(fn, ...args) { return `${fn}(window,document,${args.map(arg => JSON.stringify(arg)).join(',')})`; }
 async function sourceProof(client, snapshot) {
   if (snapshot.modified !== false || !snapshot.version) return null;
@@ -113,7 +122,8 @@ export async function createWorkspace(name, { layout, target, pine } = {}) {
   const file = join(directory, `${randomUUID()}.json`);
   const reservation=reserveWorkspaceName(name,{file});
   let initialized=false;
-  try { await initWorkspace({ file, target: matches[0].target, layout, pine,created_by_cli:wasCreatedLayout(layout,matches[0].target) });initialized=true;return registerWorkspaceName(name, file, {}, reservation.token); }
+  try { const tab_ownership = ownedTabProof(layout, matches[0].target, await browserIdentity());
+    await initWorkspace({ file, target: matches[0].target, layout, pine, created_by_cli: Boolean(tab_ownership), owned_target: tab_ownership ? matches[0].target : null, tab_ownership });initialized=true;return registerWorkspaceName(name, file, {}, reservation.token); }
   catch(cause){if(initialized){try{await closeWorkspace(file);}catch(cleanup){cause.details={...cause.details,workspace_file:file,cleanup_error:cleanup.message};}}throw cause;}
   finally { reservation.cancel(); }
 }
@@ -156,7 +166,8 @@ export async function openLayout({ name, create = false, _deps } = {}) {
   }
   const result = await (_deps?.newTab || newTab)(create ? { create: true, name } : { layout_id: String(selected.id), name: selected.name });
   if (!create && result.chart_id !== String(selected.id)) throw Object.assign(workspaceError('LAYOUT_IDENTITY_MISMATCH', 'Opened chart differs from the requested saved layout; inspect the new target before retrying.'), { details: { requested_layout: String(selected.id), opened_layout: result.chart_id, target: result.target } });
-  if(create)recordCreatedLayout(result);
+  if(create)recordSavedLayoutCreation(result);
+  (_deps?.recordOwnedTab || recordOwnedTab)(result);
   return { ...result, previous_target, foreground_changed: true };
 }
 export async function reconnectWorkspace(name, { target, generation, pine, detach = false } = {}) {
@@ -182,7 +193,7 @@ export async function reconnectWorkspace(name, { target, generation, pine, detac
       if(prospective.pine&&snapshot.draft===true)throw workspaceError('WORKSPACE_SAVED_DOCUMENT_REQUIRED','Save the dedicated draft as a document before attaching it; no native save was dispatched.');
       if (snapshot.pending) throw workspaceError('WORKSPACE_NATIVE_BUSY', 'Wait for the target to settle before reconnecting.');
       lease.checkpoint({phase:'reconnecting',command:'workspace reconnect',target_id:target,old_generation:generation,layout:selected.layout,pine:prospective.pine});
-      lease.reassign({ target, pine: prospective.pine, expectedGeneration: generation });
+      lease.reassign({ target, pine: prospective.pine, expectedGeneration: generation, tab_ownership: ownedTabProof(selected.layout, target, browser) });
       changedResources=true;
       const binding = await raw(client, pageCall('bindWorkspacePage', lease.workspace, randomUUID()));
       // Old study IDs, report revisions and source proofs are never reused.
@@ -241,12 +252,12 @@ export async function runWorkspace(file, command, values, positionals, handler, 
   assertLegacyCompatibility({target:selected.target});
   if (['pine new', 'pine open'].includes(command)) throw workspaceError('WORKSPACE_COMMAND_UNSUPPORTED', 'Create or open a dedicated saved document in this tab, then use workspace attach. Workspace calls cannot replace an unowned editor document.');
   if (PINE_COMMANDS.has(command) && !selected.pine) throw workspaceError('WORKSPACE_PINE_REQUIRED', 'This chart-only workspace has no owned Pine document. Use workspace attach with a dedicated saved document.');
+  if (command === 'tab close') assertOwnedTab(selected, values.workspaceReference || file);
   if ((FOREGROUND_COMMANDS.has(command) && command !== 'tab switch') || (command === 'screenshot' && values.method !== 'api')) {
     const inventory = await withSharedSession(() => getDesktopInventory());
     if (!inventory.tabs.some(tab => tab.id === selected.target && tab.active)) throw workspaceError('FOREGROUND_REQUIRED', 'Select this workspace tab in Desktop before using shared UI commands.');
     if (command === 'layout switch') throw workspaceError('WORKSPACE_COMMAND_UNSUPPORTED', 'Use layout open and create/select its workspace; registered saved layouts cannot be silently replaced.');
   }
-  if (command === 'tab close' && !selected.created_by_cli) throw workspaceError('WORKSPACE_TAB_NOT_OWNED', 'Only tabs created by this CLI can be closed. Release preserves preexisting tabs.');
   if (command === 'tab switch') {
     const inventory = await withSharedSession(() => getDesktopInventory());
     if (positionals[0] !== undefined && inventory.tabs[Number(positionals[0])]?.id !== selected.target) throw workspaceError('WORKSPACE_TARGET_MISMATCH', 'Legacy tab index does not identify the selected workspace.');
@@ -255,9 +266,17 @@ export async function runWorkspace(file, command, values, positionals, handler, 
   if(command==='stream ohlcv')values.workspaceOwned=true;
   if (WORKSPACE_READS.has(command) && pureRead(command, values, positionals)) {
     const workspace = loadWorkspace(file);
-    if (workspaceStatus(file).interrupted) throw workspaceError('WORKSPACE_RECOVERY_REQUIRED', 'Observation cannot adopt an interrupted result. Inspect workspace show and recover the exact operation.');
-    const observer = { workspace, observe: true, endpoint_key: workspace.endpoint_key, assertOwner: () => loadWorkspace(file) };
+    const getStatus = _deps?.workspaceStatus || workspaceStatus, reference = values.workspaceReference || file;
+    const admission = assertObservationAdmission(getStatus(file), reference);
+    const followingWait = command === 'workspace wait';
+    const checkAdmission = () => assertObservationAdmission(getStatus(file), reference, admission, { followOperations: followingWait });
+    const observer = { workspace, observe: true, endpoint_key: workspace.endpoint_key, assertOwner: () => {
+      loadWorkspace(file); assertObservationAdmission(getStatus(file), reference);
+    } };
     return withWorkspaceSession(observer, async () => {
+      for (;;) {
+      checkAdmission();
+      if (followingWait && values.workspaceWaitStartedAt !== undefined && Date.now() - values.workspaceWaitStartedAt >= Number(values.timeout || 30000)) return workspaceWaitTimeout();
       await (_deps?.checkLayout || checkLayout)(workspace);
       if (await (_deps?.browserIdentity || browserIdentity)() !== workspace.binding?.browser) throw workspaceError('WORKSPACE_GENERATION_CHANGED', 'Desktop browser generation changed.');
       configureTarget(workspace.target);
@@ -265,9 +284,21 @@ export async function runWorkspace(file, command, values, positionals, handler, 
       const before = await inspect(client, pageCall('guardWorkspacePage', owner(workspace), { observe: true }));
       if(command==='screenshot'&&values.method!=='api'&&(before.viewport?.width===0||before.viewport?.height===0))throw workspaceError('DESKTOP_VIEWPORT_UNAVAILABLE','Restore the existing Desktop window before CDP capture; the owned viewport is zero.');
       if (workspace.pine && command === 'indicator get' && positionals[0] !== before.studies[0]?.id) throw workspaceError('WORKSPACE_STUDY_MISMATCH', 'Read only the owned study.');
+      if (['data strategy', 'data trades', 'data ledger', 'data equity'].includes(command) && values['strategy-id'] && values['strategy-id'] !== before.studies[0]?.id) {
+        const requested = values['strategy-id'];
+        const present = await inspect(client, pageCall('workspaceStrategyPresent', requested));
+        assertObservationAdmission(getStatus(file), reference, admission);
+        const code = present ? 'WORKSPACE_STUDY_MISMATCH' : 'STUDY_NOT_FOUND';
+        const quoted = `'${String(reference).replace(/'/g, "''")}'`;
+        throw Object.assign(workspaceError(code, present ? 'Requested strategy is not the owned study.' : 'Requested strategy ID is absent; refresh its current ID.'), { details: {
+          requested_strategy_id: requested, current_strategy_id: before.studies[0]?.id || null,
+          next_commands: [`tv --workspace ${quoted} state`, `tv --workspace ${quoted} workspace wait`], calculation_pending: false } });
+      }
       const result = await handler(values, positionals);
+      checkAdmission();
       if (command.startsWith('stream ') && result === undefined) return;
       const after = await inspect(client, pageCall('guardWorkspacePage', owner(workspace), { observe: true }));
+      checkAdmission();
       const stable = sourceHash(before.source) === sourceHash(after.source)
         && JSON.stringify(before.context) === JSON.stringify(after.context)
         && JSON.stringify(before.studies.map(study => [study.id, study.inputs])) === JSON.stringify(after.studies.map(study => [study.id, study.inputs]));
@@ -287,12 +318,19 @@ export async function runWorkspace(file, command, values, positionals, handler, 
         && proof.version === String(after.version)
         && (proof.applied_version || proof.version) === String(study?.inputs.find(input => input.id === 'pineVersion')?.value));
       if (result === undefined) return;
+      const finalAdmission = checkAdmission();
+      if (followingWait && result?.success && Date.now() - values.workspaceWaitStartedAt >= Number(values.timeout || 30000)) return workspaceWaitTimeout();
+      if (followingWait && result?.success) {
+        const locks = (_deps?.resourceLockStatus || resourceLockStatus)();
+        if (finalAdmission.operation || [...locks.holders, ...locks.queue].some(row => row.workspace_id === workspace.id)) continue;
+      }
       return { ...result, ...(['data strategy','data trades','data ledger','data equity'].includes(command) ? {report_revision:result.report_revision || (result.success?sourceHash(JSON.stringify(result)):null),calculation_pending:after.calculating} : {}), provenance: { workspace_id: workspace.id, observation: true, target: workspace.target,
         ...(reportEpoch?{calculation:{phase:reportEpoch.phase,accepted_cycle:reportEpoch.accepted_cycle,cycle:reportEpoch.calculation?.cycle,events:reportEpoch.calculation?.events,completed:reportEpoch.calculation?.completed?{cycle:reportEpoch.calculation.completed.cycle,key_hash:sourceHash(reportEpoch.calculation.completed.key)}:null}}:{}),
         source_hash: sourceHash(after.source), source_scope: 'editor', persisted_applied_source_verified: persistedApplied,
         study: study ? { id: study.id, status: study.status, compiled_hash: sourceHash(JSON.stringify(study.inputs)) } : null,
         context: after.context, page_generation: workspace.binding.nonce,
         changed_during_read: !stable } };
+      }
     });
   }
   const permit = await permitFor(command, values, positionals);
@@ -309,7 +347,7 @@ export async function runWorkspace(file, command, values, positionals, handler, 
       if (workspace.layout !== selected.layout || workspace.pine !== selected.pine) throw workspaceError('WORKSPACE_GENERATION_CHANGED', 'Reserved resources changed while waiting; inspect the workspace before retrying.');
       if (workspace.target !== selected.target) throw workspaceError('WORKSPACE_GENERATION_CHANGED', 'Target changed while waiting; inspect the new owned target and retry.');
       if (command.startsWith('tab ')) values.workspaceTarget = workspace.target;
-      if (command === 'tab close' && !workspace.created_by_cli) throw workspaceError('WORKSPACE_TAB_NOT_OWNED', 'Only tabs created by this CLI can be closed.');
+      if (command === 'tab close') assertOwnedTab(workspace, values.workspaceReference || file);
       if (!workspace.binding) throw workspaceError('WORKSPACE_NOT_BOUND', 'Initialization did not finish; recover explicitly.');
       await (_deps?.checkLayout || checkLayout)(workspace);
       if (await (_deps?.browserIdentity || browserIdentity)() !== workspace.binding.browser) throw workspaceError('WORKSPACE_GENERATION_CHANGED', 'Desktop browser generation changed.');

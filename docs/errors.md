@@ -26,6 +26,9 @@ an unknown native operation.
 | WORKSPACE_EXTERNAL_CHANGE | Inspect source/context/inputs; explicitly acknowledge intended changes without overwriting foreign drafts. |
 | WORKSPACE_OBSERVATION_CHANGED | Retry after the operation settles; discard the changing sample. |
 | WORKSPACE_BUSY / WORKSPACE_PAGE_BUSY / WORKSPACE_OWNER_DEAD | Inspect exact owner/operation. Wait for live owner; mark/reconcile a proven-dead operation. |
+| WORKSPACE_OWNER_DEAD during observation | All Desktop observations (including wait and four data reports) preserve the unreconciled operation and reject adoption before/after awaited reads. Follow exact named interrupt → native settlement/recover → locks → exact dead-token repair hints. No automatic interrupt or lease deletion. Unknown PID/liveness is never classified dead. Offline workspace show remains available. |
+| WORKSPACE_OBSERVATION_CHANGED | Reports saw a resource/generation or unrelated operation identity change; retry after settlement. Wait follows healthy FIFO transitions by discarding/re-observing samples, while dead/interrupted or resource/generation changes remain errors. |
+| WORKSPACE_TAB_NOT_OWNED / legacy_ownership_unverified | 2.1-and-earlier boolean/created-layout records do not prove fresh landing/browser lifecycle. Release preserves the tab; save drafts and close manually if intended, then reset/reopen a fresh dedicated CLI tab. Never discard a foreign draft or claim a GUI/reused-landing tab. |
 | WORKSPACE_RECOVERY_REQUIRED / WORKSPACE_OPERATION_MISMATCH | Use exact interrupted operation; never clear another operation. |
 | WORKSPACE_OWNERSHIP_LOST / OWNERSHIP_UNREADABLE | Preserve private store/handle/artifacts; do not edit credentials or infer empty ownership. |
 | FOREGROUND_REQUIRED | Select owned tab for UI/CDP capture; background API reads remain pinned. |
@@ -52,6 +55,8 @@ an unknown native operation.
 | REPORT_PENDING / REPORT_TIMEOUT / STRATEGY_CALCULATION_PENDING | Wait for existing calculation; normal waiting does not imply cancellation/manual recovery. |
 | REPORT_CHANGED | Discard pages and restart offset0 with new revision. |
 | STUDY_NOT_FOUND / WORKSPACE_STUDY_MISMATCH | Read current owned IDs; IDs do not survive reconnect. |
+| STUDY_NOT_FOUND for strategy-id | Requested ID is absent (including removed/another-page ID), even if calculation is pending. Re-read the safe owned current_strategy_id using the exact state/wait hint; no fallback to another strategy. A same-page nonowned strategy yields WORKSPACE_STUDY_MISMATCH. |
+| REPORT_AMBIGUOUS | More than one matching strategy; select the owned current ID rather than waiting. Runtime errors remain distinct even when the report is incomplete. |
 | LAYOUT_UNVERIFIED / WORKSPACE_LAYOUT_UNVERIFIED | Inspect owned layout and preserve uncertain records before changes. |
 | LAYOUT_LIST_FAILED / LAYOUT_LIST_TIMEOUT / LAYOUT_LIST_MALFORMED | Saved-layout lookup failed; no empty-list success or open dispatch is inferred. Retry only after resolving the cause. |
 | LAYOUT_IDENTITY_MISMATCH | Opened URL differs from the requested saved ID. Inspect the reported new target; preserve it and do not assume the requested layout opened. |

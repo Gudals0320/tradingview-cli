@@ -73,11 +73,13 @@ function describe(name, adapter) {
     foreground: name==='screenshot'?'conditional':name==='tab switch'?'changes':FOREGROUND_COMMANDS.has(name) ? 'required' : ['layout create', 'layout open', 'tab new'].includes(name) ? 'changes' : 'background',
     ...(name==='screenshot'?{foreground_when:'CDP capture requires the owned tab to be selected and a nonzero viewport; --method api targets the owned chart in the background.'}:{}),
     read_only: invocation === 'pure' ? true : invocation === 'mixed' ? 'conditional' : invocation === 'native' ? false : null,
+    ...(workspaceRequired(name) && ['pure', 'mixed'].includes(invocation) ? { observation_admission: 'workspace_read' } : {}),
     ...(MIXED_RULES.has(name) ? { read_only_when: MIXED_RULES.get(name) } : {}),
     output: OUTPUT_RULES.has(name) ? 'conditional' : name.startsWith('stream ') ? 'jsonl' : 'json',
     ...(OUTPUT_RULES.has(name) ? { output_when: OUTPUT_RULES.get(name) } : {}),
   };
 }
+
 
 export function buildCatalog(commands, filter = [], { brief = false } = {}) {
   const entries = [...commands].flatMap(([name, command]) => command.subcommands
@@ -122,7 +124,7 @@ export function buildCatalog(commands, filter = [], { brief = false } = {}) {
     invocations: INVOCATIONS,
     desktop_values: DESKTOP,
     endpoint_lease_values: LEASES,
-    ownership_fields: { workspace_required: 'Selection must resolve before any chart access.', locks: 'Resource kinds acquired together; reads use no mutation lock. Mixed commands depend on arguments.', foreground: 'background targets the owned page; required verifies the selected Desktop tab; changes opens/selects tabs.' },
+    ownership_fields: { workspace_required: 'Selection must resolve before any chart access.', locks: 'Resource kinds acquired together; reads use no mutation lock. Mixed commands depend on arguments.', foreground: 'background targets the owned page; required verifies the selected Desktop tab; changes opens/selects tabs.', observation_admission: 'workspace_read: never adopt interrupted/proven-dead results; unknown liveness stays protected and offline show remains available. Reports recheck generation/operation identity. Wait discards/reobserves healthy FIFO transitions within its original timeout; resource/generation changes still fail.' },
     read_only_values: {
       true: 'Pure read.',
       false: 'Changes Desktop state.',

@@ -4,6 +4,16 @@ Version 2 uses saved layout → named workspace → execution. Chart commands re
 `--workspace NAME` or the calling PowerShell process's `TV_WORKSPACE` selection.
 There is no active-tab fallback or global active-workspace setting.
 
+## 2.2 observation admission and tab ownership
+
+All Desktop observations reject a recorded operation whose owner is proven dead, before and after awaited page reads. `WORKSPACE_OWNER_DEAD` preserves journals and supplies exact named interrupt/recover/lock inspection/repair actions; no observation silently reconciles native work. Unknown process identity is treated conservatively as alive/unverifiable. Living-owner observations and independent-workspace work remain available without broad read mutation locks. Reports pin the initial operation identity and accept disappearance only when its exact result is committed. `workspace wait` deliberately follows healthy FIFO operation/queue transitions, discards transition samples, and re-observes until admitted work settles; its original timeout remains bounded. Dead/interrupted owners or resource/generation changes still fail immediately. Offline `workspace show` remains a diagnosis route.
+
+An explicit missing/removed/other-page strategy ID is `STUDY_NOT_FOUND`, even while the current study calculates. A same-page nonowned strategy is `WORKSPACE_STUDY_MISMATCH`; hints expose only the owned current ID. Refresh IDs with state/wait, not retries of the old ID. Actual present-but-calculating studies remain `REPORT_PENDING`, ambiguous selection is `REPORT_AMBIGUOUS`, and runtime error is distinct from incomplete reports/zero trades.
+
+Saved layout creation and tab ownership are separate. Create/open records exact target+browser lifecycle only after a fresh landing, actual new-tab button, unique native shell transition, absent pre-call CDP target and verified saved ID. Desktop 3.4.1 create replaces its new placeholder shell tab; that is accepted only when every old tab remains and one exact new shell tab replaces the fresh placeholder. Reused landing, existing GUI tabs, mismatches and unverified outcomes never receive close proof. Reconnect/attach recheck the new exact target, so a GUI reopen does not inherit an old CLI boolean.
+
+Compatibility policy: pre-2.2 boolean-only ownership and the old created-layout ledger are not promoted because they cannot prove landing/browser lifecycle. `WORKSPACE_TAB_NOT_OWNED` with `legacy_ownership_unverified` offers exact release (tab/artifact preservation). Save drafts and manually close the intended tab if desired, or release/reset and open a fresh dedicated CLI tab. The CLI never automatically discards the unsaved dialog or a foreign draft. Currently installed 2.1.0 is not updated by this development PR.
+
 ## Prepare and select
 
 ```powershell

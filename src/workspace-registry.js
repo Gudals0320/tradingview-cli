@@ -66,6 +66,30 @@ export function wasCreatedLayout(layout,target,options={}) {
   const paths=sessionPaths(options),path=join(paths.directory,`${paths.key}.created-layouts.json`);
   return existsSync(path)&&JSON.parse(readFileSync(path,'utf8')).some(row=>row.layout===layout&&row.target===target);
 }
+export function recordSavedLayoutCreation(result, options = {}) {
+  const paths = sessionPaths(options), path = join(paths.directory, `${paths.key}.saved-layouts.json`);
+  if (!result.success || !result.chart_id) throw workspaceError('LAYOUT_CREATION_UNVERIFIED', 'Saved-layout creation was not verified.');
+  secureDirectory(paths.directory);
+  return withAdmissionGate(options, () => { const rows = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : [];
+    rows.push({ layout: result.chart_id, created_at: new Date().toISOString() });
+    const temp = `${path}.${randomUUID()}.tmp`; writeFileSync(temp, JSON.stringify(rows), { mode: 0o600 }); renameSync(temp, path);
+  });
+}
+export function recordOwnedTab(result, options = {}) {
+  const proof = result.tab_ownership;
+  if (!result.success || !proof?.owned || proof.layout !== result.chart_id || proof.target !== result.target
+    || !proof.browser_generation || !proof.proof?.new_tab_button || !proof.proof.target_absent_before || !proof.proof.shell_tab_id) return false;
+  const paths = sessionPaths(options), path = join(paths.directory, `${paths.key}.owned-tabs.json`);
+  secureDirectory(paths.directory);
+  return withAdmissionGate(options, () => { const rows = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : [];
+    rows.push({ ...proof, created_at: new Date().toISOString() });
+    const temp = `${path}.${randomUUID()}.tmp`; writeFileSync(temp, JSON.stringify(rows), { mode: 0o600 }); renameSync(temp, path); return true;
+  });
+}
+export function ownedTabProof(layout, target, browser, options = {}) {
+  const paths = sessionPaths(options), path = join(paths.directory, `${paths.key}.owned-tabs.json`);
+  return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')).find(row => row.owned && row.layout === layout && row.target === target && row.browser_generation === browser) || null : null;
+}
 export function listWorkspaceNames(options = {}) {
   const rows=readReservations(options);
   return { success: true, workspaces: Object.entries(registry(options).names).map(([name, value]) => {

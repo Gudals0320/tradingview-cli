@@ -183,6 +183,17 @@ export function startWorkspacePage(window, document, owner, operation, permit) {
   return snapshot;
 }
 
+/** Presence only: never expose another document's source, inputs or report. */
+export function workspaceStrategyPresent(window, document, requested) {
+  const chart = window.TradingViewApi?._activeChartWidgetWV?.value();
+  if (!chart) throw new Error('WORKSPACE_NOT_READY: Chart is unavailable.');
+  return chart._chartWidget.model().model().dataSources().some(source => {
+    if (source.id?.() !== requested) return false;
+    const info = source.metaInfo?.();
+    return Boolean(info?.isTVScriptStrategy || info?.is_strategy);
+  });
+}
+
 export function finishWorkspacePage(window, document, owner, operation, {allowIncomplete=false}={}) {
   const snapshot = guardWorkspacePage(window, document, owner), bound = window.__tvCliWorkspace;
   if (bound.operation !== operation) throw new Error('WORKSPACE_OWNERSHIP_LOST: Page operation changed.');
@@ -203,4 +214,4 @@ export function finishWorkspacePage(window, document, owner, operation, {allowIn
 }
 
 export const WORKSPACE_PAGE_CODE = [canonicalPineSource, findPineEditor, findPineController, readChartContext, normalizeTimeframe, symbolMatches, layoutConfirmationRoot, layoutConfirmationVisible, layoutOperationPending, trackNativeOperation,
-  readWorkspacePage, bindWorkspacePage, restoreWorkspaceDocument, guardWorkspacePage, startWorkspacePage, finishWorkspacePage].map(fn => fn.toString()).join('\n');
+  readWorkspacePage, bindWorkspacePage, restoreWorkspaceDocument, guardWorkspacePage, startWorkspacePage, workspaceStrategyPresent, finishWorkspacePage].map(fn => fn.toString()).join('\n');

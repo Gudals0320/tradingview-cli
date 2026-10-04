@@ -8,6 +8,7 @@ import { secureDirectory } from './private-store.js';
 import { tmpdir } from 'node:os';
 import { ownerAlive } from './process-identity.js';
 import {withLegacyNamespace,synchronizeLegacyNamespace} from './legacy-bridge.js';
+import { resourceLockStatus } from './resource-lock.js';
 
 export function workspaceError(code, message) { const error = new Error(message); error.code = code; return error; }
 const fail = (code, message) => { throw workspaceError(code, message); };
@@ -104,7 +105,7 @@ export function importLegacyWorkspace(file, {legacyDirectory=join(tmpdir(),'trad
   });
 }
 
-export function reserveWorkspace({ file, target, layout, pine = null, created_by_cli = false }, options = {}) {
+export function reserveWorkspace({ file, target, layout, pine = null, created_by_cli = false, owned_target = null, tab_ownership = null }, options = {}) {
   if (![file, target, layout].every(value => typeof value === 'string' && value.trim()) || (pine !== null && (typeof pine !== 'string' || !pine.trim()))) {
     fail('WORKSPACE_RESOURCE_REQUIRED', 'file, exact target and saved layout ID are required; Pine document is optional.');
   }
@@ -120,7 +121,7 @@ export function reserveWorkspace({ file, target, layout, pine = null, created_by
     }
     if (rows.some(row => samePath(row.file, file)) || existsSync(file)) fail('WORKSPACE_EXISTS', 'Workspace file already exists.');
     const workspace = { schema: 2, id: randomUUID(), token: randomUUID(), file,
-      endpoint_key: paths.key, target, layout, pine, created_by_cli, created_at: new Date().toISOString() };
+      endpoint_key: paths.key, target, layout, pine, created_by_cli, owned_target, tab_ownership, created_at: new Date().toISOString() };
     // Reserve before creating the file: a crash leaves a fail-closed reservation.
     atomic(paths.reservations, [...rows, workspace]);
     try {
@@ -179,13 +180,18 @@ export function acquireWorkspace(file, { recover = false, recoveryOperation, ...
     saveBinding(binding) {
       lease.assertOwner(); workspace.binding = binding; savePrivate(workspace, options);
     },
-    reassign({ target = workspace.target, pine = workspace.pine, expectedGeneration }) {
+    reassign({ target = workspace.target, pine = workspace.pine, expectedGeneration, tab_ownership }) {
       lease.assertOwner();
       if (workspace.binding?.nonce !== expectedGeneration) fail('WORKSPACE_GENERATION_CHANGED', 'Workspace generation changed while reconnecting.');
       withLegacyNamespace(options,()=>withAdmissionGate(options, paths => {
         const rows = readReservations(options), row = match(rows, workspace);
         if (rows.some(other => other.id !== workspace.id && (other.target === target || (pine && other.pine === pine)))) fail('WORKSPACE_CONFLICT', 'Requested target or document belongs to another workspace.');
+        const tab = tab_ownership === undefined && target === workspace.target ? workspace.tab_ownership : tab_ownership;
+        const owned = Boolean(tab?.owned && tab.target === target && tab.layout === workspace.layout);
         row.target = target; row.pine = pine; workspace.target = target; workspace.pine = pine; workspace.binding = null;
+        workspace.tab_ownership = row.tab_ownership = owned ? tab : null;
+        workspace.owned_target = row.owned_target = owned ? target : null;
+        workspace.created_by_cli = row.created_by_cli = owned;
         savePrivate(workspace, options); atomic(paths.reservations, rows);
       }),{target,layout:workspace.layout,pine});
     },
@@ -220,7 +226,21 @@ export function acquireWorkspace(file, { recover = false, recoveryOperation, ...
 }
 
 export function workspaceStatus(file, options = {}) {
-  const workspace = loadWorkspace(file, options), row = match(readReservations(options), workspace);
+  let workspace, row, aliveOwner = false, coherent = false;
+  const identity = (value, entry) => JSON.stringify([value.target, value.layout, value.pine, value.binding?.nonce, value.binding?.browser,
+    entry.operation?.id, entry.operation?.pid, entry.operation?.process_started_at, entry.operation?.command, entry.operation?.started_at,
+    entry.interrupted?.operation_id, entry.result_path]);
+  // Platform liveness queries can outlive a normal lease's final commit/exit.
+  // Never combine that late death proof with a stale operation snapshot.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    workspace = loadWorkspace(file, options); row = match(readReservations(options), workspace);
+    const before = identity(workspace, row);
+    aliveOwner = row.operation ? (options._deps?.ownerAlive || ownerAlive)(row.operation) : false;
+    const current = loadWorkspace(file, options), currentRow = match(readReservations(options), current);
+    if (before === identity(current, currentRow)) { workspace = current; row = currentRow; coherent = true; break; }
+  }
+  if (!coherent) throw Object.assign(workspaceError('WORKSPACE_OBSERVATION_CHANGED', 'Ownership metadata changed during repeated liveness probes; retry after it settles.'), { details: { reason: 'metadata_unstable', records_preserved: true } });
+  const lastResult = row.result_path && existsSync(row.result_path) ? read(row.result_path) : null;
   const quotedFile = `'${workspace.file.replace(/'/g, "''")}'`;
   const reference = options.name ? `'${options.name.replace(/'/g, "''")}'` : quotedFile;
   const canReconnect = Boolean(workspace.binding?.nonce && !row.interrupted);
@@ -228,12 +248,8 @@ export function workspaceStatus(file, options = {}) {
     ...(canReconnect ? [`tv layout open ${workspace.layout}`, `tv workspace reconnect ${reference} --generation ${workspace.binding.nonce}`] : []),
     `tv workspace reset ${reference} --id ${workspace.id}${row.interrupted ? ` --operation ${row.interrupted.operation_id}` : ''}`,
   ] : [...(canReconnect ? [`tv layout open ${workspace.layout}`] : []), `tv workspace abandon --file ${quotedFile} --id ${workspace.id}${row.interrupted ? ` --operation ${row.interrupted.operation_id}` : ''}`];
-  let aliveOwner = false;
-  if (row.operation) {
-    aliveOwner = ownerAlive(row.operation);
-  }
   const nextCommands = row.operation
-    ? aliveOwner ? [] : [`tv workspace interrupt --file ${quotedFile} --operation ${row.operation.id}`]
+    ? aliveOwner ? [] : [`tv --workspace ${reference} workspace interrupt --operation ${row.operation.id}`]
     : row.connection_state === 'target_lost' ? lostCommands
       : row.interrupted ? [`tv --workspace ${reference} workspace recover --operation ${row.interrupted.operation_id}${workspace.binding ? '' : ' --rebind'}`]
       : workspace.binding ? [`tv --workspace ${reference} state`, `tv --workspace ${reference} workspace release`]
@@ -242,11 +258,13 @@ export function workspaceStatus(file, options = {}) {
     generation: workspace.binding?.nonce || null, browser_generation: workspace.binding?.browser || null,
     state: row.interrupted ? 'interrupted' : row.operation ? 'running' : row.connection_state || 'idle',
     bound: Boolean(workspace.binding), operation: row.operation || null, interrupted: row.interrupted || null,
+    owned_target: workspace.owned_target || null,
     owner_alive: aliveOwner, next_commands: nextCommands, handle_schema: workspace.schema,
     ...(row.connection_state === 'target_lost' ? { next_commands_note: canReconnect
       ? 'Choose reconnect after explicitly opening the saved layout, or confirm reset/abandon to preserve artifacts and stop restoration. Reconnect without --target requires exactly one matching target.'
       : 'Outcome unknown or binding incomplete: reconnect cannot acknowledge an interrupted operation or missing generation. Confirm exact reset/abandon to archive records and stop restoration; inspect external effects before retrying.' } : {}),
-    result_path: row.result_path || null, result_committed: row.result_path && existsSync(row.result_path) ? read(row.result_path).committed === true : false };
+    result_path: row.result_path || null, result_committed: lastResult?.committed === true,
+    result_operation_id: lastResult?.operation_id || null };
 }
 
 export function noteWorkspaceState(file, state, options = {}) {
@@ -256,6 +274,38 @@ export function noteWorkspaceState(file, state, options = {}) {
     row.connection_state=state;atomic(paths.reservations,rows);
   });
 }
+
+/** Read-only admission shared by observations and wait; never interrupts/reconciles. */
+export function assertObservationAdmission(status, reference, baseline = null, { followOperations = false } = {}) {
+  const quoted = `'${String(reference).replace(/'/g, "''")}'`;
+  const operation = status.operation ? { id: status.operation.id, command: status.operation.command, started_at: status.operation.started_at } : null;
+  const details = { workspace_id: status.workspace_id, generation: status.generation,
+    operation, result_adopted: false, records_preserved: true };
+  if (status.interrupted) throw Object.assign(workspaceError('WORKSPACE_RECOVERY_REQUIRED', 'Observation cannot adopt an interrupted result. Reconcile the exact operation.'), { details: { ...details,
+    interrupted_operation_id: status.interrupted.operation_id,
+    next_commands: [`tv --workspace ${quoted} workspace recover --operation ${status.interrupted.operation_id}`] } });
+  if (status.operation && status.owner_alive === false) {
+    const next_commands = [`tv --workspace ${quoted} workspace interrupt --operation ${operation.id}`,
+      `tv --workspace ${quoted} workspace recover --operation ${operation.id}`, 'tv workspace locks'];
+    try {
+      for (const row of resourceLockStatus().holders.filter(row => row.workspace_id === status.workspace_id && row.pid === status.operation.pid && row.command === status.operation.command)) next_commands.push(`tv workspace lock-clear --token ${row.token}`);
+    } catch { /* Inspection failure cannot authorize clearing ownership. */ }
+    throw Object.assign(workspaceError('WORKSPACE_OWNER_DEAD', 'Recorded operation owner terminated; do not adopt its unreconciled result.'), { details: { ...details, next_commands,
+      next_commands_note: 'Interrupt the exact dead operation, wait for native settlement and recover it, then inspect/repair only its exact dead resource tokens. Never replay or clear a live/unverifiable owner.' } });
+  }
+  const sameOperation = observationOperationMatches(status, baseline || {});
+  if (baseline && (status.workspace_id !== baseline.workspace_id || status.target !== baseline.target || status.layout !== baseline.layout
+    || status.pine !== baseline.pine || status.generation !== baseline.generation || status.browser_generation !== baseline.browser_generation
+    || !followOperations && !sameOperation)) throw Object.assign(workspaceError('WORKSPACE_OBSERVATION_CHANGED', 'Workspace generation or operation identity changed during observation; retry after it settles.'), { details: { ...details,
+      previous_operation_id: baseline.operation?.id || null, next_commands: [`tv --workspace ${quoted} workspace wait`] } });
+  return status;
+}
+
+export function observationOperationMatches(current, baseline) {
+  return ['id', 'pid', 'process_started_at', 'command', 'started_at'].every(key => current.operation?.[key] === baseline.operation?.[key])
+    || Boolean(baseline.operation && !current.operation && current.result_committed === true && current.result_operation_id === baseline.operation.id);
+}
+export function workspaceWaitTimeout() { return { success: false, code: 'REPORT_TIMEOUT', calculation_pending: true, error: 'Workspace calculation did not complete within the original wait deadline.' }; }
 
 /** A killed PID releases only its operation, never its persistent resources. */
 export function markInterrupted(file, operationId, options = {}) {

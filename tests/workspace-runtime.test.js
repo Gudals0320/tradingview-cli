@@ -12,7 +12,8 @@ process.env.TMP = runtimeSessionRoot;
 process.env.TV_STATE_DIR = join(runtimeSessionRoot, 'tradingview-cli-sessions');
 process.env.TV_CDP_HOST = `runtime-fixture-${randomUUID()}`;
 process.env.TV_CDP_PORT = '1';
-const { reserveWorkspace, acquireWorkspace, workspaceStatus, abandonWorkspace } = await import('../src/workspace-store.js');
+const { reserveWorkspace, acquireWorkspace, workspaceStatus, abandonWorkspace, assertObservationAdmission } = await import('../src/workspace-store.js');
+const { ownerAlive } = await import('../src/process-identity.js');
 const { runWorkspace, rebindWorkspace, closeWorkspace } = await import('../src/workspace.js');
 const { sourceHash } = await import('../src/session.js');
 function fixture() {
@@ -40,6 +41,49 @@ it('an unverified report is a clean failure and the next verified read can conti
     const result=await runWorkspace(f.workspace.file,'data strategy',{},[],async()=>({success:true,strategy_id:'study'}),{_deps:f.deps});
     assert.equal(result.success,true);
   }finally{f.cleanup();}
+});
+
+it('unknown PID/identity stays protected and generation/operation/recovery races prevent result adoption', async () => {
+  assert.equal(ownerAlive({ pid: null }), true); assert.equal(ownerAlive({ pid: process.pid, process_started_at: 'unverifiable' }), true);
+  const f = fixture();
+  try {
+    const baseline = workspaceStatus(f.workspace.file);
+    for (const patch of [{ generation: 'changed' }, { operation: { id: 'new-operation' }, owner_alive: true }, { interrupted: { operation_id: 'interrupted' } }]) {
+      let reads = 0;
+      f.deps.workspaceStatus = () => ++reads === 1 ? baseline : { ...baseline, ...patch };
+      await assert.rejects(runWorkspace(f.workspace.file, 'data strategy', {}, [], async () => ({ success: true, strategy_id: 'study' }), { _deps: f.deps }), e => e.code === (patch.interrupted ? 'WORKSPACE_RECOVERY_REQUIRED' : 'WORKSPACE_OBSERVATION_CHANGED'));
+    }
+    assert.doesNotThrow(() => assertObservationAdmission({ ...baseline, operation: { id: 'unknown-owner', pid: null }, owner_alive: true }, 'worker'));
+    const pinned = { ...baseline, operation: { id: 'same-id', pid: 123, command: 'pine compile', process_started_at: 'old-start' }, owner_alive: true };
+    assert.throws(() => assertObservationAdmission({ ...pinned, operation: { ...pinned.operation, pid: 456 } }, 'worker', pinned), { code: 'WORKSPACE_OBSERVATION_CHANGED' });
+    assert.equal(workspaceStatus(f.workspace.file).interrupted, null);
+  } finally { f.cleanup(); }
+});
+
+it('wait outer publication retries cannot extend the original deadline under a perpetual admitted queue', async () => {
+  const f = fixture(); let calls = 0;
+  try {
+    f.deps.resourceLockStatus = () => ({ holders: [], queue: [{ workspace_id: f.workspace.id }] });
+    const values = { timeout: '10' };
+    const start = Date.now();
+    const result = await runWorkspace(f.workspace.file, 'workspace wait', values, [], async opts => {
+      opts.workspaceWaitStartedAt ??= Date.now(); calls++;
+      await new Promise(resolve => setTimeout(resolve, 4)); return { success: true, phase: 'ready' };
+    }, { _deps: f.deps });
+    assert.equal(result.code, 'REPORT_TIMEOUT'); assert.equal(result.calculation_pending, true);
+    assert.ok(calls > 0 && calls < 10); assert.ok(Date.now() - start < 1000);
+    assert.equal(workspaceStatus(f.workspace.file).interrupted, null);
+  } finally { f.cleanup(); }
+});
+it('status resamples normal completion during a liveness probe instead of declaring stale owner dead', () => {
+  const f = fixture();
+  try {
+    const lease = acquireWorkspace(f.workspace.file); let probes = 0;
+    const status = workspaceStatus(f.workspace.file, { _deps: { ownerAlive: () => { probes++; lease.finish({ success: true, result: { success: true } }); return false; } } });
+    assert.equal(probes, 1); assert.equal(status.operation, null); assert.equal(status.owner_alive, false);
+    assert.equal(status.result_operation_id, lease.operation); assert.equal(status.result_committed, true);
+    assert.doesNotThrow(() => assertObservationAdmission(status, 'worker'));
+  } finally { f.cleanup(); }
 });
 
 it('queued quote builds its restore permission after admission from the latest page context', async () => {

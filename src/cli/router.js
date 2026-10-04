@@ -177,6 +177,7 @@ async function execute(handler, values, positionals, offline = false, readOnly =
         const reference = workspaceFile || process.env.TV_WORKSPACE;
         if (process.env.TV_CDP_TARGET || configuredTarget()) throw Object.assign(new Error('--target/TV_CDP_TARGET is a preparation-only migration option. Use a named workspace for Desktop work.'), { code: 'WORKSPACE_TARGET_MISMATCH' });
         const file = resolveWorkspace(reference);
+        values.workspaceReference = reference;
         if(!workspaceFile && process.env.TV_LAYOUT && process.env.TV_LAYOUT !== (await import('../workspace-store.js')).loadWorkspace(file).layout)throw Object.assign(new Error('Terminal layout and workspace selection differ; select the workspace again.'),{code:'WORKSPACE_SELECTION_MISMATCH'});
         const output=await runWorkspace(file, command, values, positionals, handler);
         return output && resolve(reference)===file ? {...output,warnings:[...(output.warnings||[]),'Legacy file reference: import this handle under a workspace name.']} : output;
