@@ -56,6 +56,15 @@ it('every mixed command documents when it stays a pure read', () => {
   for (const command of buildCatalog(registeredCommands()).commands) {
     assert.equal(command.read_only === 'conditional', command.read_only_when !== undefined, command.name);
   }
+  for (const selector of [['--workspace', 'missing'], ['--target', 'missing']]) {
+    const result = run([...selector, 'data', 'no-such-command']);
+    assert.equal(result.stdout, ''); assert.equal(result.exitCode, 1);
+    const error = JSON.parse(result.stderr);
+    assert.equal(error.code, 'UNKNOWN_COMMAND');
+    assert.ok(error.details.available_subcommands.includes('strategy'));
+  }
+  assert.equal(run(['data']).exitCode, 0);
+  assert.match(run(['data']).stdout, /Usage: tv data/);
 });
 
 it('catalog filters by command and subcommand and rejects unknown names', () => {
@@ -120,4 +129,42 @@ it('help works under --workspace without touching the workspace file', () => {
   const text = run(['--workspace', missing, 'help', 'pine']);
   assert.equal(text.exitCode, 0, text.stderr);
   assert.equal(text.stdout, run(['pine', '--help']).stdout);
+});
+
+it('unknown paths return one JSON error, no stdout, and an executable help hint', () => {
+  for (const args of [['no-such-command'], ['data', 'no-such-command'], ['help', '--json', 'data', 'no-such-command']]) {
+    const result = run(args);
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.stdout, '');
+    const error = JSON.parse(result.stderr);
+    assert.equal(error.code, 'UNKNOWN_COMMAND');
+    assert.equal(error.details.command_path, args.slice(args[0] === 'help' ? 2 : 0).join(' '));
+    assert.match(error.details.help_command, /^tv /);
+  }
+});
+
+it('brief derives the same safe command contract and fingerprint with smaller output', () => {
+  const all = JSON.parse(run(['help', '--json']).stdout);
+  for (const filter of [[], ['pine', 'compile']]) {
+    const full = run(['help', '--json', ...filter]);
+    const brief = run(['help', '--json', '--brief', ...filter]);
+    assert.equal(brief.exitCode, 0);
+    const f = JSON.parse(full.stdout), b = JSON.parse(brief.stdout);
+    assert.deepEqual(b.commands, f.commands);
+    assert.equal(b.output, undefined);
+    assert.equal(b.global_options, undefined);
+    assert.equal(b.contract.bootstrap_command, 'tv help --json');
+    assert.equal(b.catalog_fingerprint, all.catalog_fingerprint);
+    assert.match(b.catalog_fingerprint, /^[a-f0-9]{64}$/);
+    assert.ok(Buffer.byteLength(brief.stdout) < Buffer.byteLength(full.stdout));
+    if (filter.length) assert.ok(Buffer.byteLength(brief.stdout) < 1200);
+  }
+  const changed = new Map(registeredCommands());
+  changed.set('status', { ...changed.get('status'), description: 'Changed contract' });
+  assert.notEqual(buildCatalog(changed).catalog_fingerprint, all.catalog_fingerprint);
+  changed.set('status', { ...changed.get('status'), options: { probe: { type: 'boolean' } } });
+  assert.notEqual(buildCatalog(changed).catalog_fingerprint, buildCatalog(registeredCommands()).catalog_fingerprint);
+  const invalid = run(['help', '--brief']);
+  assert.equal(invalid.exitCode, 1);
+  assert.equal(JSON.parse(invalid.stderr).code, 'INVALID_OPTION_COMBINATION');
 });

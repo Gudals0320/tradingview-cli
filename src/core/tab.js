@@ -91,7 +91,7 @@ async function withTarget(targetId, fn) {
  *   layout: '<name>' -> open the saved layout whose title contains <name>
  * Reuses an already-open landing tab instead of opening another one.
  */
-export async function newTab({ layout, name, reconnect = true } = {}) {
+export async function newTab({ layout, layout_id, create = false, name, reconnect = true } = {}) {
   let landing = await findLandingTarget();
   if (!landing) {
     await withShell(async (evalIn) => {
@@ -101,7 +101,7 @@ export async function newTab({ layout, name, reconnect = true } = {}) {
     });
     landing = await waitForLandingTarget();
   }
-  if (!layout) return landingTabResult(await list(), landing);
+  if (!layout && !layout_id && !create) return landingTabResult(await list(), landing);
 
   if (!landing) throw new Error('New tab opened but its landing page target was not found.');
 
@@ -113,9 +113,13 @@ export async function newTab({ layout, name, reconnect = true } = {}) {
       .map(t => t.id)
   );
 
-  const wantNew = String(layout).trim().toLowerCase() === 'new';
+  const wantNew = create;
   const layoutName = name || 'New layout';
   const picked = await withTarget(landing.id, async (evalIn) => {
+    if (layout_id) {
+      await evalIn(`location.assign(${JSON.stringify(`https://www.tradingview.com/chart/${encodeURIComponent(layout_id)}/`)});true`, { mutation: true });
+      return name || layout_id;
+    }
     if (wantNew) {
       // "Create new layout" opens a naming dialog; the Create button stays
       // disabled until the name input is filled (React controlled input, so
@@ -163,7 +167,7 @@ export async function newTab({ layout, name, reconnect = true } = {}) {
         var items = document.querySelectorAll('.layout-list-item');
         var rows = Array.from(items).map(item => ({ item, title: item.querySelector('.layout-list-item-title')?.textContent.trim() || '' }));
         var exact = rows.filter(row => row.title.toLowerCase() === q);
-        var matches = exact.length ? exact : rows.filter(row => row.title.toLowerCase().includes(q));
+        var matches = exact;
         if (matches.length > 1) throw new Error('Ambiguous layout name: ' + q + '. Use the exact unique name.');
         if (matches.length === 1) { matches[0].item.click(); return matches[0].title; }
         return null;
@@ -195,6 +199,10 @@ export async function newTab({ layout, name, reconnect = true } = {}) {
     if (chartTarget) break;
   }
   if (!chartTarget) throw new Error(`Picked "${picked}" but no new chart target appeared.`);
+  const openedId = chartTarget.url.match(/\/chart\/([^/?]+)/)?.[1] || null;
+  if (layout_id && openedId !== layout_id) throw Object.assign(new Error('Opened chart differs from the requested saved layout.'), {
+    code: 'LAYOUT_IDENTITY_MISMATCH', details: { requested_layout: layout_id, opened_layout: openedId, target: chartTarget.id },
+  });
 
   // Give the chart a moment to boot, then follow it.
   await new Promise(r => setTimeout(r, 2000));

@@ -146,21 +146,35 @@ export function assertNoWorkspaceAnywhere(options = {}) {
 export function withAdmissionGate(options, action) {
   if (action.constructor.name === 'AsyncFunction') throw failure('ADMISSION_ASYNC', 'Admission actions must be synchronous metadata transactions.');
   const paths = sessionPaths(options);
+  const gateFailure = (code, message, cause) => {
+    const error = failure(code, message);
+    let gate_exists = null, gate_owner = null;
+    try { gate_exists = existsSync(paths.gate); if (gate_exists) { const owner = read(paths.gate); gate_owner = { pid: owner.pid || null, owner_alive: ownerAlive(owner), process_started_at: owner.process_started_at || null }; } } catch { /* Unknown owner is preserved as unavailable. */ }
+    error.details = { errno: cause.code, syscall: cause.syscall || 'open', gate_exists, gate_owner };
+    return error;
+  };
   try { mkdirSync(paths.directory, { recursive: true }); }
-  catch (error) { if (['EPERM', 'EACCES'].includes(error.code)) throw failure('ADMISSION_PERMISSION', `Cannot write admission directory: ${paths.directory}.`); throw error; }
+  catch (error) { if (['EPERM', 'EACCES'].includes(error.code)) throw gateFailure('ADMISSION_PERMISSION', `Cannot write admission directory: ${paths.directory}.`, error); throw error; }
   let gate;
   const started = Date.now();
   for (;;) {
-    try { gate = openSync(paths.gate, 'wx', 0o600); break; }
+    try { gate = (options._deps?.openSync || openSync)(paths.gate, 'wx', 0o600); break; }
     catch (error) {
       if (!['EEXIST', 'EPERM', 'EBUSY', 'EACCES'].includes(error.code)) throw error;
+      if (['EPERM', 'EACCES'].includes(error.code)) {
+        // On Windows a competing gate can disappear between open failure and
+        // existsSync. Probe independent write permission before classifying it.
+        const probe = `${paths.gate}.${randomUUID()}.permission-probe`;
+        try { const handle = (options._deps?.openSync || openSync)(probe, 'wx', 0o600); closeSync(handle); unlinkSync(probe); }
+        catch (cause) { if (['EPERM', 'EACCES'].includes(cause.code)) throw gateFailure('ADMISSION_PERMISSION', 'Admission metadata creation was denied; inspect the state directory owner and permissions.', error); throw cause; }
+      }
       if (Date.now() - started >= (options.gateTimeout || 2000)) {
         if (['EPERM', 'EACCES'].includes(error.code)) {
           const probe = `${paths.gate}.${randomUUID()}.permission-probe`;
           try { const handle = openSync(probe, 'wx', 0o600); closeSync(handle); unlinkSync(probe); }
-          catch (cause) { if (['EPERM', 'EACCES'].includes(cause.code)) throw failure('ADMISSION_PERMISSION', `Cannot write admission metadata: ${paths.directory}. Check owner and permissions.`); throw cause; }
+          catch (cause) { if (['EPERM', 'EACCES'].includes(cause.code)) throw gateFailure('ADMISSION_PERMISSION', `Cannot write admission metadata: ${paths.directory}. Check owner and permissions.`, error); throw cause; }
         }
-        throw failure('ADMISSION_BUSY', `Admission metadata did not clear. Inspect ${paths.gate} if its process was killed.`);
+        throw gateFailure('ADMISSION_BUSY', `Admission metadata did not clear. Inspect ${paths.gate} if its process was killed.`, error);
       }
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5 + Math.floor(Math.random() * 10));
     }
@@ -235,6 +249,8 @@ export function sessionStatus(options = {}) {
   if (existsSync(paths.lock)) { try { lock = read(paths.lock); } catch { lock = { malformed: true }; } }
   let pending = null;
   if (existsSync(paths.journal)) { try { pending = read(paths.journal); } catch { /* report existence without exposing draft */ } }
+  let diagnostics = null;
+  if (existsSync(paths.journal)) try { const saved = read(`${paths.journal}.diagnostics.json`); if (saved.journal_hash === sourceHash(readFileSync(paths.journal))) diagnostics = saved; } catch { /* Diagnostics are optional; never infer native state without a matching journal. */ }
   return { locked: Boolean(lock), owner_pid: lock?.pid || null, run_id: lock?.run_id || null,
     owner_command: lock?.command || null, process_started_at: lock?.process_started_at || null,
     owner_scope:lock?.scope||'legacy',recovery_effect_scope:pending?.effect_scope||null,
@@ -244,6 +260,13 @@ export function sessionStatus(options = {}) {
     recovery_journal_hash: existsSync(paths.journal) ? sourceHash(readFileSync(paths.journal)) : null,
     recovery_target: pending ? { target_id: pending.target_id || pending.snapshot?.target_id, chart_id: pending.snapshot?.chart_id } : null,
     recovery_targets:pending?[...new Set([pending.target_id,pending.snapshot?.target_id,...(pending.targets||[])].filter(Boolean))]:[],
+    recovery_command: pending?.command || pending?.snapshot?.command || null,
+    recovery_phase: pending?.phase || pending?.snapshot?.phase || null,
+    recovery_target_panes: pending?.target_panes && typeof pending.target_panes === 'object' ? Object.fromEntries(Object.entries(pending.target_panes).map(([target, panes]) => [target, Array.isArray(panes) ? panes.filter(Number.isInteger) : panes === '*' ? '*' : null])) : {},
+    recovery_blocker_class: diagnostics?.blocker_class || (pending ? 'not_observed' : null),
+    recovery_unknown_hash: diagnostics?.unknown_hash || null,
+    recovery_next_commands: diagnostics?.next_commands || (pending?.native_quiescence_required && pending.run_id ? [`tv session recover --run-id ${pending.run_id}`] : []),
+    recovery_confirmation_required: diagnostics?.confirmation_required || false,
     acquisition_in_progress: existsSync(paths.gate) };
 }
 
@@ -342,7 +365,9 @@ export function discardSession({ runId, journalHash, lostTargetInventory, ...opt
     const backup = `${lease.paths.journal}.${randomUUID()}.discarded`;
     renameSync(lease.paths.journal, backup);
     return { success: true, discarded: true, restored: false, incomplete:true, run_id: runId, backup_path: backup,
-      warning: 'Desktop changes were left in place. The saved draft remains in the archived journal.' };
+      outcome: 'unknown', journal_archived: true,
+      external_effects_verified: false,
+      warning: 'Desktop changes were left in place. The saved draft remains in the archived journal. Target absence proves no server-side save/alert outcome; inspect account resources before any retry.' };
   } finally { lease.release(); }
 }
 

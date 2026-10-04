@@ -2,11 +2,11 @@
  * Core streaming logic — real-time JSONL output from TradingView.
  * Uses efficient poll + dedup: only emits when data changes.
  */
-import { readChartContext } from '../chart-context.js';
+import { readChartContext, normalizeTimeframe, symbolMatches } from '../chart-context.js';
 import { getStudyValues, getPineLines, getPineLabels, getPineTables } from './data.js';
-import { evaluate, configuredTarget, KNOWN_PATHS, CDP_PORT, requireInteger } from '../connection.js';
+import { evaluate, configuredTarget, KNOWN_PATHS, requireInteger } from '../connection.js';
 import { currentWorkspaceSession } from '../session.js';
-import { parseFeedSpecs, feedMatches } from './multi-feed.js';
+import { parseFeedSpecs } from './multi-feed.js';
 
 const CHART_API = KNOWN_PATHS.chartApi;
 const MODEL = `${CHART_API}._chartWidget.model()`;
@@ -48,11 +48,8 @@ async function pollLoop(fetcher, { interval = 500, dedupe = true, label = 'strea
 
   // Emit header with compliance notice
   const start = Date.now();
-  process.stderr.write(`\u26A0  tradingview-cli  |  Unofficial tool. Not affiliated with TradingView Inc.\n`);
-  process.stderr.write(`   Streams from your locally running TradingView Desktop instance only.\n`);
-  process.stderr.write(`   Does not connect to TradingView servers. Requires --remote-debugging-port=${CDP_PORT}.\n`);
-  process.stderr.write(`   Ensure your usage complies with TradingView's Terms of Use.\n`);
-  process.stderr.write(`[stream:${label}] started, interval=${interval}ms, Ctrl+C to stop\n`);
+  process.stderr.write(JSON.stringify({ event: 'stream_started', stream: label, interval_ms: interval,
+    notice: 'Unofficial local Desktop tool, not affiliated with TradingView. Use subject to TradingView terms.' }) + '\n');
 
   while (running) {
     try {
@@ -83,12 +80,12 @@ async function pollLoop(fetcher, { interval = 500, dedupe = true, label = 'strea
         const failure={success:false,code:err.code,error:err.message,context:err.details?.context};
         const hash=JSON.stringify(failure);
         if(hash!==lastHash){lastHash=hash;process.stdout.write(JSON.stringify({...failure,_ts:Date.now(),_stream:label})+'\n');}
-      } else process.stderr.write(`[stream:${label}] error: ${err.message}\n`);
+      } else process.stderr.write(JSON.stringify({ success: false, stream: label, code: err.code || 'STREAM_SAMPLE_FAILED', error: err.message }) + '\n');
     }
     await sleep(interval);
   }
 
-  process.stderr.write(`[stream:${label}] stopped after ${((Date.now() - start) / 1000).toFixed(1)}s\n`);
+  process.stderr.write(JSON.stringify({ event: 'stream_stopped', stream: label, duration_ms: Date.now() - start }) + '\n');
   process.removeListener('SIGINT', cleanup);
   process.removeListener('SIGTERM', cleanup);
   process.stdout.removeListener('error', stdoutError);
@@ -243,14 +240,45 @@ export async function streamAllPanes({ interval } = {}) {
 }
 
 export async function streamOwnedFeeds({feedSpecs,interval=250}) {
-  const feeds=parseFeedSpecs(feedSpecs);
-  return pollLoop(async()=>{
-    const data=await fetchAllPanes();
-    const samples=feeds.map(feed=>{
-      const pane=data.panes.find(pane=>feedMatches(feed,{...pane,timeframe:pane.resolution}));
-      if(!pane)throw Object.assign(new Error(`Owned layout has no ready pane for ${feed.key}. Prepare its panes before streaming.`),{code:'WORKSPACE_FEED_MISSING'});
-      return {feed:feed.key,...pane};
-    });
-    return {success:true,scope:'workspace',feeds:samples};
-  },{interval:Number(interval),label:'ohlcv'});
+  return pollLoop(() => sampleOwnedFeeds({ feedSpecs }), {interval:Number(interval),label:'ohlcv'});
+}
+
+export function readOwnedFeeds(window, feeds) {
+  const unwrap = value => typeof value?.value === 'function' ? value.value() : value;
+  const all = window.TradingViewApi?._chartWidgetCollection?.getAll?.();
+  const samples = feeds.map(feed => {
+    const failure = (code, error, extra = {}, status = 'error') => ({ feed: feed.key, status, code, error, ...extra });
+    try {
+      if (!Array.isArray(all)) return failure('FEED_STATE_UNREADABLE', 'Pane collection is unavailable.');
+      const matches = all.flatMap((pane, index) => {
+        try {
+          const model = pane.model?.() || pane._chartWidget?.model?.(), series = model?.mainSeries?.();
+          return series && symbolMatches(feed.symbol, { symbol: series.symbol() }) && normalizeTimeframe(series.interval()) === normalizeTimeframe(feed.timeframe) ? [{ index, series }] : [];
+        } catch { return []; }
+      });
+      if (matches.length !== 1) return failure(matches.length ? 'WORKSPACE_FEED_AMBIGUOUS' : 'WORKSPACE_FEED_MISSING', 'Prepare one uniquely matching owned pane for the requested feed.');
+      const { index, series } = matches[0], info = series.symbolInfo?.(), state = unwrap(series.status?.()), loading = unwrap(series.isLoading?.());
+      // Desktop 3.4.1 main series has a numeric status enum; its explicit
+      // isStatusError predicate supplies the error meaning without guessing enums.
+      const statusError = unwrap(series.isStatusError?.());
+      const identity = { symbol: info?.full_name || info?.pro_name, aliases: [info?.full_name, info?.pro_name, info?.original_name].filter(Boolean) };
+      const detail = { index, symbol: feed.symbol, resolution: feed.timeframe, series_symbol: identity.symbol || null };
+      if (statusError === true || state?.error || state?.errorMessage) return failure('DATA_FEED_ERROR', String(state?.error || state?.errorMessage || 'Requested series reports a feed error.'), detail);
+      if (loading === true) return failure('DATA_NOT_READY', 'Requested pane is loading.', detail, 'loading');
+      if (loading !== false || statusError !== false) return failure('FEED_STATE_UNREADABLE', 'Requested feed readiness/error predicate is unavailable.', detail);
+      if (!identity.symbol || !symbolMatches(feed.symbol, identity)) return failure('FEED_IDENTITY_MISMATCH', 'Actual series belongs to another or unknown symbol.', detail);
+      const bars = series.bars?.(), value = bars?.valueAt(bars.lastIndex());
+      if (!value) return failure('DATA_NOT_READY', 'Requested feed has no current bar.', detail, 'loading');
+      const afterInfo = series.symbolInfo?.(), afterState = unwrap(series.status?.());
+      if (unwrap(series.isLoading?.()) !== false || !symbolMatches(feed.symbol, { symbol: series.symbol() }) || normalizeTimeframe(series.interval()) !== normalizeTimeframe(feed.timeframe)
+        || (afterInfo?.full_name || afterInfo?.pro_name) !== identity.symbol || unwrap(series.isStatusError?.()) === true || afterState?.error || afterState?.errorMessage) return failure('DATA_NOT_READY', 'Feed changed during sample.', detail, 'loading');
+      return { feed: feed.key, status: 'ok', ...detail, time: value[0], open: value[1], high: value[2], low: value[3], close: value[4], volume: value[5] || 0 };
+    } catch (error) { return failure('FEED_STATE_UNREADABLE', error.message); }
+  });
+  return { success: samples.every(sample => sample.status === 'ok'), partial_success: samples.some(sample => sample.status === 'ok') && samples.some(sample => sample.status !== 'ok'), scope: 'workspace', feeds: samples };
+}
+
+export async function sampleOwnedFeeds({ feedSpecs, _deps } = {}) {
+  const feeds = parseFeedSpecs(feedSpecs);
+  return (_deps?.evaluate || evaluate)(`(() => {${normalizeTimeframe.toString()};${symbolMatches.toString()};return (${readOwnedFeeds.toString()})(window,${JSON.stringify(feeds)});})()`);
 }

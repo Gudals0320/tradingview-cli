@@ -2,6 +2,7 @@ import { findPineEditor, findPineController } from './core/desktop-dom.js';
 import { readChartContext, normalizeTimeframe, symbolMatches } from './chart-context.js';
 import { layoutConfirmationRoot, layoutConfirmationVisible, layoutOperationPending } from './layout-state.js';
 import { trackNativeOperation } from './native-operation.js';
+import { canonicalPineSource } from './pine-source.js';
 
 /** Serialized page functions have no captured Node state. */
 export function readWorkspacePage(window, document, options = {}) {
@@ -30,7 +31,7 @@ export function readWorkspacePage(window, document, options = {}) {
     ;
   const calculating = studies.some(study => study.strategy && (study.status === 0 || study.status === 1));
   return { layout: String(layout), pine: identity?.scriptIdPart || null, version: identity?.version,
-    source: editor?.editor.getValue().replace(/\r\n/g, '\n') || '', modified: controller?.isModified?.() ?? null,draft:controller?.isDraft?.()??null,
+    source: editor ? canonicalPineSource(editor.editor.getValue()) : '', modified: controller?.isModified?.() ?? null,draft:controller?.isDraft?.()??null,
     context: { symbol: context.symbol, aliases: context.aliases, resolution: normalizeTimeframe(context.resolution), chart_type: context.chart_type,
       session: chart.symbolExt?.()?.session || null },
     studies, pending: pending_action || calculating, pending_action, calculating,
@@ -162,6 +163,7 @@ export function startWorkspacePage(window, document, owner, operation, permit) {
   if (snapshot.pending_action) throw new Error('WORKSPACE_NATIVE_BUSY: Native action is pending.');
   const bound = window.__tvCliWorkspace;
   if (bound.operation) throw new Error('WORKSPACE_PAGE_BUSY: Previous page operation must be reconciled.');
+  if (permit.quote_symbol) { permit.symbols = [permit.quote_symbol, snapshot.context.symbol]; delete permit.quote_symbol; }
   bound.operation = operation; bound.permit = permit;
   bound.events = []; bound.dispose?.();
   const source = bound.chart._chartWidget.model().model().dataSources().find(source => source.id() === snapshot.studies[0]?.id);
@@ -200,5 +202,5 @@ export function finishWorkspacePage(window, document, owner, operation, {allowIn
     report_verified: epoch.report_verified, inputs_fingerprint: epoch.inputs_fingerprint } : null };
 }
 
-export const WORKSPACE_PAGE_CODE = [findPineEditor, findPineController, readChartContext, normalizeTimeframe, symbolMatches, layoutConfirmationRoot, layoutConfirmationVisible, layoutOperationPending, trackNativeOperation,
+export const WORKSPACE_PAGE_CODE = [canonicalPineSource, findPineEditor, findPineController, readChartContext, normalizeTimeframe, symbolMatches, layoutConfirmationRoot, layoutConfirmationVisible, layoutOperationPending, trackNativeOperation,
   readWorkspacePage, bindWorkspacePage, restoreWorkspaceDocument, guardWorkspacePage, startWorkspacePage, finishWorkspacePage].map(fn => fn.toString()).join('\n');

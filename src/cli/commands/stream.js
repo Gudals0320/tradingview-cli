@@ -70,7 +70,7 @@ register('stream', {
       },
     }],
     ['ohlcv', {
-      description: 'Observe existing owned layout panes for SYMBOL@TIMEFRAME feeds as JSONL; prepare panes before streaming',
+      description: 'Observe owned SYMBOL@TIMEFRAME panes as JSONL until interrupted; feed failures keep polling, success only when all feeds are ok; partial_success preserves healthy feeds, failed feeds have status/code without stale OHLCV',
       options: {
         'allow-reassign-target': { type: 'string', multiple: true, description: 'Explicit target IDs whose existing panes may be reassigned' },
         interval: { type: 'string', short: 'i', description: 'Poll interval in ms (default 250, minimum 100)' },

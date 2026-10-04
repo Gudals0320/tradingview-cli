@@ -4,6 +4,11 @@ import * as core from '../../core/watchlist.js';
 register('watchlist', {
   description: 'Watchlist tools (get, add, add-bulk, remove)',
   subcommands: new Map([
+    ['raw', {
+      description: 'Read the complete native watchlist array by exact ID/name; preserve sections, formulas, multipliers, order and duplicates; distinguish raw_count from rendered_count (null when not mounted)',
+      options: { 'list-id': { type: 'string', description: 'Exact watchlist ID' }, 'list-name': { type: 'string', description: 'Unique exact watchlist name' } },
+      handler: opts => core.raw({ id: opts['list-id'], name: opts['list-name'] }),
+    }],
     ['get', {
       description: 'Get watchlist symbols',
       handler: () => core.get(),

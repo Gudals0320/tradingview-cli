@@ -1,5 +1,5 @@
-/** Physical EOL canonicalization for compilation identity only. */
-export function canonicalPineSource(source) { return source.replace(/\r\n/g, '\n'); }
+/** Monaco physical EOL canonicalization; preserve every other character. */
+export function canonicalPineSource(source) { return source.replace(/\r\n?|\n/g, '\n'); }
 
 export function pineDeclaration(source) {
   const code=source.replace(/("(?:\\[^\r\n]|[^"\\\r\n])*"|'(?:\\[^\r\n]|[^'\\\r\n])*')|\/\/[^\r\n]*/g,

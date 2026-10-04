@@ -20,6 +20,7 @@ import {synchronizeLegacyNamespace} from './legacy-bridge.js';
 import { newTab } from './core/tab.js';
 import { secureDirectory } from './private-store.js';
 import { layoutList } from './core/ui.js';
+import { canonicalPineSource } from './pine-source.js';
 export { WORKSPACE_COMMANDS } from './cli/policy.js';
 
 async function raw(client, expression) {
@@ -67,7 +68,7 @@ async function sourceProof(client, snapshot) {
       const appliedVersion=${JSON.stringify(appliedVersion || snapshot.version)};
       const applied=String(appliedVersion)===${JSON.stringify(String(snapshot.version))}?data:await fetch('https://pine-facade.tradingview.com/pine-facade/get/'+encodeURIComponent(${JSON.stringify(snapshot.pine)})+'/'+encodeURIComponent(appliedVersion),{credentials:'include'}).then(response=>response.ok?response.json():{});
       const current=readWorkspacePage(window,document);
-      return data.source?.replace(/\\r\\n/g,'\\n')===${JSON.stringify(snapshot.source)}&&applied.source?.replace(/\\r\\n/g,'\\n')===${JSON.stringify(snapshot.source)}&&current.source===${JSON.stringify(snapshot.source)}&&current.pine===${JSON.stringify(snapshot.pine)}&&String(current.version)===${JSON.stringify(String(snapshot.version))}
+      return typeof data.source==='string'&&typeof applied.source==='string'&&canonicalPineSource(data.source)===${JSON.stringify(snapshot.source)}&&canonicalPineSource(applied.source)===${JSON.stringify(snapshot.source)}&&current.source===${JSON.stringify(snapshot.source)}&&current.pine===${JSON.stringify(snapshot.pine)}&&String(current.version)===${JSON.stringify(String(snapshot.version))}
         &&(!current.studies.length||String(current.studies[0].inputs.find(input=>input.id==='pineVersion')?.value)===String(appliedVersion));
     })()`);
     return verified ? { hash: sourceHash(snapshot.source), version: String(snapshot.version), applied_version: String(appliedVersion || snapshot.version) } : null;
@@ -140,17 +141,21 @@ export async function resetWorkspace(name,{id,operation,reservationId}={}) {
   }
   forgetWorkspaceName(name,record);return {success:true,reset:true,workspace_id:id,artifacts_preserved:true,desktop_changed:false};
 }
-export async function openLayout({ name, create = false } = {}) {
-  const inventory = await getDesktopInventory();
+export async function openLayout({ name, create = false, _deps } = {}) {
+  const inventory = await (_deps?.inventory || getDesktopInventory)();
   const previous_target = inventory.tabs.find(tab => tab.active)?.id || null;
+  let selected;
   if (!create) {
-    const layouts = await layoutList();
+    const layouts = await (_deps?.layoutList || layoutList)();
+    if (!layouts?.success) throw workspaceError(layouts?.code || 'LAYOUT_LIST_FAILED', layouts?.error || 'Saved layout lookup failed');
     const exact = layouts.layouts.filter(layout => String(layout.id) === name);
-    if (exact.length === 1) name = exact[0].name;
-    const matches=layouts.layouts.filter(layout=>layout.name.toLowerCase()===name.toLowerCase());
+    const matches=exact.length ? exact : layouts.layouts.filter(layout=>layout.name.toLowerCase()===name.toLowerCase());
     if(matches.length>1)throw workspaceError('LAYOUT_AMBIGUOUS','Saved layout name is ambiguous; use its exact ID.');
+    if(matches.length!==1)throw workspaceError('LAYOUT_NOT_FOUND','Saved layout not found; use an exact ID or name.');
+    selected = matches[0];
   }
-  const result = await newTab({ layout: create ? 'new' : name, name: create ? name : undefined });
+  const result = await (_deps?.newTab || newTab)(create ? { create: true, name } : { layout_id: String(selected.id), name: selected.name });
+  if (!create && result.chart_id !== String(selected.id)) throw Object.assign(workspaceError('LAYOUT_IDENTITY_MISMATCH', 'Opened chart differs from the requested saved layout; inspect the new target before retrying.'), { details: { requested_layout: String(selected.id), opened_layout: result.chart_id, target: result.target } });
   if(create)recordCreatedLayout(result);
   return { ...result, previous_target, foreground_changed: true };
 }
@@ -194,9 +199,10 @@ async function permitFor(command, values, positionals) {
   if (command === 'pine set') {
     const source = values.file ? readFileSync(values.file, 'utf8') : await readInput();
     if (!source) throw workspaceError('PINE_SOURCE_REQUIRED', 'A nonempty Pine source is required.');
+    if (source.startsWith('\uFEFF')) throw Object.assign(workspaceError('PINE_SOURCE_UNSUPPORTED_BOM', 'Remove the leading BOM before pine set; no editor write was dispatched.'), { details: { editor_changed: false, results_invalidated: false } });
     // Preserve the CLI adapter's stdin behavior without consuming it twice.
     values.workspaceSource = source;
-    return { source: source.replace(/\r\n/g, '\n') };
+    return { source: canonicalPineSource(source) };
   }
   if (command === 'symbol' && positionals[0]) return { symbol: positionals[0] };
   if (command === 'timeframe' && positionals[0]) return { resolution: normalizeTimeframe(positionals[0]) };
@@ -290,7 +296,7 @@ export async function runWorkspace(file, command, values, positionals, handler, 
     });
   }
   const permit = await permitFor(command, values, positionals);
-  if(command==='quote'&&positionals[0])permit.symbols=[positionals[0],selected.binding?.snapshot?.context?.symbol].filter(Boolean);
+  if(command==='quote'&&positionals[0])permit.quote_symbol=positionals[0];
   const resourceLease = await (_deps?.acquireResources||acquireResources)(resourceKinds(command, values, positionals).map(kind => kind === 'app' ? 'app' : `${kind}:${kind === 'layout' ? selected.layout : kind === 'document' ? selected.pine : selected.id}`), { command, workspace_id: selected.id, timeout: values['lock-timeout-ms'] });
   let lease;
   try { lease = (_deps?.acquireWorkspace||acquireWorkspace)(file,{command}); } catch (error) { resourceLease.release(); throw error; }
@@ -300,12 +306,17 @@ export async function runWorkspace(file, command, values, positionals, handler, 
   const inspect = _deps?.raw || raw;
   try { return await withWorkspaceSession(lease, async () => {
     try {
+      if (workspace.layout !== selected.layout || workspace.pine !== selected.pine) throw workspaceError('WORKSPACE_GENERATION_CHANGED', 'Reserved resources changed while waiting; inspect the workspace before retrying.');
+      if (workspace.target !== selected.target) throw workspaceError('WORKSPACE_GENERATION_CHANGED', 'Target changed while waiting; inspect the new owned target and retry.');
+      if (command.startsWith('tab ')) values.workspaceTarget = workspace.target;
+      if (command === 'tab close' && !workspace.created_by_cli) throw workspaceError('WORKSPACE_TAB_NOT_OWNED', 'Only tabs created by this CLI can be closed.');
       if (!workspace.binding) throw workspaceError('WORKSPACE_NOT_BOUND', 'Initialization did not finish; recover explicitly.');
       await (_deps?.checkLayout || checkLayout)(workspace);
       if (await (_deps?.browserIdentity || browserIdentity)() !== workspace.binding.browser) throw workspaceError('WORKSPACE_GENERATION_CHANGED', 'Desktop browser generation changed.');
       configureTarget(workspace.target);
       client = await (_deps?.getClient || getClient)();
       const before = await inspect(client, pageCall('startWorkspacePage', owner(workspace), lease.operation, permit));
+      if (permit.quote_symbol) { permit.symbols = [permit.quote_symbol, before.context.symbol]; delete permit.quote_symbol; }
       started = true;
       if(FOREGROUND_COMMANDS.has(command)&&command!=='tab switch'&&(before.viewport?.width===0||before.viewport?.height===0))throw workspaceError('DESKTOP_VIEWPORT_UNAVAILABLE','Restore the existing Desktop window before UI input; the owned viewport is zero.');
       if (workspace.pine && command.startsWith('indicator ') && command !== 'indicator add' && before.studies[0]?.id !== positionals[0]) throw workspaceError('WORKSPACE_STUDY_MISMATCH', 'Indicator ID must identify the owned study.');
@@ -419,17 +430,19 @@ export async function rebindWorkspace(file, workspaceId, { _deps, restoreDocumen
   });
 }
 
-export async function closeWorkspace(file) {
+export async function closeWorkspace(file, { _deps } = {}) {
   const lease = acquireWorkspace(file), workspace = lease.workspace;
+  let pageProbeStarted = false;
   // No Desktop writes. Validate the page is idle, then drop only this reservation.
   return withWorkspaceSession(lease, async () => {
     try {
-      await checkLayout(workspace); configureTarget(workspace.target);
-      const snapshot = await raw(await getClient(), pageCall('guardWorkspacePage', owner(workspace)));
+      await (_deps?.checkLayout || checkLayout)(workspace); configureTarget(workspace.target);
+      pageProbeStarted = true;
+      const snapshot = await (_deps?.raw || raw)(await (_deps?.getClient || getClient)(), pageCall('guardWorkspacePage', owner(workspace)));
       if (snapshot.pending) throw workspaceError('WORKSPACE_NATIVE_BUSY', 'Cannot release a pending native action.');
       const result = { success: true, released: true, workspace_id: workspace.id };
       lease.checkpoint({ phase: 'released', result });
       return releaseWorkspace(lease);
-    } catch (error) { try { lease.finish({ success: false, error: error.message }); } catch { /* Original failure wins. */ } throw error; }
+    } catch (error) { try { lease.finish({ success: false, interrupted: pageProbeStarted && ['CDP_TIMEOUT', 'WORKSPACE_PAGE_BUSY'].includes(error.code), error: error.message }); } catch { /* Original failure wins. */ } throw error; }
   });
 }

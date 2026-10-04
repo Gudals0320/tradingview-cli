@@ -122,6 +122,20 @@ tv layout open LAYOUT_URL_ID
 tv workspace reconnect research-a --target NEW_TARGET --generation OLD_GENERATION
 ```
 
+`layout open`은 정확한 저장 ID를 끝까지 유지하며 열린 URL ID를 검증합니다. 이름을 사용하면 정확히 일치하는 유일한 이름만 허용합니다. `new`/`NEW`도 저장 이름으로 열 수 있고 생성은 `layout create`로 지정합니다. 목록 조회 실패는 빈 목록으로 취급하지 않습니다.
+
+FIFO 대기한 `quote`의 복원 종목은 잠금 획득 후 page guard가 확인한 실행 baseline에서 정합니다. 이전 CLI 종목 변경을 외부 편집으로 오인하지 않으며 실제 외부 변경/복원 실패 검사는 유지합니다.
+
+`pine set`은 LF/CRLF/단독 CR/혼합 줄바꿈을 LF로 정규화해 전체 본문을 엄격 비교합니다. 공백·들여쓰기·마지막 개행은 보존하며, 실제 변경은 기존 전략 결과를 무효화합니다. Monaco가 제거하는 leading BOM은 `PINE_SOURCE_UNSUPPORTED_BOM`으로 쓰기 전에 거부합니다. 비교 불일치는 `PINE_SOURCE_MISMATCH`와 적용/무효화 여부를 보고합니다.
+
+wait/compile/strategy/trades/ledger의 내부 input `text`는 CLI 출력에서 `{id,omitted,length,sha256}`로 요약합니다. 입력 원본은 compiled identity/fingerprint/revision/최신성 검증에 그대로 사용하며 사용자 input은 길이에 관계없이 보존합니다. 공개 raw 옵션은 제공하지 않습니다.
+
+`stream ohlcv`는 요청 feed마다 `status:ok/loading/error`를 냅니다. 모든 feed가 정상일 때만 상단 `success:true`; 일부 정상은 `partial_success:true`로 정상 feed의 가격을 유지합니다. 실패 feed에는 code와 feed 식별자만 있고 OHLCV는 없습니다. `DATA_NOT_READY`, `DATA_FEED_ERROR`, `FEED_IDENTITY_MISMATCH`, `FEED_STATE_UNREADABLE`, `WORKSPACE_FEED_MISSING/AMBIGUOUS`는 다음 poll에서 재관찰하며 상태 변화도 dedupe에서 보존합니다. 요청하지 않은 활성 pane의 loading은 정상 보조 feed를 차단하지 않습니다. SIGINT/SIGTERM 정상 종료는 exit 0이며 feed 실패 프레임 자체는 프로세스를 종료하지 않습니다; ownership/transport 실패는 stream을 종료하고 exit 1/2 오류를 반환합니다. stderr의 lifecycle/sample 오류도 JSONL입니다.
+
+`watchlist raw --list-id ID` 또는 `--list-name NAME`은 표시 목록을 바꾸지 않고 저장 원본 배열을 전체 읽습니다. 섹션·수식·거래소 표기·배율·순서·중복을 변형하지 않습니다. `raw_count`는 섹션을 포함한 전체 항목 수, `rendered_count`는 선택 목록이 현재 DOM에 표시될 때의 행 수이며 다른 목록/닫힌 패널은 null입니다. 기존 `watchlist get`은 표시 행의 가격값 계약을 유지합니다.
+
+native recovery의 Pine indicator/strategy는 status 0/1을 busy, 2를 idle, 3을 terminal_error(계산 종료된 실패), 나머지/읽기 실패를 unknown으로 판정합니다. 보조 source는 이름 대신 명시적 `isLoading` 또는 완료 상태를 검사하며 unknown은 복구를 차단합니다. `source_states`는 판정 근거와 관측 status를 보이며 원문·token을 포함하지 않습니다. 대상 부재는 서버 저장/알림 결과의 완료 증명이 아니므로 discard/reset은 기록을 보존하고 결과를 unknown으로 남깁니다.
+
 Reconnect compares the exact old generation. The replacement must already show
 the same saved layout/document. Competing reconnects cannot both commit. Old study
 IDs, source proofs and report verification are invalidated; compile again. Rebind

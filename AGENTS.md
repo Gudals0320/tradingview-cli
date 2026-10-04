@@ -7,6 +7,7 @@ over CDP. The human documentation is [README.md](README.md) (Korean).
 
 ```bash
 tv help --json pine compile
+tv help --json --brief pine compile
 tv help --json workspace
 ```
 
@@ -14,6 +15,9 @@ The runtime catalog classifies scope/invocation/Desktop access/read-only/output,
 workspace_required, resource locks and foreground requirements. Never commit
 generated catalog output. Install dependencies with `npm ci` first; in this repo
 use `node src/cli/index.js ...` without npm link.
+Read/cache the full catalog at bootstrap for common options/error/output/provenance;
+brief keeps each command's invocation contract and references the full contract.
+Invalidate cached contracts when cli.version, catalog_version or catalog_fingerprint changes.
 
 ## Establish the workspace before execution
 
@@ -118,6 +122,10 @@ LOCK_HOLDER_DEAD: reconcile the exact interrupted native operation. ADMISSION_PE
 inspect the state directory owner/permissions. REPORT_PENDING/TIMEOUT: wait; do not
 repeat an uncertain mutation. Expected validation/read errors alone do not imply
 manual recovery. WORKSPACE_EXTERNAL_CHANGE means inspect the affected workspace.
+Auxiliary-only unknown source status is not proof of completion. Wait/inspect first.
+Only after human confirmation, session recover --acknowledge-unknown EXACT_HASH
+can archive the exact stable auxiliary unknown set while keeping outcome unknown.
+Never acknowledge automatically; busy/Pine unknown/unreadable sources are excluded.
 
 ## Repository changes
 

@@ -273,6 +273,7 @@ export async function getSource() {
 }
 
 export async function setSource({ source, _deps }) {
+  if (source.startsWith('\uFEFF')) throw Object.assign(new Error('Leading BOM is not supported by Monaco source readback; remove the BOM before pine set.'), { code: 'PINE_SOURCE_UNSUPPORTED_BOM', details: { editor_changed: false, results_invalidated: false } });
   const editorReady = await ensurePineEditorOpen({ _deps });
   if (!editorReady) throw new Error('Could not open Pine Editor.');
 
@@ -280,17 +281,24 @@ export async function setSource({ source, _deps }) {
   const set = await (_deps?.evaluate || evaluate)(`
     (function() {
       ${STRATEGY_PAGE_CODE};
+      ${canonicalPineSource.toString()};
       var m = ${FIND_MONACO};
-      if (!m) return false;
+      if (!m) return { matches: false, editor_changed: false };
       const before = m.editor.getValue();
       try { m.editor.setValue(${escaped}); }
       finally { if (m.editor.getValue() !== before) invalidateEditedSource(window); }
-      return m.editor.getValue() === ${escaped};
+      const applied = m.editor.getValue();
+      return { matches: canonicalPineSource(applied) === canonicalPineSource(${escaped}),
+        editor_changed: applied !== before, applied };
     })()
   `, { mutation: true });
 
-  if (!set) throw new Error('Monaco found but setValue() failed.');
-  return { success: true, lines_set: source.split('\n').length };
+  if (!set?.matches) throw Object.assign(new Error('Editor source differs from the requested source after EOL normalization.'), {
+    code: 'PINE_SOURCE_MISMATCH', details: { editor_changed: set?.editor_changed === true, results_invalidated: set?.editor_changed === true,
+      applied_hash: typeof set?.applied === 'string' ? sourceHash(canonicalPineSource(set.applied)) : null },
+  });
+  return { success: true, lines_set: canonicalPineSource(source).split('\n').length,
+    applied_eol: 'LF canonical', applied_hash: sourceHash(canonicalPineSource(set.applied)) };
 }
 
 export async function compile() { return smartCompile(); }
@@ -465,7 +473,8 @@ export async function finalizePineCompile(result, {source,token,context={},saveC
         const c=${FIND_CONTROLLER},id=c?.getScriptIdVersion?.();if(!id?.scriptIdPart)return {matches:false};
         const response=await fetch('https://pine-facade.tradingview.com/pine-facade/get/'+encodeURIComponent(id.scriptIdPart)+'/'+encodeURIComponent(id.version),{credentials:'include'});
         if(!response.ok)throw new Error('Saved source verification HTTP '+response.status);const data=await response.json();
-        return {matches:typeof data.source==='string'&&data.source.replace(/\\r\\n/g,'\\n')===${JSON.stringify(canonicalPineSource(source))}};
+        ${canonicalPineSource.toString()};
+        return {matches:typeof data.source==='string'&&canonicalPineSource(data.source)===${JSON.stringify(canonicalPineSource(source))}};
       })()`);
       outcome.saved=Boolean(persisted.matches&&!observed?.draft);outcome.persistence_verified=true;
       outcome.source_persisted=Boolean(persisted.matches);outcome.persistence_kind=observed?.draft?'draft':'saved_document';

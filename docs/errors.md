@@ -14,7 +14,14 @@ an unknown native operation.
 | WORKSPACE_CONFLICT / WORKSPACE_LAYOUT_SHARED | Use dedicated layouts/documents/targets or explicit copies. |
 | WORKSPACE_PINE_REQUIRED / WORKSPACE_SAVED_DOCUMENT_REQUIRED | Mount/attach a dedicated saved document. Drafts are not saved ownership. |
 | WORKSPACE_DISCONNECTED | Restore CDP, retaining binding. Exit2 does not prove target termination or authorize reset. |
-| WORKSPACE_TARGET_LOST | Reachable CDP proved absence: open saved layout and explicitly reconnect. |
+| WORKSPACE_TARGET_LOST | Reachable CDP proved absence: follow named `workspace show` commands to explicitly open/reconnect the saved layout, or confirm exact reset to preserve artifacts and stop restoration. A release preflight failure creates no interrupted operation. |
+| WATCHLIST_SELECTOR_REQUIRED / WATCHLIST_NOT_FOUND / WATCHLIST_AMBIGUOUS | Supply one exact list ID or unique exact name to `watchlist raw`; it never selects/changes the displayed list. |
+| NATIVE_BUSY | `target_state:running` reports observable pending work; `unreadable` reports missing/unknown source or page signals. Keep the journal and wait/inspect; neither proves completion. |
+| NATIVE_BUSY / auxiliary_unknown | `target_state:unknown` reports auxiliary-only unknown status. Wait, retry exact recover, then inspect those sources in Desktop. If all other native signals remain idle and the human explicitly accepts abandoning restoration, pass the current `unknown_hash` as `session recover --acknowledge-unknown HASH --run-id EXACT_RUN`. Three stable probes and exact journal hash are required; the journal is archived unchanged and outcome remains unknown. Pine-unknown, running, unreadable, disconnected or changed sets cannot use this path. Never automatically acknowledge. |
+| NATIVE_BUSY / Pine unknown | Unknown Pine status may still represent calculation, so auxiliary acknowledgement cannot release it. Ask the human to inspect/resolve that exact source in Desktop, then retry recorded recovery after readable terminal status. If the exact page is explicitly closed by the human, use proven-target-lost archival with confirmation; no operation completion or external effect is inferred. Never auto-remove an unrelated study or close/reload a user tab. |
+| PINE_SOURCE_UNSUPPORTED_BOM | Remove the leading BOM and retry. Rejected before editor write/admission; source and report state remain unchanged. |
+| PINE_SOURCE_MISMATCH / WORKSPACE_EXTERNAL_CHANGE after setter | EOL-independent content differed after a real editor effect. Preserve the interrupted journal and inspect actual source; exact recover/rebind can explicitly adopt verified dedicated-resource state. Never overwrite a foreign draft to force recovery. |
+| RECOVERY_TARGET_LOST | Only reachable inventory proves recorded targets absent. Exact `session discard --target-lost --run-id` requires confirmation and archives the journal unchanged; outcome remains unknown, including server-side save/alert effects. Inspect account resources before retrying. |
 | WORKSPACE_GENERATION_CHANGED | Inspect show; acknowledge exact generation with reconnect/rebind, re-read IDs and compile. |
 | WORKSPACE_EXTERNAL_CHANGE | Inspect source/context/inputs; explicitly acknowledge intended changes without overwriting foreign drafts. |
 | WORKSPACE_OBSERVATION_CHANGED | Retry after the operation settles; discard the changing sample. |
@@ -46,6 +53,8 @@ an unknown native operation.
 | REPORT_CHANGED | Discard pages and restart offset0 with new revision. |
 | STUDY_NOT_FOUND / WORKSPACE_STUDY_MISMATCH | Read current owned IDs; IDs do not survive reconnect. |
 | LAYOUT_UNVERIFIED / WORKSPACE_LAYOUT_UNVERIFIED | Inspect owned layout and preserve uncertain records before changes. |
+| LAYOUT_LIST_FAILED / LAYOUT_LIST_TIMEOUT / LAYOUT_LIST_MALFORMED | Saved-layout lookup failed; no empty-list success or open dispatch is inferred. Retry only after resolving the cause. |
+| LAYOUT_IDENTITY_MISMATCH | Opened URL differs from the requested saved ID. Inspect the reported new target; preserve it and do not assume the requested layout opened. |
 | CDP_TIMEOUT | Native work was not cancelled. Inspect status; mutation journals need reconciliation, pure reads may retry without fabricating recovery. |
 | LEGACY_BATCH_REMOVED | Use workspace-batch.mjs with names; reconcile old journals through migration route. |
 

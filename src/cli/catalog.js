@@ -3,6 +3,7 @@
  * Built from the registered adapters and CLI policy so it cannot drift from the code.
  */
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { POSITIONALS } from './arguments.js';
 import { commandScope, invocationClass, MIXED_RULES, DESKTOP_REQUIREMENTS, OFFLINE_LEASE_COMMANDS, resourceKinds, workspaceRequired, FOREGROUND_COMMANDS } from './policy.js';
 
@@ -78,16 +79,16 @@ function describe(name, adapter) {
   };
 }
 
-export function buildCatalog(commands, filter = []) {
+export function buildCatalog(commands, filter = [], { brief = false } = {}) {
   const entries = [...commands].flatMap(([name, command]) => command.subcommands
     ? [...command.subcommands].map(([sub, adapter]) => [`${name} ${sub}`, adapter])
     : [[name, command]]);
   const prefix = filter.join(' ');
   const selected = entries.filter(([name]) => !prefix || name === prefix || name.startsWith(`${prefix} `));
   if (!selected.length) {
-    throw Object.assign(new Error(`Unknown command: ${prefix}`), { code: 'UNKNOWN_COMMAND' });
+    throw Object.assign(new Error(`Unknown command: ${prefix}`), { code: 'UNKNOWN_COMMAND', details: { command_path: prefix, help_command: 'tv help --json' } });
   }
-  return {
+  const catalog = {
     success: true,
     catalog_version: 2,
     cli: { name: 'tv', version },
@@ -110,6 +111,7 @@ export function buildCatalog(commands, filter = []) {
       stdout: 'One JSON object per call; stream commands emit JSONL until interrupted; see each command\'s output.',
       stderr: 'Errors as JSON: {success:false, error, code?, details?}.',
       success_rule: 'Check both the exit code and success; success:false results can appear on stdout with exit 1.',
+      provenance: 'Workspace outputs include workspace/target/page generation and source/context evidence. Re-read ephemeral IDs after reconnect and verify report revision across ledger pages.',
       exit_codes: {
         0: 'Success.',
         1: 'Invalid command or input, operation failure, compile failure or fatal error.',
@@ -129,4 +131,13 @@ export function buildCatalog(commands, filter = []) {
     },
     commands: selected.map(([name, adapter]) => describe(name, adapter)),
   };
+  // Hash the complete contract, independent of filter or output mode.
+  const fingerprint = createHash('sha256').update(JSON.stringify({ ...catalog,
+    commands: entries.map(([name, adapter]) => describe(name, adapter)),
+  })).digest('hex');
+  catalog.catalog_fingerprint = fingerprint;
+  if (!brief) return catalog;
+  return { success: true, catalog_version: catalog.catalog_version, cli: catalog.cli,
+    catalog_fingerprint: fingerprint, format: 'brief', usage: catalog.usage,
+    contract: { bootstrap_command: 'tv help --json', cache_key: ['cli.version', 'catalog_version', 'catalog_fingerprint'] }, commands: catalog.commands };
 }

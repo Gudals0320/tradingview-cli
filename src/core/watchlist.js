@@ -46,9 +46,7 @@ async function ensureWatchlistOpen(maxWaitMs = 5000) {
 
 // Active watchlist metadata (id, name, symbols) read from the React fiber
 // tree — needed for the REST endpoints. Approach from PR upstream#65.
-async function getActiveListInfo() {
-  return evaluate(`
-    (function() {
+export function readActiveListInfo(document) {
       var panel = document.querySelector('[class*="layout__area--right"]');
       if (!panel) return null;
       var rows = panel.querySelectorAll('[data-symbol-full]');
@@ -67,8 +65,38 @@ async function getActiveListInfo() {
         count++;
       }
       return null;
-    })()
-  `);
+}
+
+async function getActiveListInfo() {
+  return evaluate(`(${readActiveListInfo.toString()})(document)`);
+}
+
+export async function readRawWatchlist(document, selector) {
+  try {
+    const response = await fetch('/api/v1/symbols_list/custom/', { credentials: 'include' });
+    if (!response.ok) return { success: false, code: 'WATCHLIST_READ_FAILED', error: 'Watchlist API read failed.', http_status: response.status };
+    const lists = await response.json();
+    if (!Array.isArray(lists) || lists.some(list => !list || !Array.isArray(list.symbols) || list.symbols.some(symbol => typeof symbol !== 'string'))) return { success: false, code: 'WATCHLIST_MALFORMED', error: 'Watchlist API returned malformed source arrays.' };
+    const active = readActiveListInfo(document);
+    if (active && !lists.some(list => String(list.id) === String(active.id))) {
+      if (!Array.isArray(active.symbols) || active.symbols.some(symbol => typeof symbol !== 'string')) return { success: false, code: 'WATCHLIST_MALFORMED', error: 'Mounted native watchlist returned a malformed source array.' };
+      lists.push({ ...active, mounted_native: true });
+    }
+    const matches = lists.filter(list => selector.id !== undefined ? String(list.id) === String(selector.id) : list.name === selector.name);
+    if (matches.length !== 1) return { success: false, code: matches.length ? 'WATCHLIST_AMBIGUOUS' : 'WATCHLIST_NOT_FOUND', error: 'Select one exact list ID or unique exact name.' };
+    const selected = matches[0];
+    const rendered = String(active?.id) === String(selected.id);
+    const rows = rendered ? document.querySelector('[class*="layout__area--right"]')?.querySelectorAll('[data-symbol-full]') : null;
+    return { success: true, list_id: selected.id, list_name: selected.name, source: selected.mounted_native ? 'react_native_array' : 'symbols_list_api', symbols: selected.symbols.slice(),
+      raw_count: selected.symbols.length, rendered_count: rendered && rows ? rows.length : null,
+      rendered_scope: rendered ? 'selected_list' : 'other_or_unmounted', rendered_list_id: active?.id || null,
+      ordering: 'native_array', preserves: 'sections, expressions, exchange notation, multipliers, order and duplicates' };
+  } catch (error) { return { success: false, code: 'WATCHLIST_READ_FAILED', error: error.message }; }
+}
+
+export async function raw({ id, name, _deps } = {}) {
+  if ((id === undefined) === (name === undefined)) throw Object.assign(new Error('Pass exactly one --list-id or --list-name.'), { code: 'WATCHLIST_SELECTOR_REQUIRED' });
+  return (_deps?.evaluateAsync || evaluateAsync)(`(() => {${readActiveListInfo.toString()};return (${readRawWatchlist.toString()})(document,${JSON.stringify({ id, name })});})()`);
 }
 
 export async function get() {
