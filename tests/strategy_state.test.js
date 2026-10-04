@@ -383,6 +383,18 @@ describe('Strategy report identity and metadata', () => {
     f.input(80); f.tick();
     assert.equal(readStrategyReport(f.window).code, 'REPORT_PENDING');
   });
+  it('accepts a same-cycle report observed before completed status without adopting status-only stale results',()=>{
+    for(const changed of [false,true]){const f=fixture();beginCompilation(f.window,'run','hash',true);f.compile();f.update();assert.equal(readStrategyReport(f.window).success,true);
+      f.status(1);if(changed)f.input(70);f.update();assert.equal(readStrategyReport(f.window).code,'REPORT_PENDING');
+      f.status(2);assert.equal(readStrategyReport(f.window).success,true);assert.equal(f.window.__tvCliCompilation.calculation.active,false);
+      f.status(1);f.status(2);assert.equal(readStrategyReport(f.window).code,'REPORT_PENDING');
+    }
+  });
+  it('a report-before-status completion cannot verify later changed inputs or ABA',()=>{
+    const f=fixture();beginCompilation(f.window,'run','hash',true);f.compile();f.update();assert.equal(readStrategyReport(f.window).success,true);
+    f.status(1);f.input(60);f.update();f.input(30);f.status(2);assert.equal(readStrategyReport(f.window).code,'REPORT_PENDING');
+    f.status(1);f.update();f.status(2);assert.equal(readStrategyReport(f.window).success,true);
+  });
   for (const verification of ['compilation', 'input-change']) {
     for (const beforeStatusEvent of [false, true]) {
       it(`rejects GUI ABA after ${verification}, including before status event=${beforeStatusEvent}`, () => {

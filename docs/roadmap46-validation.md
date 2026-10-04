@@ -142,3 +142,22 @@ remaining roadmap QA. New owned tabs remain available; previous five unowned QA
 tabs and user resources remain untouched. No document creation granted tab-close
 rights. #47 implementation/live acceptance is separate from eventual main merge
 and issue closure; the rest of #46 is still in progress.
+
+## Deep development candidate and failed preparation
+
+Candidate `6ac3d20689a74dc8aafa0d7739b7d24526ff276c` passed lint and all
+570 offline tests. A Git archive of that exact commit shared the installed
+immutable dependency tree and normal-user private state for live preparation.
+Read-only B evidence matched the owned engine ID, all 32 input values/descriptors,
+and main-series extended symbol (session/currency/adjustment) to the native Deep
+manager. This verifies mapping, not a completed Deep job.
+
+The A saved document was explicitly rebound in its restored saved layout and
+compiled/saved successfully. Tab selection and report-panel activation started
+a new normal calculation cycle. The next Deep attempt returned REPORT_PENDING
+with mutation_dispatched:false; no Deep request was sent. Later native strategy
+status was Completed with a complete report, while the CLI observer still had
+cycle 2 active and only cycle 1 completed. The report-before-Completed-status
+ordering is covered by the subsequent monitor correction, including negatives
+for status-only old reports and changed input/ABA identity. The candidate archive
+is unchanged. This attempt is failed preparation and is not Deep live acceptance.
