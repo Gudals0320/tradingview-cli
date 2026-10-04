@@ -93,10 +93,15 @@ tv workspace show research-a
 
 ## Pine과 백테스트
 
-실제 적용 전략 Properties는 `strategy properties`로 읽습니다. `strategy set-properties
---values JSON`은 전체 patch를 타입·단위·native 옵션으로 먼저 검사하고 한 번 적용한
+실제 적용 전략 Properties는 `strategy properties`로 읽습니다.
+`strategy set-properties --values JSON`은 전체 patch를 타입·단위·native 옵션으로 먼저 검사하고 한 번 적용한
 뒤 readback과 해당 계산 완료를 확인합니다. `indicator set`은 strategy_props 내부 ID
 변경을 거부합니다. [필드·통화·호환성 계약](docs/strategy-properties.md)을 확인하세요.
+
+개발 브랜치의 `backtest run --mode deep`은 별도 native Deep 작업을 명시 실행합니다.
+status/wait/results는 순수 관측이며 일반 `data strategy`를 딥 결과로 대신 반환하지
+않습니다. [기간·timezone·응답 귀속·불명 작업 계약](docs/deep-backtesting.md)은 현재
+실환경 인수 검증 중입니다. 설치된 정식 2.2.0의 지원 목록과 구분하세요.
 
 Pine 문서는 기본 생성 조건이 아닙니다. chart-only workspace에서 명시적으로 새 저장
 문서를 준비하거나 정확한 저장 ID를 엽니다. 현재 generation과 재호출에 사용할 고정

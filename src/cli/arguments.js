@@ -1,6 +1,7 @@
 import { requireFinite, requireInteger } from '../connection.js';
 import { alertCondition } from '../core/alerts.js';
 import { validateStrategyProperties } from '../strategy-properties.js';
+import { deepPeriod } from '../core/deep-backtest.js';
 
 // A command without an entry accepts no positional arguments.
 export const POSITIONALS = new Map([
@@ -25,6 +26,7 @@ export const POSITIONALS = new Map([
 ]);
 
 export function validateArguments(command, values, positionals) {
+  if(command==='backtest run'){deepPeriod(values);if(values.mode!=='deep'||!values['request-id']||!/^[-a-zA-Z0-9_]{1,100}$/.test(values['request-id']))throw Object.assign(new Error('Pass --mode deep and a stable --request-id.'),{code:'INVALID_DEEP_REQUEST'});}
   if(command==='strategy set-properties')validateStrategyProperties(JSON.parse(values.values||'null'));
   const [min, max] = POSITIONALS.get(command) || [0, 0];
   if (positionals.length < min || positionals.length > max) {
@@ -44,6 +46,7 @@ export function validateArguments(command, values, positionals) {
     requireInteger(values[name], `--${name}`, low, high);
   }
   for (const name of ['price', 'price2', 'time', 'time2', 'from', 'to', 'amount']) {
+    if(command==='backtest run'&&['from','to'].includes(name))continue;
     if (values[name] !== undefined) requireFinite(values[name], `--${name}`);
   }
   if (command === 'range' && ((values.from === undefined) !== (values.to === undefined))) {

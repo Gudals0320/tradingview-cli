@@ -246,7 +246,7 @@ export async function reconnectWorkspace(name, { target, generation, pine, detac
       const snapshot = await raw(client, pageCall('readWorkspacePage', { pine: Boolean(prospective.pine) }));
       if (snapshot.layout !== prospective.layout || (prospective.pine && snapshot.pine !== prospective.pine)) throw workspaceError('WORKSPACE_IDENTITY_MISMATCH', 'New target must already display the owned saved layout and exact document.');
       if(prospective.pine&&snapshot.draft===true)throw workspaceError('WORKSPACE_SAVED_DOCUMENT_REQUIRED','Save the dedicated draft as a document before attaching it; no native save was dispatched.');
-      if (snapshot.pending) throw workspaceError('WORKSPACE_NATIVE_BUSY', 'Wait for the target to settle before reconnecting.');
+      if (snapshot.pending||snapshot.deep_job_pending) throw workspaceError('WORKSPACE_NATIVE_BUSY', 'Wait for the target to settle before reconnecting.');
       lease.checkpoint({phase:'reconnecting',command:'workspace reconnect',target_id:target,old_generation:generation,layout:selected.layout,pine:prospective.pine});
       lease.reassign({ target, pine: prospective.pine, expectedGeneration: generation, tab_ownership: ownedTabProof(selected.layout, target, browser) });
       changedResources=true;
@@ -282,6 +282,7 @@ async function permitFor(command, values, positionals) {
     return { inputs,study_id:positionals[0] };
   }
   if(command==='strategy set-properties')return {properties:JSON.parse(values.values)};
+  if(command==='backtest run')return {deep_request_id:values['request-id']};
   if(command==='indicator add')return {add_study:true};
   if(command==='indicator remove')return {remove_study:positionals[0]};
   if(command==='pane focus')return {pane_index:Number(positionals[0])};
@@ -533,7 +534,7 @@ export async function closeWorkspace(file, { _deps } = {}) {
       await (_deps?.checkLayout || checkLayout)(workspace); configureTarget(workspace.target);
       pageProbeStarted = true;
       const snapshot = await (_deps?.raw || raw)(await (_deps?.getClient || getClient)(), pageCall('guardWorkspacePage', owner(workspace)));
-      if (snapshot.pending) throw workspaceError('WORKSPACE_NATIVE_BUSY', 'Cannot release a pending native action.');
+      if (snapshot.pending||snapshot.deep_job_pending) throw workspaceError('WORKSPACE_NATIVE_BUSY', 'Cannot release a pending native action.');
       const result = { success: true, released: true, workspace_id: workspace.id };
       lease.checkpoint({ phase: 'released', result });
       return releaseWorkspace(lease);

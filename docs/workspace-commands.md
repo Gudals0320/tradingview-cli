@@ -27,3 +27,9 @@ migration contract. See [workspaces.md](workspaces.md) for the full workflow.
 layout/workspace/document and applies a prevalidated complete typed patch via
 native inputs, then verifies readback and recalculation. Strategy Properties
 cannot be changed through the untyped indicator input interface.
+
+`backtest run/normal` are explicit native Deep mutations with
+layout/workspace/document ownership. `backtest status/wait/results` are pure
+observations and retain workspace admission/source checks. Pending native Deep
+jobs prevent unrelated mutations/release/reconnect; unknown persistent intents
+cannot be erased by normal reset. [Deep contract](deep-backtesting.md).

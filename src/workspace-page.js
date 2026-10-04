@@ -35,7 +35,7 @@ export function readWorkspacePage(window, document, options = {}) {
     source: editor ? canonicalPineSource(editor.editor.getValue()) : '', modified: controller?.isModified?.() ?? null,draft:controller?.isDraft?.()??null,
     context: { symbol: context.symbol, aliases: context.aliases, resolution: normalizeTimeframe(context.resolution), chart_type: context.chart_type,
       session: chart.symbolExt?.()?.session || null },
-    studies, pending: pending_action || calculating, pending_action, calculating,
+    studies, pending: pending_action || calculating, pending_action, calculating,deep_job_pending:['accepted','pending'].includes(window.__tvCliDeepRun?.last_phase)||Boolean(window.__tvCliDeepRun&&[0,1].includes(window.__tvCliDeepRun.facade?._deepBacktestingManager?.activeStrategyStatus?.value?.()?.type)),
     viewport: { width: window.innerWidth, height: window.innerHeight }, visibility: document.visibilityState };
 }
 
@@ -44,7 +44,7 @@ export function bindWorkspacePage(window, document, resource, nonce) {
   if (snapshot.layout !== resource.layout || snapshot.pine !== resource.pine) throw new Error('WORKSPACE_IDENTITY_MISMATCH: Saved resources do not match registration.');
   if(resource.pine&&snapshot.draft===true)throw new Error('WORKSPACE_SAVED_DOCUMENT_REQUIRED: Drafts cannot be reserved as saved Pine documents.');
   if (resource.pine && (snapshot.studies.some(study => study.pine !== resource.pine) || snapshot.studies.length > 1)) throw new Error('WORKSPACE_STUDY_CONFLICT: Pine workspaces require a single owned study.');
-  if (snapshot.pending) throw new Error('WORKSPACE_NATIVE_BUSY: Native action or calculation is pending.');
+  if (snapshot.pending||snapshot.deep_job_pending) throw new Error('WORKSPACE_NATIVE_BUSY: Native action or calculation is pending.');
   const chart = window.TradingViewApi._activeChartWidgetWV.value();
   for(const epoch of new Set([window.__tvCliCompilation,...(window.__tvCliVerifiedStrategies?.values?.()||[])]))epoch?.dispose?.();
   delete window.__tvCliCompilation;delete window.__tvCliVerifiedStrategies;
@@ -168,6 +168,7 @@ export function guardWorkspacePage(window, document, owner, { observe = false } 
 
 export function startWorkspacePage(window, document, owner, operation, permit) {
   const snapshot = guardWorkspacePage(window, document, owner);
+  if(snapshot.deep_job_pending&&permit.deep_request_id!==window.__tvCliDeepRun?.request_id)throw new Error('WORKSPACE_DEEP_JOB_PENDING: Observe the exact native Deep run before another mutation; timeout is not cancellation.');
   if (snapshot.pending_action) throw new Error('WORKSPACE_NATIVE_BUSY: Native action is pending.');
   const bound = window.__tvCliWorkspace;
   if (bound.operation) throw new Error('WORKSPACE_PAGE_BUSY: Previous page operation must be reconciled.');

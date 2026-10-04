@@ -20,8 +20,41 @@ import { reportPage } from './fixtures/report-page.mjs';
 import { resourceLockStatus } from '../src/resource-lock.js';
 import { preparationPage } from './fixtures/preparation-page.mjs';
 import { propertiesPage } from './fixtures/properties-page.mjs';
+import { deepPage } from './fixtures/deep-page.mjs';
 
 const CLI = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
+
+it('real Deep CLI pins native source and response identity, pages one revision and rejects later foreign reports',async t=>{
+  const page=deepPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('deep-entry-compiled-v2');
+  const args=['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00Z','--to','2024-01-02T00:00:00Z','--request-id','deep-entry'];
+  const accepted=jsonResult(await f.run(args));assert.equal(accepted.mode,'deep');assert.equal(accepted.phase,'pending');assert.equal(page.dispatches(),1);
+  await page.complete(10);const ready=jsonResult(await f.run(['--workspace','contract','backtest','wait','--run-id',accepted.run_id,'--timeout','1000']));assert.equal(ready.phase,'ready');
+  const first=jsonResult(await f.run(['--workspace','contract','backtest','results','--run-id',accepted.run_id,'--limit','1']));assert.equal(first.performance.all.netProfit,10);assert.equal(first.ledger.rows.length,1);assert.equal(first.snapshot.period_validation,'once_per_snapshot');
+  const repeated=jsonResult(await f.run(args));assert.equal(repeated.reused,true);assert.equal(page.dispatches(),1);
+  await page.complete(999,99);const foreign=jsonResult(await f.run(['--workspace','contract','backtest','results','--run-id',accepted.run_id]),1);assert.equal(foreign.code,'DEEP_REPORT_UNVERIFIED');assert.equal(foreign.performance,undefined);
+  const reset=jsonResult(await f.run(['--workspace','contract','backtest','normal']),1);assert.equal(reset.code,'DEEP_RUN_UNSETTLED');assert.ok(page.window.__tvCliDeepRun);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+});
+it('real Deep entry rejects stale manager kernel and tiny periods with zero native dispatch',async t=>{
+  const page=deepPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('deep-entry-compiled-v2');
+  jsonError(await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00.100Z','--to','2024-01-01T00:00:00.900Z','--request-id','tiny']),/whole seconds/,'INVALID_DEEP_PERIOD');
+  page.manager._activeStrategyInputs.value=()=>({studyName:'wrong',inputs:{text:'wrong',pineId:'foreign',pineVersion:9},dependencies:[]});
+  const denied=jsonResult(await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00Z','--to','2024-01-02T00:00:00Z','--request-id','stale']),1);assert.equal(denied.code,'DEEP_KERNEL_UNVERIFIED');assert.equal(denied.mutation_dispatched,false);assert.equal(page.dispatches(),0);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+});
+it('real Deep entry rejects independently mismatched symbol, interval and each native input field without dispatch',async t=>{
+  const page=deepPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('deep-matrix-compiled-v2');
+  const symbol=page.manager._symbolString.value,resolution=page.manager._resolution.value,kernel=page.manager._activeStrategyInputs.value;
+  const changes=[
+    ['symbol',()=>{page.manager._symbolString.value=()=> 'FOREIGN';},'DEEP_CONTEXT_UNVERIFIED'],
+    ['resolution',()=>{page.manager._resolution.value=()=>({value:()=> '240',isTicks:()=>false,isRange:()=>false});},'DEEP_CONTEXT_UNVERIFIED'],
+    ...['text','pineId','pineVersion','prop_fee','prop_qty_type'].map(id=>[id,()=>{page.manager._activeStrategyInputs.value=()=>{const n=kernel();n.inputs[id]=typeof n.inputs[id]==='object'?{...n.inputs[id],v:'foreign'}:'foreign';return n;};},'DEEP_KERNEL_UNVERIFIED']),
+  ];
+  for(const [name,change,code] of changes){page.manager._symbolString.value=symbol;page.manager._resolution.value=resolution;page.manager._activeStrategyInputs.value=kernel;change();
+    const denied=jsonResult(await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00Z','--to','2024-01-02T00:00:00Z','--request-id','matrix-'+name]),1);assert.equal(denied.code,code,name);assert.equal(denied.mutation_dispatched,false,name);assert.equal(page.dispatches(),0,name);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null,name);
+  }
+});
 
 it('real typed Properties CLI rejects invalid patches and untyped bypass before mutation, then verifies one matching cycle',async t=>{
   const page=propertiesPage();

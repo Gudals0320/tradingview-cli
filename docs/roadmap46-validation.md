@@ -113,6 +113,18 @@ ongoing #48 changes were not used for these Pine-only claims.
   before and after refusal. The original synthetic fixture source was then
   explicitly restored in its own workspace; compile/save/report succeeded. No
   user draft was used or modified.
+- Clean f04e8c5, after the Desktop connection was restored under a maintained
+  execution session: exact C saved-layout/document identities were reread in the
+  new browser. Explicit chart-only reconnect and exact-ID preparation discarded
+  old target/generation/report proofs; GUI-restored tab ownership remained null.
+  Create with C's existing exact QA name returned exit 1 /
+  PINE_DOCUMENT_NAME_EXISTS, stages:null and new saved_document:null.
+- The prepared C document then received a genuinely different synthetic source
+  via pine set (Cycle default 10 to 12), followed by pine compile --save and data
+  strategy. Saved version changed 1.0 to 2.0. Both compile and report returned
+  source hash `4af5c66f248abb53e3e4ebd0ac6ff62230b1c263b72fe68d748e8e1e35dda68e`,
+  distinct from the preparation hash. Persistence and report verification were
+  successful. The saved document remains the same exact C document.
 
 Fixture coverage distinguishes known native pre-dispatch rejection plus an empty
 candidate delta from unknown creation. Unknown create is never resent; one new

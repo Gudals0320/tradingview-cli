@@ -70,6 +70,17 @@ an unknown native operation.
 | STRATEGY_PROPERTIES_CHANGED | Complete actual readback differs from requested state. Preserve it; inspect external/partial changes instead of adopting a report. |
 | STRATEGY_PROPERTIES_REPORT_FAILED | Values may be applied but the matching calculation failed. Inspect actual values and native diagnostics. |
 | STRATEGY_PROPERTIES_TIMEOUT | Finite wait expired after dispatch; not cancellation. Inspect/wait for native completion before another change. |
+| INVALID_DEEP_PERIOD / INVALID_DEEP_REQUEST | Invalid explicit period/precision/timezone/request ID; no native dispatch. |
+| DEEP_SOURCE_UNVERIFIED / DEEP_KERNEL_UNVERIFIED | Current saved/applied/compiled/full-input proof or native payload mapping is missing; compile and inspect the exact owned strategy. |
+| DEEP_NATIVE_PATH_UNAVAILABLE | Native report provider/decoder/monitor shape is unsupported; reads never mount or create it. |
+| DEEP_NATIVE_JOB_PENDING / DEEP_RUN_PENDING / WORKSPACE_DEEP_JOB_PENDING | Inspect/wait for exact native work, including GUI jobs; no implicit disconnect, cancellation or overlapping mutation. |
+| DEEP_RUN_UNKNOWN / DEEP_RUN_UNSETTLED | Preserve persistent intent after response/page/owner loss; do not resend or discard uncertain work. |
+| DEEP_REQUEST_CONFLICT | Stable request ID describes different source/full inputs/context/settings/period; use an explicit new request after old work settles. |
+| DEEP_RESULT_STALE / DEEP_REQUEST_CHANGED / DEEP_RESULT_GENERATION_CHANGED | Current source or native run/provider identity changed; no stale result adoption. |
+| DEEP_REPORT_PENDING / DEEP_REPORT_UNVERIFIED | Native report is pending or its exact decoded response cycle cannot be proved; no chart/old-report fallback. |
+| DEEP_SERVER_ERROR | Exact native server rejection is separate from an unknown transport outcome; inspect its request and observed error. |
+| DEEP_WAIT_TIMEOUT | Original finite wait expired; server work was not cancelled. |
+| DEEP_PERIOD_MISMATCH | Native trades fall outside requested absolute bounds; metrics/ledger are refused and the actual native window is reported. |
 | PINE_COMPILE_ERROR | Fix diagnostic locations and compile requested source. |
 | REPORT_UNVERIFIED / REPORT_INVALIDATED | Compile owned source or perform verified input change; never adopt prior metrics. |
 | REPORT_PENDING / REPORT_TIMEOUT / STRATEGY_CALCULATION_PENDING | Wait for existing calculation; normal waiting does not imply cancellation/manual recovery. |
