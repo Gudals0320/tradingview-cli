@@ -102,9 +102,10 @@ export async function run(argv) {
   const cmd = commands.get(cmdName);
 
   if (!cmd) {
-    console.error(`Unknown command: ${cmdName}`);
-    console.error('Run "tv --help" for a list of commands.');
-    process.exit(1);
+    handleError(Object.assign(new Error(`Unknown command: ${cmdName}`), {
+      code: 'UNKNOWN_COMMAND', details: { command_path: cmdName, available_commands: [...commands.keys()], help_command: 'tv --help' },
+    }));
+    return;
   }
 
   // Handle subcommands (e.g., tv pine get)
@@ -117,9 +118,10 @@ export async function run(argv) {
     }
     const sub = cmd.subcommands.get(subName);
     if (!sub) {
-      console.error(`Unknown subcommand: ${cmdName} ${subName}`);
-      printCommandHelp(cmdName, cmd);
-      process.exit(1);
+      handleError(Object.assign(new Error(`Unknown subcommand: ${cmdName} ${subName}`), {
+        code: 'UNKNOWN_COMMAND', details: { command_path: `${cmdName} ${subName}`, available_subcommands: [...cmd.subcommands.keys()], help_command: `tv ${cmdName} --help` },
+      }));
+      return;
     }
     handler = sub.handler;
     options = sub.options || {};
@@ -216,7 +218,7 @@ async function execute(handler, values, positionals, offline = false, readOnly =
   }
   if (result !== undefined) {
     if (cleanupWarnings.length) result = { ...result, cleanup_warnings: cleanupWarnings };
-    console.log(JSON.stringify(result, null, 2));
+    console.log(JSON.stringify(result, null, command === 'help' && values.brief ? undefined : 2));
   } else if (cleanupWarnings.length) console.error(JSON.stringify({ cleanup_warnings: cleanupWarnings }));
   process.exitCode = result?.success === false || result?.compiled === false || result?.has_errors === true ? 1 : 0;
 }

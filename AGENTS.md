@@ -7,6 +7,7 @@ over CDP. The human documentation is [README.md](README.md) (Korean).
 
 ```bash
 tv help --json pine compile
+tv help --json --brief pine compile
 tv help --json workspace
 ```
 
@@ -14,6 +15,9 @@ The runtime catalog classifies scope/invocation/Desktop access/read-only/output,
 workspace_required, resource locks and foreground requirements. Never commit
 generated catalog output. Install dependencies with `npm ci` first; in this repo
 use `node src/cli/index.js ...` without npm link.
+Read/cache the full catalog at bootstrap for common options/error/output/provenance;
+brief keeps each command's invocation contract and references the full contract.
+Invalidate cached contracts when cli.version, catalog_version or catalog_fingerprint changes.
 
 ## Establish the workspace before execution
 
