@@ -97,6 +97,13 @@ describe('launch() — MSIX WindowsApps handling', { skip: !onWindows }, () => {
     assert.match(state.spawned[0], /WindowsApps/);
     assert.match(state.spawned[1], /tradingview-cli/);
   });
+  it('--no-kill never terminates instances on EACCES or CDP-less WindowsApps fallback',async()=>{
+    for(const spawnFailures of [['WindowsApps'],[]]){
+      const {deps,state}=msixDeps({spawnFailures,cdpBindsFor:['tradingview-cli']});
+      const result=await launch({kill_existing:false,_deps:deps});
+      assert.equal(result.success,true);assert.equal(result.msix_local_copy,true);assert.equal(state.spawned.length,2);assert.equal(state.killed,0);
+    }
+  });
 
   it('reuses an existing local copy without re-copying', async () => {
     const { deps, state } = msixDeps({ spawnFailures: ['WindowsApps'], cdpBindsFor: ['tradingview-cli'], copyExists: true });
