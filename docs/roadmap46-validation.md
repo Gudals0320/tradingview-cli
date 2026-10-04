@@ -70,3 +70,63 @@ are observations, not quota/feature guarantees. Native two-factor status returne
 type:null, classified off by the loaded status parser. Webhook is excluded by
 human scope change, so this is no longer an acceptance dependency. Server-alert
 and Deep capabilities still require their own actual evidence.
+
+## #47 clean acceptance receipts
+
+Reviewer independently approved Pine-only `f04e8c5b2d20a1d78dbc85e3b8e3dd7e7466b5a2`
+after isolated lint and 535/535 tests. Its source was exported with git archive,
+left unmodified, and used the matching shared ancestor node_modules. Live commands
+ran as the normal Desktop OS user, sharing the default protected LOCALAPPDATA
+workspace state; archive/private paths are omitted here. The root checkout's
+ongoing #48 changes were not used for these Pine-only claims.
+
+- Clean `bab0f6d`: explicit B detach to chart-only, new saved B2 document prepare
+  in one call (created/persistence_verified/opened/attached all true,
+  reused:false), then compile/report and completed-request reuse passed.
+- Clean `180d1e4`: wholly new layout C initially refused before document dispatch
+  with PINE_VIEWPORT_UNAVAILABLE, viewport 0x0. Existing-window activation via
+  Computer Use failed twice with access denied; browser getWindowForTarget was
+  unsupported. No launch/reload, privilege workaround or extra C resource was
+  used. The human restored the existing window. Exact C identity/generation and
+  viewport 2560x1358/visible were reread, and the same request's first actual
+  document dispatch completed mount/create/remote save/version/source/open/
+  attach in one call, followed by compile and verified report. Request stages and
+  private operation records preserve the earlier preflight refusals.
+- Exact existing C open on 180d1e4 was initially refused PINE_OPEN_BUSY because
+  the native version opener skipped an already mounted identical document. An
+  early progress message incorrectly said this had succeeded before its tool
+  result arrived; it was explicitly corrected. This refusal is not counted as a
+  success. The Pine-only f04e8c5 fix verifies ID/version/canonical source plus
+  unmodified/not-draft/not-pending and skips redundant native open.
+- Clean f04e8c5 exact existing open returned created:false,
+  persistence_verified/opened/attached:true, open_dispatch:not_needed and
+  reused_mounted:true, with the expected saved version/source hash and a new
+  attachment generation. Compile and report succeeded afterward.
+- Same clean C, chart-only: nonexistent exact document ID returned exit 1 /
+  PINE_DOCUMENT_NOT_FOUND. A's exact document, reserved by a different workspace,
+  returned exit 1 / WORKSPACE_RESOURCE_RESERVED before open. Neither produced a
+  saved document or interruption.
+- Same clean C: an explicitly created synthetic QA modified draft was detached
+  to chart-only. Prepare refused exit 1 / PINE_FOREIGN_DRAFT before save/open,
+  residual saved_document:null and recovery_required:false. Explicitly attaching
+  that same QA document allowed source readback: the draft was byte-identical
+  before and after refusal. The original synthetic fixture source was then
+  explicitly restored in its own workspace; compile/save/report succeeded. No
+  user draft was used or modified.
+
+Fixture coverage distinguishes known native pre-dispatch rejection plus an empty
+candidate delta from unknown creation. Unknown create is never resent; one new
+candidate still needs remote source proof. Zero/multiple candidates remain
+unknown. Native open response loss retains its stage and offers an explicit new
+exact-ID open request, or verifies an already completed identical mount. Entry
+fixtures cover reassign/bind/browser-proof continuity, residual resources,
+foreign draft, stale generation, duplicate prevention and explicit unknown-open
+recovery. Locale-sensitive save dialogs are avoided by the observed native
+no-overwrite saveNewScript API; existing save dialog failure/cancel regressions
+remain fixtures. No plan/paywall state was altered to manufacture a live failure.
+
+Dedicated saved documents/layouts A, B/B2 and C remain recorded privately for the
+remaining roadmap QA. New owned tabs remain available; previous five unowned QA
+tabs and user resources remain untouched. No document creation granted tab-close
+rights. #47 implementation/live acceptance is separate from eventual main merge
+and issue closure; the rest of #46 is still in progress.

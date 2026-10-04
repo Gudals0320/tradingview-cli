@@ -19,8 +19,26 @@ import { beginCompilation } from '../src/strategy-state.js';
 import { reportPage } from './fixtures/report-page.mjs';
 import { resourceLockStatus } from '../src/resource-lock.js';
 import { preparationPage } from './fixtures/preparation-page.mjs';
+import { propertiesPage } from './fixtures/properties-page.mjs';
 
 const CLI = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
+
+it('real typed Properties CLI rejects invalid patches and untyped bypass before mutation, then verifies one matching cycle',async t=>{
+  const page=propertiesPage();
+  const f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile();
+  const invalid=jsonError(await f.run(['--workspace','contract','strategy','set-properties','--values','{"commission_value":0.1,"slippage":-1}']),/slippage/,'INVALID_STRATEGY_PROPERTIES');assert.equal(invalid.details.mutation_dispatched,false);assert.equal(page.mutations(),0);
+  jsonError(await f.run(['--workspace','contract','indicator','set','owned-study','--inputs','{"prop_fee":0.1}']),/typed strategy Properties/,'STRATEGY_PROPERTY_COMMAND_REQUIRED');assert.equal(page.mutations(),0);
+  const unsupported=jsonResult(await f.run(['--workspace','contract','strategy','set-properties','--values','{"slippage":1}']),1);assert.equal(unsupported.code,'STRATEGY_PROPERTY_UNSUPPORTED');assert.equal(unsupported.mutation_dispatched,false);assert.equal(page.mutations(),0);
+  const changed=jsonResult(await f.run(['--workspace','contract','strategy','set-properties','--values','{"commission_value":0.2,"default_qty_value":2}']));assert.equal(changed.report_ready,true);assert.equal(changed.effective_properties.values.commission_value,0.2);assert.equal(changed.effective_properties.values.default_qty_value,2);assert.equal(changed.effective_properties.fingerprint.length,64);assert.equal(page.mutations(),1);
+  const read=jsonResult(await f.run(['--workspace','contract','strategy','properties']));assert.equal(read.effective_properties.fingerprint,changed.effective_properties.fingerprint);
+  const catalog=jsonResult(await f.run(['help','--json','strategy','set-properties'])).commands[0];assert.equal(catalog.invocation,'native');assert.deepEqual(catalog.locks,['layout','workspace','document']);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+});
+it('real Properties guard rejects an unrequested simultaneous native change instead of publishing success',async t=>{
+  const page=propertiesPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile();page.extraChange();
+  const result=jsonError(await f.run(['--workspace','contract','strategy','set-properties','--values','{"commission_value":0.2}']),/WORKSPACE_EXTERNAL_CHANGE/,'WORKSPACE_EXTERNAL_CHANGE');assert.equal(result.success,false);assert.equal(page.mutations(),1);assert.ok(workspaceStatus(ws.file,f.options).interrupted);
+});
 
 it('real Pine preparation reassigns then binds, retains browser proof, and resumes without duplicate creation',async t=>{
   const page=preparationPage();

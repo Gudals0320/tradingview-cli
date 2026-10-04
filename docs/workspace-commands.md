@@ -22,3 +22,8 @@ Pine new/open and bound layout switch reject resource replacement. Attach a
 dedicated document or open/select another workspace. `stream ohlcv` reads prepared
 owned panes only. These restrictions prevent active-tab fallback and form the
 migration contract. See [workspaces.md](workspaces.md) for the full workflow.
+
+`strategy properties` is a pure observation. `strategy set-properties` owns
+layout/workspace/document and applies a prevalidated complete typed patch via
+native inputs, then verifies readback and recalculation. Strategy Properties
+cannot be changed through the untyped indicator input interface.

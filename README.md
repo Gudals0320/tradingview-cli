@@ -93,6 +93,11 @@ tv workspace show research-a
 
 ## Pine과 백테스트
 
+실제 적용 전략 Properties는 `strategy properties`로 읽습니다. `strategy set-properties
+--values JSON`은 전체 patch를 타입·단위·native 옵션으로 먼저 검사하고 한 번 적용한
+뒤 readback과 해당 계산 완료를 확인합니다. `indicator set`은 strategy_props 내부 ID
+변경을 거부합니다. [필드·통화·호환성 계약](docs/strategy-properties.md)을 확인하세요.
+
 Pine 문서는 기본 생성 조건이 아닙니다. chart-only workspace에서 명시적으로 새 저장
 문서를 준비하거나 정확한 저장 ID를 엽니다. 현재 generation과 재호출에 사용할 고정
 request ID가 필요합니다. `--mount`는 에디터만 열며 기존 수정 draft를 저장/폐기하지

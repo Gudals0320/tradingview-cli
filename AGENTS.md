@@ -81,6 +81,8 @@ tv --workspace agent-research pine set --file strategy.pine
 tv --workspace agent-research pine compile --save
 tv --workspace agent-research pine errors
 tv --workspace agent-research data strategy
+tv --workspace agent-research strategy properties
+tv --workspace agent-research strategy set-properties --values '{"commission_type":"percent","commission_value":0.1}' --timeout 30000
 tv --workspace agent-research data ledger --offset 0 --limit 100
 ```
 

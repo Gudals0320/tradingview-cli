@@ -178,6 +178,11 @@ export async function setInputs({ entity_id, inputs: inputsRaw, timeout = 30000,
       if (!study) return { error: 'Study not found: ' + ${safeString(entity_id)} };
       var currentInputs = study.getInputValues();
       var overrides = ${inputsJson};
+      const nativeModel=window.TradingViewApi?._activeChartWidgetWV?.value()?._chartWidget?.model?.();
+      const nativeSource=nativeModel?.model?.().dataSources?.().find(source=>source.id?.()===${safeString(entity_id)});
+      const propertyIds=(nativeSource?.metaInfo?.()?.inputs||[]).filter(input=>input.groupId==='strategy_props').map(input=>input.id);
+      const propertyChanges=Object.keys(overrides).filter(id=>propertyIds.includes(id));
+      if(propertyChanges.length)return {error:'Use strategy set-properties for typed strategy Properties; indicator set accepts ordinary Pine inputs only.',code:'STRATEGY_PROPERTY_COMMAND_REQUIRED',details:{input_ids:propertyChanges,mutation_dispatched:false}};
       var ids = new Set(currentInputs.map(input => input.id));
       var unknown = Object.keys(overrides).filter(key => !ids.has(key));
       if (unknown.length) return { error: 'Unknown input ids: ' + unknown.join(', '), code: 'UNKNOWN_INPUT' };

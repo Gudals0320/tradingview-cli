@@ -1,5 +1,6 @@
 import { requireFinite, requireInteger } from '../connection.js';
 import { alertCondition } from '../core/alerts.js';
+import { validateStrategyProperties } from '../strategy-properties.js';
 
 // A command without an entry accepts no positional arguments.
 export const POSITIONALS = new Map([
@@ -24,6 +25,7 @@ export const POSITIONALS = new Map([
 ]);
 
 export function validateArguments(command, values, positionals) {
+  if(command==='strategy set-properties')validateStrategyProperties(JSON.parse(values.values||'null'));
   const [min, max] = POSITIONALS.get(command) || [0, 0];
   if (positionals.length < min || positionals.length > max) {
     throw new Error(`${command} accepts ${min === max ? min : `${min} to ${max}`} positional arguments; received ${positionals.length}.`);

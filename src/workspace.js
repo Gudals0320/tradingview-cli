@@ -281,6 +281,7 @@ async function permitFor(command, values, positionals) {
     if (['pineId', 'pineVersion', 'text'].some(key => Object.hasOwn(inputs, key))) throw workspaceError('WORKSPACE_INPUT_FORBIDDEN', 'Compiled document identity inputs cannot be edited.');
     return { inputs,study_id:positionals[0] };
   }
+  if(command==='strategy set-properties')return {properties:JSON.parse(values.values)};
   if(command==='indicator add')return {add_study:true};
   if(command==='indicator remove')return {remove_study:positionals[0]};
   if(command==='pane focus')return {pane_index:Number(positionals[0])};
@@ -339,7 +340,7 @@ export async function runWorkspace(file, command, values, positionals, handler, 
       const before = await inspect(client, pageCall('guardWorkspacePage', owner(workspace), { observe: true }));
       if(command==='screenshot'&&values.method!=='api'&&(before.viewport?.width===0||before.viewport?.height===0))throw workspaceError('DESKTOP_VIEWPORT_UNAVAILABLE','Restore the existing Desktop window before CDP capture; the owned viewport is zero.');
       if (workspace.pine && command === 'indicator get' && positionals[0] !== before.studies[0]?.id) throw workspaceError('WORKSPACE_STUDY_MISMATCH', 'Read only the owned study.');
-      if (['data strategy', 'data trades', 'data ledger', 'data equity'].includes(command) && values['strategy-id'] && values['strategy-id'] !== before.studies[0]?.id) {
+      if (['data strategy', 'data trades', 'data ledger', 'data equity','strategy properties','strategy set-properties'].includes(command) && values['strategy-id'] && values['strategy-id'] !== before.studies[0]?.id) {
         const requested = values['strategy-id'];
         const present = await inspect(client, pageCall('workspaceStrategyPresent', requested));
         assertObservationAdmission(getStatus(file), reference, admission);
@@ -356,7 +357,7 @@ export async function runWorkspace(file, command, values, positionals, handler, 
       checkAdmission();
       const stable = sourceHash(before.source) === sourceHash(after.source)
         && JSON.stringify(before.context) === JSON.stringify(after.context)
-        && JSON.stringify(before.studies.map(study => [study.id, study.inputs])) === JSON.stringify(after.studies.map(study => [study.id, study.inputs]));
+        && JSON.stringify(before.studies.map(study => [study.id, study.inputs,study.properties_fingerprint])) === JSON.stringify(after.studies.map(study => [study.id, study.inputs,study.properties_fingerprint]));
       if (!stable && command !== 'workspace wait') throw workspaceError('WORKSPACE_OBSERVATION_CHANGED', 'Source, inputs or chart context changed during this observation; retry after the active operation settles.');
       let reportEpoch;
       if (['data strategy', 'data trades', 'data ledger', 'data equity'].includes(command) && result?.success) {
@@ -383,7 +384,7 @@ export async function runWorkspace(file, command, values, positionals, handler, 
         ...(reportEpoch?{calculation:{phase:reportEpoch.phase,accepted_cycle:reportEpoch.accepted_cycle,cycle:reportEpoch.calculation?.cycle,events:reportEpoch.calculation?.events,completed:reportEpoch.calculation?.completed?{cycle:reportEpoch.calculation.completed.cycle,key_hash:sourceHash(reportEpoch.calculation.completed.key)}:null}}:{}),
         source_hash: sourceHash(after.source), source_scope: 'editor', persisted_applied_source_verified: persistedApplied,
         study: study ? { id: study.id, status: study.status, compiled_hash: sourceHash(JSON.stringify(study.inputs)) } : null,
-        context: after.context, page_generation: workspace.binding.nonce,
+        effective_properties_fingerprint:study?.properties_fingerprint?sourceHash(study.properties_fingerprint):null,context: after.context, page_generation: workspace.binding.nonce,
         changed_during_read: !stable } };
       }
     });
@@ -443,13 +444,13 @@ export async function runWorkspace(file, command, values, positionals, handler, 
       lease.saveBinding({ ...workspace.binding, snapshot: after.snapshot, source_proof });
       noteWorkspaceState(file,after.snapshot.calculating?'calculating':'idle');
       const study = after.snapshot.studies[0];
-      const calculation = after.calculation ? { ...after.calculation, inputs_fingerprint: undefined,
+      const calculation = after.calculation ? { ...after.calculation, inputs_fingerprint: undefined,effective_properties_fingerprint:after.calculation.effective_properties_fingerprint?sourceHash(after.calculation.effective_properties_fingerprint):null,
         inputs_hash: after.calculation.inputs_fingerprint ? sourceHash(after.calculation.inputs_fingerprint) : null,
         completed: after.calculation.completed ? { cycle: after.calculation.completed.cycle, key_hash: sourceHash(after.calculation.completed.key) } : null } : null;
       const provenance = { workspace_id: workspace.id, operation_id: lease.operation, target: workspace.target, layout: workspace.layout, pine: workspace.pine,
         locks: { waited_ms: resourceLease.waited_ms, waited_for:resourceLease.waited_for, resources: resourceLease.resources, command: resourceLease.command },
         page_generation: workspace.binding.nonce, source_hash: sourceHash(after.snapshot.source), context: after.snapshot.context,
-        study: study ? { ...study, inputs: study.inputs.filter(input => input.id !== 'text'), compiled_hash: sourceHash(JSON.stringify(study.inputs)) } : null, calculation, native_events: after.events };
+        effective_properties_fingerprint:study?.properties_fingerprint?sourceHash(study.properties_fingerprint):null,study: study ? { ...study,properties_fingerprint:study.properties_fingerprint?sourceHash(study.properties_fingerprint):null, inputs: study.inputs.filter(input => input.id !== 'text'), compiled_hash: sourceHash(JSON.stringify(study.inputs)) } : null, calculation, native_events: after.events };
       const output = { ...result, provenance };
       lease.checkpoint({ phase: success ? 'complete' : 'failed', command, before, after: after.snapshot, provenance });
       completedResult=output;lease.finish({ success, result: output, interrupted: false }); return output;

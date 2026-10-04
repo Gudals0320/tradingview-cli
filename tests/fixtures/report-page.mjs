@@ -38,6 +38,7 @@ export function reportPage() {
     replace(next) { call('startWorkspacePage', owner, 'fixture-remove', { remove_study: id }); sources = sources.filter(item => item !== source);
       call('finishWorkspacePage', owner, 'fixture-remove'); id = next; },
     pending() { type = 1; statuses.fire(); },
+    completeInputs() { type=2;report={...report};reports.fire(); },
     runtimeError() { type = 3; report = {}; },
     zero() { report = { ...report, performance: { all: { netProfit: 0, totalTrades: 0, numberOfWiningTrades: 0, numberOfLosingTrades: 0 } }, trades: [] }; },
   };

@@ -7,6 +7,7 @@ import { nativeCheckpoint, nativeQuiescent } from '../session.js';
 import { waitForChartReady } from '../wait.js';
 import { reportExpression, STRATEGY_PAGE_CODE } from '../strategy-state.js';
 import { createHash } from 'node:crypto';
+import { projectStrategyProperties } from '../strategy-properties.js';
 
 const MAX_OHLCV_BARS = 500;
 const MAX_TRADES = 20;
@@ -192,7 +193,9 @@ export async function getIndicator({ entity_id }) {
 
 export async function getStrategyResults(options = {}) {
   const inspect = options._deps?.evaluate || evaluate;
-  return inspect(reportExpression({ strategy_id: options.strategy_id, strategy: options.strategy }));
+  const result=await inspect(reportExpression({ strategy_id: options.strategy_id, strategy: options.strategy }));
+  if(result.effective_properties)result.effective_properties=projectStrategyProperties(result.effective_properties);
+  return result;
 }
 
 export async function getTrades({ max_trades = 20, strategy_id, _deps } = {}) {
@@ -233,12 +236,12 @@ export async function getTradeLedger({ offset = 0, limit = 100, strategy_id, rep
       entry_bar: trade.e?.b ?? null, exit_bar: trade.x?.b ?? null, raw: trade }));
     return { success: true, strategy_id: summary.strategy_id, currency: summary.currency, total_trades: ledger.length,
       compilation_token:summary.compilation_token,source_hash:summary.source_hash,strategy_inputs:summary.strategy_inputs,
-      context:summary.context,backtest_window:summary.backtest_window,loaded_window:summary.loaded_window,trade_window:summary.trade_window,
+      context:summary.context,effective_properties:summary.effective_properties,backtest_window:summary.backtest_window,loaded_window:summary.loaded_window,trade_window:summary.trade_window,
       record_kind:'trade_ledger',order:'native_ordinal_ascending',
       units:{time_fields:'ISO-8601 UTC',raw_time:'native tm; magnitude < 1e11 interpreted as seconds, otherwise milliseconds'},
       _snapshot:JSON.stringify({strategy_id:summary.strategy_id,token:summary.compilation_token,source_hash:summary.source_hash,
         inputs:summary.strategy_inputs,symbol:summary.context.symbol,resolution:summary.context.resolution,chart_type:summary.context.chart_type,
-        performance:item.report.performance,settings:item.report.settings,trades:ledger}),
+        effective_properties:summary.effective_properties,performance:item.report.performance,settings:item.report.settings,trades:ledger}),
       offset: ${offset}, limit: ${limit}, trades, has_more: ${offset + limit} < ledger.length,
       next_offset: ${offset + limit} < ledger.length ? ${offset} + trades.length : null };
   })()`);
@@ -248,7 +251,7 @@ export async function getTradeLedger({ offset = 0, limit = 100, strategy_id, rep
   if (report_revision && report_revision !== revision) return { success: false, code: 'REPORT_CHANGED',
     error: 'Strategy report changed during pagination; restart collection at offset 0.',
     expected_revision: report_revision, report_revision: revision, strategy_id: page.strategy_id };
-  return { ...page, report_revision: revision };
+  return { ...page, ...(page.effective_properties?{effective_properties:projectStrategyProperties(page.effective_properties)}:{}),report_revision: revision };
 }
 
 export async function getEquity({ strategy_id, _deps } = {}) {

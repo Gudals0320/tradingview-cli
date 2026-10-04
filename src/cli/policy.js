@@ -1,9 +1,11 @@
 // Every adapter is classified explicitly; additions fail the policy coverage test.
 export const WORKSPACE_COMMANDS = new Set(['state', 'symbol', 'timeframe', 'type', 'info',
+  'strategy properties','strategy set-properties',
   'pine get', 'pine set', 'pine compile', 'pine raw-compile', 'pine save', 'pine errors', 'pine console',
   'indicator get', 'indicator set', 'data strategy', 'data trades', 'data ledger', 'data equity', 'workspace wait',
   'ohlcv', 'values', 'quote', 'data lines', 'data labels', 'data tables', 'data boxes']);
 export const PURE_READ_COMMANDS = new Set(['status', 'state', 'info', 'ohlcv', 'values', 'data lines', 'data labels',
+  'strategy properties',
   'data tables', 'data boxes', 'data strategy', 'data trades', 'data ledger', 'data equity', 'data depth',
   'data indicator', 'indicator get', 'pine get', 'pine errors', 'pine console', 'pine list', 'alert list',
   'watchlist get', 'watchlist raw', 'tab list', 'layout list', 'pane list', 'draw list', 'draw get', 'replay status', 'discover', 'ui-state', 'ui find', 'workspace wait',
@@ -38,6 +40,7 @@ export const ADMIN_COMMANDS = new Set(['workspace init', 'workspace recover', 'w
 // Only these commands dispatch native changes which may outlive the CLI.
 // Pure collection and observation never create a recovery journal.
 export const NATIVE_COMMANDS = new Set(['launch', 'range', 'scroll', 'pine set', 'pine compile', 'pine raw-compile',
+  'strategy set-properties',
   'pine save', 'pine new', 'pine open', 'indicator set', 'indicator add', 'indicator remove', 'indicator toggle',
   'layout switch', 'pane layout', 'pane focus', 'pane symbol', 'tab new', 'tab close', 'tab switch',
   'alert create', 'alert delete', 'draw shape', 'draw remove', 'draw clear', 'replay start', 'replay step',
@@ -94,6 +97,7 @@ WORKSPACE_READS.add('workspace wait');WORKSPACE_READS.add('stream ohlcv');
 for(const name of ['symbol','timeframe','type','range','screenshot'])WORKSPACE_READS.add(name);
 // Results have their own revision/source validation; do not open panels while observing.
 export const PINE_COMMANDS = new Set(['pine get', 'pine set', 'pine compile', 'pine raw-compile', 'pine save', 'pine errors', 'pine console', 'pine new', 'pine open',
+  'strategy properties','strategy set-properties',
   'data strategy', 'data trades', 'data ledger', 'data equity', 'workspace wait']);
 export const FOREGROUND_COMMANDS = new Set([...APP_COMMANDS].filter(name => name.startsWith('ui ') || ['tab close', 'tab switch', 'layout switch'].includes(name)));
 export function workspaceRequired(command) { return commandScope(command) === 'workspace' || FOREGROUND_COMMANDS.has(command) || command === 'stream ohlcv' || command.startsWith('watchlist ') || command.startsWith('alert '); }
@@ -105,6 +109,6 @@ export function resourceKinds(command, values = {}, positionals = []) {
   if (scope === 'app-shared' || ['layout create', 'layout open', 'workspace reconnect'].includes(command)) kinds.push('app');
   if(command==='screenshot'&&values.method==='api')kinds.push('app');
   if (workspaceRequired(command)) kinds.push('layout', 'workspace');
-  if (['pine save', 'pine compile', 'pine raw-compile', 'pine new', 'pine open'].includes(command)) kinds.push('document');
+  if (['pine save', 'pine compile', 'pine raw-compile', 'pine new', 'pine open','strategy set-properties'].includes(command)) kinds.push('document');
   return kinds;
 }

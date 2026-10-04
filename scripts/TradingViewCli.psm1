@@ -1,6 +1,7 @@
 # Selection belongs to this PowerShell process, never to User/Machine environment.
 # Document preparation uses an explicit name, stable request ID and current generation:
 # tv workspace pine-prepare research-a --create 'Research A Strategy' --file strategy.pine --request-id research-a-document --generation EXACT_GENERATION --mount
+# tv --workspace research-a strategy set-properties --values '{"commission_type":"percent","commission_value":0.1}' --timeout 30000
 $script:TvModulePath = $PSCommandPath
 function Invoke-TvApplication {
     param([string[]]$Arguments, [object[]]$InputValues = @())

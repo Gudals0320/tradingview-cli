@@ -3,6 +3,7 @@ import { readChartContext, normalizeTimeframe, symbolMatches } from './chart-con
 import { layoutConfirmationRoot, layoutConfirmationVisible, layoutOperationPending } from './layout-state.js';
 import { trackNativeOperation } from './native-operation.js';
 import { canonicalPineSource } from './pine-source.js';
+import { effectiveStrategyProperties,strategyPropertyInputPatch,PROPERTIES_PAGE_CODE } from './strategy-properties.js';
 
 /** Serialized page functions have no captured Node state. */
 export function readWorkspacePage(window, document, options = {}) {
@@ -21,7 +22,7 @@ export function readWorkspacePage(window, document, options = {}) {
     const inputs = chart.getStudyById(source.id()).getInputValues();
     let status = source.status?.(); status = unwrap(status);
     return [{ id: source.id(), pine: inputs.find(input => input.id === 'pineId')?.value || null,
-      strategy: Boolean(info.isTVScriptStrategy || info.is_strategy), inputs: JSON.parse(JSON.stringify(inputs)), status: status?.type }];
+      strategy: Boolean(info.isTVScriptStrategy || info.is_strategy), inputs: JSON.parse(JSON.stringify(inputs)), status: status?.type,properties_fingerprint:effectiveStrategyProperties(window,source.id())?.fingerprint??null }];
   }).filter(study => !includePine || !identity?.scriptIdPart || study.pine === identity.scriptIdPart);
   const context = readChartContext(window);
   const pending_action = Object.keys(controller?._editorStore?.getStore?.().getState()?.ui?.pendingRequests || {}).length > 0
@@ -140,9 +141,14 @@ export function guardWorkspacePage(window, document, owner, { observe = false } 
     return actual;
   }
   const old = before.studies[0], current = actual.studies[0];
-  if (JSON.stringify(old?.inputs) !== JSON.stringify(current?.inputs) || old?.id !== current?.id || actual.version !== before.version) {
+  if (JSON.stringify(old?.inputs) !== JSON.stringify(current?.inputs) || old?.id !== current?.id || actual.version !== before.version || old?.properties_fingerprint!==current?.properties_fingerprint) {
     if (permit.compile) {
       if (old && current && old.id !== current.id) fail();
+    } else if (permit.properties && old && current && old.id===current.id) {
+      const patch=strategyPropertyInputPatch(window,current.id,permit.properties).inputs;
+      const expected=old.inputs.map(input=>Object.hasOwn(patch,input.id)?{...input,value:patch[input.id]}:input);
+      if(JSON.stringify(current.inputs)!==JSON.stringify(expected))fail();
+      delete permit.properties;
     } else if (permit.inputs && old && current && old.id === current.id) {
       const expected = old.inputs.map(input => Object.hasOwn(permit.inputs, input.id) ? { ...input, value: permit.inputs[input.id] } : input);
       if (JSON.stringify(current.inputs) !== JSON.stringify(expected)) fail();
@@ -211,8 +217,8 @@ export function finishWorkspacePage(window, document, owner, operation, {allowIn
   return { snapshot, events: bound.events, calculation: epoch ? { token: epoch.token, source_hash: epoch.source_hash, phase: epoch.phase,
     strategy_id: epoch.strategy_id, accepted_cycle: epoch.accepted_cycle, cycle: epoch.calculation?.cycle,
     events: epoch.calculation?.events, completed: epoch.calculation?.completed,
-    report_verified: epoch.report_verified, inputs_fingerprint: epoch.inputs_fingerprint } : null };
+    report_verified: epoch.report_verified, inputs_fingerprint: epoch.inputs_fingerprint,effective_properties_fingerprint:epoch.effective_properties_fingerprint } : null };
 }
 
-export const WORKSPACE_PAGE_CODE = [canonicalPineSource, findPineEditor, findPineController, readChartContext, normalizeTimeframe, symbolMatches, layoutConfirmationRoot, layoutConfirmationVisible, layoutOperationPending, trackNativeOperation,
+export const WORKSPACE_PAGE_CODE = PROPERTIES_PAGE_CODE+'\n'+[canonicalPineSource, findPineEditor, findPineController, readChartContext, normalizeTimeframe, symbolMatches, layoutConfirmationRoot, layoutConfirmationVisible, layoutOperationPending, trackNativeOperation,
   readWorkspacePage, bindWorkspacePage, restoreWorkspaceDocument, guardWorkspacePage, startWorkspacePage, workspaceStrategyPresent, finishWorkspacePage].map(fn => fn.toString()).join('\n');

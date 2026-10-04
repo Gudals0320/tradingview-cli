@@ -63,6 +63,13 @@ an unknown native operation.
 | PINE_OPEN_BUSY | Native exact open was not admitted during another open transition. Wait for the editor to settle, then resume the same request; no new document is created. |
 | PINE_EDITOR_SETTLE_TIMEOUT | Initial mount/restore exceeded its finite wait. No document create/open was dispatched. Wait/inspect, then resume the same request. |
 | WORKSPACE_PINE_ALREADY_BOUND | Detach explicitly before preparing a different document; bound resource replacement is not implicit. |
+| INVALID_STRATEGY_PROPERTIES | Entire patch is rejected before dispatch for unknown fields, types, units, enum options or bounds. |
+| STRATEGY_PROPERTY_UNSUPPORTED | No verified native mapping/setter exists; use an explicit Pine source setting, never implicit replacement. |
+| STRATEGY_PROPERTY_COMMAND_REQUIRED | indicator set cannot bypass typed Properties validation; use strategy set-properties. |
+| STRATEGY_PROPERTIES_APPLY_FAILED | Inspect requested versus actual values; native setter atomicity is not guaranteed. Reconcile any exact interrupted workspace before replay. |
+| STRATEGY_PROPERTIES_CHANGED | Complete actual readback differs from requested state. Preserve it; inspect external/partial changes instead of adopting a report. |
+| STRATEGY_PROPERTIES_REPORT_FAILED | Values may be applied but the matching calculation failed. Inspect actual values and native diagnostics. |
+| STRATEGY_PROPERTIES_TIMEOUT | Finite wait expired after dispatch; not cancellation. Inspect/wait for native completion before another change. |
 | PINE_COMPILE_ERROR | Fix diagnostic locations and compile requested source. |
 | REPORT_UNVERIFIED / REPORT_INVALIDATED | Compile owned source or perform verified input change; never adopt prior metrics. |
 | REPORT_PENDING / REPORT_TIMEOUT / STRATEGY_CALCULATION_PENDING | Wait for existing calculation; normal waiting does not imply cancellation/manual recovery. |
