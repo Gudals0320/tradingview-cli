@@ -75,6 +75,16 @@ it('wait outer publication retries cannot extend the original deadline under a p
     assert.equal(workspaceStatus(f.workspace.file).interrupted, null);
   } finally { f.cleanup(); }
 });
+it('status resamples normal completion during a liveness probe instead of declaring stale owner dead', () => {
+  const f = fixture();
+  try {
+    const lease = acquireWorkspace(f.workspace.file); let probes = 0;
+    const status = workspaceStatus(f.workspace.file, { _deps: { ownerAlive: () => { probes++; lease.finish({ success: true, result: { success: true } }); return false; } } });
+    assert.equal(probes, 1); assert.equal(status.operation, null); assert.equal(status.owner_alive, false);
+    assert.equal(status.result_operation_id, lease.operation); assert.equal(status.result_committed, true);
+    assert.doesNotThrow(() => assertObservationAdmission(status, 'worker'));
+  } finally { f.cleanup(); }
+});
 
 it('queued quote builds its restore permission after admission from the latest page context', async () => {
   const f = fixture(); let releaseWait, waiting;

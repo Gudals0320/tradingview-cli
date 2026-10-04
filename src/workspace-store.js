@@ -226,7 +226,20 @@ export function acquireWorkspace(file, { recover = false, recoveryOperation, ...
 }
 
 export function workspaceStatus(file, options = {}) {
-  const workspace = loadWorkspace(file, options), row = match(readReservations(options), workspace);
+  let workspace, row, aliveOwner = false, coherent = false;
+  const identity = (value, entry) => JSON.stringify([value.target, value.layout, value.pine, value.binding?.nonce, value.binding?.browser,
+    entry.operation?.id, entry.operation?.pid, entry.operation?.process_started_at, entry.operation?.command, entry.operation?.started_at,
+    entry.interrupted?.operation_id, entry.result_path]);
+  // Platform liveness queries can outlive a normal lease's final commit/exit.
+  // Never combine that late death proof with a stale operation snapshot.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    workspace = loadWorkspace(file, options); row = match(readReservations(options), workspace);
+    const before = identity(workspace, row);
+    aliveOwner = row.operation ? (options._deps?.ownerAlive || ownerAlive)(row.operation) : false;
+    const current = loadWorkspace(file, options), currentRow = match(readReservations(options), current);
+    if (before === identity(current, currentRow)) { workspace = current; row = currentRow; coherent = true; break; }
+  }
+  if (!coherent) throw Object.assign(workspaceError('WORKSPACE_OBSERVATION_CHANGED', 'Ownership metadata changed during repeated liveness probes; retry after it settles.'), { details: { reason: 'metadata_unstable', records_preserved: true } });
   const lastResult = row.result_path && existsSync(row.result_path) ? read(row.result_path) : null;
   const quotedFile = `'${workspace.file.replace(/'/g, "''")}'`;
   const reference = options.name ? `'${options.name.replace(/'/g, "''")}'` : quotedFile;
@@ -235,10 +248,6 @@ export function workspaceStatus(file, options = {}) {
     ...(canReconnect ? [`tv layout open ${workspace.layout}`, `tv workspace reconnect ${reference} --generation ${workspace.binding.nonce}`] : []),
     `tv workspace reset ${reference} --id ${workspace.id}${row.interrupted ? ` --operation ${row.interrupted.operation_id}` : ''}`,
   ] : [...(canReconnect ? [`tv layout open ${workspace.layout}`] : []), `tv workspace abandon --file ${quotedFile} --id ${workspace.id}${row.interrupted ? ` --operation ${row.interrupted.operation_id}` : ''}`];
-  let aliveOwner = false;
-  if (row.operation) {
-    aliveOwner = ownerAlive(row.operation);
-  }
   const nextCommands = row.operation
     ? aliveOwner ? [] : [`tv --workspace ${reference} workspace interrupt --operation ${row.operation.id}`]
     : row.connection_state === 'target_lost' ? lostCommands
