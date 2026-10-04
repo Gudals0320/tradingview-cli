@@ -23,6 +23,20 @@ function fixture() {
   return { resource, window, chart, inputs, editor, controller, call, owner: { ...resource, nonce: 'nonce' } };
 }
 describe('atomic workspace page guards', () => {
+  it('quote permission derives restore identity from the guarded execution baseline', () => {
+    const f = fixture();
+    f.chart.symbolExt = () => ({ full_name: f.chart.symbol() });
+    f.call('startWorkspacePage', f.owner, 'symbol', { symbol: 'BINANCE:SOLUSDT' });
+    f.chart.symbol = () => 'BINANCE:SOLUSDT';
+    f.call('finishWorkspacePage', f.owner, 'symbol');
+    f.call('startWorkspacePage', f.owner, 'quote', { quote_symbol: 'BITSTAMP:BTCUSD' });
+    assert.deepEqual(Array.from(f.window.__tvCliWorkspace.permit.symbols), ['BITSTAMP:BTCUSD', 'BINANCE:SOLUSDT']);
+    f.chart.symbol = () => 'BITSTAMP:BTCUSD'; f.call('guardWorkspacePage', f.owner);
+    f.chart.symbol = () => 'BINANCE:SOLUSDT'; f.call('finishWorkspacePage', f.owner, 'quote');
+    f.call('startWorkspacePage', f.owner, 'external', { quote_symbol: 'BITSTAMP:BTCUSD' });
+    f.chart.symbol = () => 'BINANCE:ETHUSDT';
+    assert.throws(() => f.call('guardWorkspacePage', f.owner), /EXTERNAL_CHANGE/);
+  });
   it('a draft identity cannot masquerade as a saved Pine resource',()=>{
     const f=fixture();f.controller.isDraft=()=>true;
     assert.throws(()=>f.call('bindWorkspacePage',f.resource,'new'),/WORKSPACE_SAVED_DOCUMENT_REQUIRED/);

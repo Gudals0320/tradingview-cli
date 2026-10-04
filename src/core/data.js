@@ -419,7 +419,7 @@ export async function getStudyValues({ _deps } = {}) {
           var id = null;
           try { id = s.id ? s.id() : null; } catch(e) {}
           var inputs = null;
-          try { var ip = s.inputs ? s.inputs() : null; if (ip && Object.keys(ip).length) inputs = Object.fromEntries(Object.entries(ip).filter(([key,value]) => key !== 'text' && !(typeof value === 'string' && value.length > 500))); } catch(e) {}
+          try { var ip = s.inputs ? s.inputs() : null; if (ip && Object.keys(ip).length) inputs = Object.fromEntries(Object.entries(ip).filter(([key]) => key !== 'text')); } catch(e) {}
           if (Object.keys(values).length > 0) results.push({ id: id, name: name, inputs: inputs, values: values });
         } catch(e) {
           var studyId = null; try { studyId = s.id?.() ?? null; } catch {}

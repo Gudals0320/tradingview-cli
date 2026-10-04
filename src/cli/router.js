@@ -11,6 +11,7 @@ import { resolveWorkspace } from '../workspace-registry.js';
 import { acquireResources } from '../resource-lock.js';
 import { resolve } from 'node:path';
 import { validateArguments } from './arguments.js';
+import { projectOutput } from './output.js';
 
 /** @type {Map<string, { description: string, options?: object, handler: Function, subcommands?: Map<string, object> }>} */
 const commands = new Map();
@@ -218,7 +219,7 @@ async function execute(handler, values, positionals, offline = false, readOnly =
   }
   if (result !== undefined) {
     if (cleanupWarnings.length) result = { ...result, cleanup_warnings: cleanupWarnings };
-    console.log(JSON.stringify(result, null, command === 'help' && values.brief ? undefined : 2));
+    console.log(JSON.stringify(projectOutput(result), null, command === 'help' && values.brief ? undefined : 2));
   } else if (cleanupWarnings.length) console.error(JSON.stringify({ cleanup_warnings: cleanupWarnings }));
   process.exitCode = result?.success === false || result?.compiled === false || result?.has_errors === true ? 1 : 0;
 }
@@ -228,10 +229,10 @@ function handleError(err) {
   // Connection failures get exit code 2
   if (['CDP_CONNECTION', 'WORKSPACE_DISCONNECTED', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND'].includes(err.code)
     || ['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND'].includes(err.cause?.code)) {
-    console.error(JSON.stringify({ success: false, error: message,...(err.code?{code:err.code}:{}),...(err.details?{details:err.details}:{}) }, null, 2));
+    console.error(JSON.stringify(projectOutput({ success: false, error: message,...(err.code?{code:err.code}:{}),...(err.details?{details:err.details}:{}) }), null, 2));
     process.exitCode = 2;
     return;
   }
-  console.error(JSON.stringify({ success: false, error: message,...(err.code?{code:err.code}:{}),...(err.details?{details:err.details}:{}) }, null, 2));
+  console.error(JSON.stringify(projectOutput({ success: false, error: message,...(err.code?{code:err.code}:{}),...(err.details?{details:err.details}:{}) }), null, 2));
   process.exitCode = 1;
 }

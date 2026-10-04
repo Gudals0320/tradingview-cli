@@ -39,6 +39,22 @@ function fixture() {
 }
 
 describe('Strategy report identity and metadata', () => {
+  it('source setter accepts Monaco LF/CRLF/mixed/lone CR normalization and rejects all other edits', async () => {
+    for (const source of ['a\nb\n', 'a\r\nb\r\n', 'a\nb\r\n', 'a\rb\r']) {
+      let draft = 'old';
+      const editor = { getValue: () => draft, setValue: value => { draft = canonicalPineSource(value); }, getModel: () => ({}) };
+      const document = { querySelectorAll: () => [{ offsetParent: {}, __reactFiber$fixture: { memoizedProps: { value: { _editorRef: { current: { _editor: editor, _monaco: { editor: {} } } } } } } }] };
+      const window = {};
+      const evaluate = expression => expression.startsWith('(() => {const m=') ? true : runInNewContext(expression, { window, document });
+      const result = await setSource({ source, _deps: { evaluate } });
+      assert.equal(result.success, true); assert.equal(draft, 'a\nb\n');
+      assert.equal(result.applied_hash, sourceHash(draft));
+      for (const alter of [s => s + ' ', s => ' ' + s, s => s.replace('b', '\tb'), s => '\uFEFF' + s, s => s.trim()]) {
+        editor.setValue = value => { draft = alter(canonicalPineSource(value)); };
+        await assert.rejects(setSource({ source, _deps: { evaluate } }), e => e.code === 'PINE_SOURCE_MISMATCH' && e.details.editor_changed && e.details.results_invalidated);
+      }
+    }
+  });
   it('changed source injection invalidates cached results even if compilation is refused before dispatch', async () => {
     const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
     assert.equal(readStrategyReport(f.window).success, true);
@@ -206,11 +222,11 @@ describe('Strategy report identity and metadata', () => {
     f.status(1);f.status(2);f.tick();
     assert.equal(compilationState(f.window).phase,'ready');
   });
-  it('canonicalizes physical CRLF only without changing source contents or trailing newlines', () => {
+  it('canonicalizes Monaco physical EOLs without changing other contents or trailing newlines', () => {
     const lf='strategy("\\r\\n")\n// 한글\n';
     assert.equal(sourceHash(canonicalPineSource(lf.replace(/\n/g,'\r\n'))),sourceHash(lf));
     assert.notEqual(sourceHash(canonicalPineSource(lf+'\n')),sourceHash(lf));
-    assert.equal(canonicalPineSource('a\rb'),'a\rb');
+    assert.equal(canonicalPineSource('a\rb'),'a\nb');
   });
   it('keeps verified per-study monitoring while another document is compiled', () => {
     const f=fixture();beginCompilation(f.window,'run','hash',true);f.compile();f.update();

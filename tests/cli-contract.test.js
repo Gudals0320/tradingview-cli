@@ -10,36 +10,44 @@ import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import CDP from 'chrome-remote-interface';
 import { acquireSession, sessionPaths, sessionStatus } from '../src/session.js';
-import { reserveWorkspace, acquireWorkspace } from '../src/workspace-store.js';
+import { reserveWorkspace, acquireWorkspace, noteWorkspaceState, workspaceStatus, loadWorkspace } from '../src/workspace-store.js';
 import { registerWorkspaceName } from '../src/workspace-registry.js';
 import { sourceHash } from '../src/session.js';
+import { runInNewContext } from 'node:vm';
+import { WORKSPACE_PAGE_CODE } from '../src/workspace-page.js';
+import { beginCompilation } from '../src/strategy-state.js';
 
 const CLI = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
 
 // Exercise the real entry point, parser, router and filesystem ownership code.
 // An isolated HTTP endpoint counts unexpected Desktop access; no real Desktop,
 // external API, user target, or user workspace is used by these tests.
-async function fixture(t, pageResult) {
+async function fixture(t, pageResult, { pine = 'owned-document', snapshotFactory, epochFactory } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'tv-cli-contract-'));
   const requests = [], sockets = new Set();
   let connections = 0;
   const protocol = pageResult ? await CDP.Protocol({ local: true }) : null;
+  let targets;
   const server = createServer((request, response) => {
     requests.push(request.url);
     response.setHeader('Content-Type', 'application/json');
     response.end(JSON.stringify(pageResult ? request.url === '/json/protocol' ? protocol : request.url === '/json/version' ? { webSocketDebuggerUrl: 'fixture-browser' }
-      : [{ id: 'fixture-target', type: 'page', url: 'https://www.tradingview.com/chart/fixture-layout/', webSocketDebuggerUrl: `ws://127.0.0.1:${server.address().port}/fixture-target` }] : []));
+      : targets || [{ id: 'fixture-target', type: 'page', url: 'https://www.tradingview.com/chart/fixture-layout/', webSocketDebuggerUrl: `ws://127.0.0.1:${server.address().port}/fixture-target` }] : []));
   });
   const ws = pageResult ? new WebSocket.Server({ server }) : null;
-  ws?.on('connection', socket => socket.on('message', raw => {
+  ws?.on('connection', socket => socket.on('message', async raw => {
     const message = JSON.parse(raw);
+    try {
     const expression = message.params?.expression || '';
-    const workspaceSnapshot = { source: 'owned', modified: false, version: 1, context: { symbol: 'FIXTURE', resolution: '60' }, studies: [{ id: 'chosen-study', status: 2, inputs: [{id:'pineVersion',value:1}] }] };
+    const workspaceSnapshot = snapshotFactory?.() || { source: 'owned', modified: false, version: 1, context: { symbol: 'FIXTURE', resolution: '60' }, studies: [{ id: 'chosen-study', status: 2, inputs: [{id:'pineVersion',value:1}] }] };
     const value = expression.includes(';return (guardWorkspacePage(') ? workspaceSnapshot
-      : expression.includes(';return (window.__tvCliCompilation') ? { source_hash: sourceHash('owned'), report_verified: true, phase: 'ready', inputs_fingerprint: JSON.stringify(workspaceSnapshot.studies[0].inputs) }
-      : expression === '1' ? 1 : pageResult?.(expression);
+      : expression.includes(';return (window.__tvCliCompilation') ? epochFactory?.() || { source_hash: sourceHash('owned'), report_verified: true, phase: 'ready', inputs_fingerprint: JSON.stringify(workspaceSnapshot.studies[0].inputs) }
+      : expression === '1' ? 1 : await pageResult?.(expression);
     const result = message.method === 'Runtime.evaluate' ? { result: { type: 'object', value } } : {};
     socket.send(JSON.stringify({ id: message.id, result }));
+    } catch (error) {
+      socket.send(JSON.stringify({ id: message.id, result: { result: { type: 'undefined' }, exceptionDetails: { text: error.message, exception: { description: error.message } } } }));
+    }
   }));
   server.on('connection', socket => {
     connections++;
@@ -61,7 +69,7 @@ async function fixture(t, pageResult) {
   delete env.TV_CDP_TARGET;
   delete env.TV_WORKSPACE;
   if (pageResult) {
-    const workspace = reserveWorkspace({file:join(root,'contract.json'),target:'fixture-target',layout:'fixture-layout',pine:'owned-document'},options);
+    const workspace = reserveWorkspace({file:join(root,'contract.json'),target:'fixture-target',layout:'fixture-layout',pine},options);
     const lease = acquireWorkspace(workspace.file,options); lease.saveBinding({nonce:'fixture-generation',browser:'fixture-browser'});lease.finish({success:true});
     registerWorkspaceName('contract',workspace.file,options);
   }
@@ -82,7 +90,7 @@ async function fixture(t, pageResult) {
       child.stdin.end(input);
     });
   }
-  return { root, options, requests, run, get connections() { return connections; } };
+  return { root, options, requests, run, set targets(value) { targets = value; }, get connections() { return connections; } };
 }
 
 it('real ledger CLI carries selectors and revisions, fails changed pages with exit 1 and leaves no recovery journal', async t => {
@@ -106,6 +114,105 @@ it('real ledger CLI carries selectors and revisions, fails changed pages with ex
   assert.ok(catalog.options.some(option => option.name === '--report-revision'));
 });
 
+it('layout list real CLI executes production lookup for empty/list/throw/timeout/malformed responses', async t => {
+  let mode = 'empty', callbacks = 0;
+  const f = await fixture(t, expression => runInNewContext(expression, {
+    window: { TradingViewApi: { getSavedCharts(cb) {
+      if (mode === 'throw') throw new Error('SYNTHETIC_LAYOUT_READ_FAILURE');
+      if (mode === 'timeout') return;
+      callbacks++;
+      cb(mode === 'empty' ? [] : mode === 'malformed' ? {} : mode === 'missing-id' ? [{ name: 'broken' }] : [{ url: 'saved-id', name: 'saved' }]);
+    } } }, setTimeout: fn => setTimeout(fn, 5), clearTimeout,
+  }));
+  for (mode of ['empty', 'list']) {
+    const result = jsonResult(await f.run(['--target', 'fixture-target', 'layout', 'list']));
+    assert.equal(result.layout_count, mode === 'empty' ? 0 : 1);
+  }
+  for (const [kind, code] of [['throw', 'LAYOUT_LIST_FAILED'], ['timeout', 'LAYOUT_LIST_TIMEOUT'], ['malformed', 'LAYOUT_LIST_MALFORMED'], ['missing-id', 'LAYOUT_LIST_MALFORMED']]) {
+    mode = kind;
+    const result = jsonError(await f.run(['--target', 'fixture-target', 'layout', 'list']), /getSavedCharts|SYNTHETIC_LAYOUT_READ_FAILURE/, code);
+    if (kind === 'throw') assert.equal(result.error, 'SYNTHETIC_LAYOUT_READ_FAILURE');
+  }
+  assert.equal(callbacks, 4);
+});
+
+it('lost chart-only and Pine releases create no interruption and suggested named reset is executable', async t => {
+  for (const pine of [null, 'owned-document']) {
+    const f = await fixture(t, () => ({}), { pine });
+    const file = join(f.root, 'contract.json');
+    f.targets = [];
+    noteWorkspaceState(file, 'target_lost', f.options);
+    const before = jsonResult(await f.run(['workspace', 'show', 'contract']));
+    assert.equal(before.state, 'target_lost'); assert.equal(before.interrupted, null);
+    jsonError(await f.run(['--workspace', 'contract', 'workspace', 'release']), /exact workspace target/, 'WORKSPACE_TARGET_LOST');
+    const after = jsonResult(await f.run(['workspace', 'show', 'contract']));
+    assert.equal(after.state, 'target_lost'); assert.equal(after.interrupted, null);
+    assert.ok(after.next_commands.includes(`tv layout open fixture-layout`));
+    assert.ok(after.next_commands.some(command => command.includes(`--generation fixture-generation`)));
+    assert.equal(workspaceStatus(file, f.options).interrupted, null);
+    const reset = after.next_commands.find(command => command.startsWith('tv workspace reset'));
+    const args = reset.slice(3).match(/'[^']*'|\S+/g).map(arg => arg.replace(/^'|'$/g, ''));
+    const result = jsonResult(await f.run(args));
+    assert.equal(result.artifacts_preserved, true); assert.equal(result.desktop_changed, false);
+  }
+});
+
+it('real wait/report CLI projects large compiled text after raw production freshness and revision checks', async t => {
+  const testSource = readFileSync(new URL('./strategy_state.test.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+  const body = testSource.slice(testSource.indexOf('function fixture() {'), testSource.indexOf('\n\ndescribe('));
+  const page = Function(body + ';return fixture();')();
+  const chart = page.window.TradingViewApi._activeChartWidgetWV.value();
+  const original = chart.getStudyById;
+  chart.getStudyById = id => ({ getInputValues: () => [...original(id).getInputValues(), { id: 'pineId', value: 'owned-document' }, { id: 'pineVersion', value: 1 }] });
+  page.source.metaInfo = () => ({ isTVScript: true, isTVScriptStrategy: true, description: 'Same title' });
+  page.source.ordersData = () => [{ tm: 1 }];
+  page.window.TradingViewApi._chartWidgetCollection = { metaInfo: { uid: { value: () => 'fixture-layout' } } };
+  const controller = { openNewScript() {}, openScript() {}, setScript() {}, isModified: () => false,
+    getScriptIdVersion: () => ({ scriptIdPart: 'owned-document', version: 1 }), _editorStore: {},
+    _editorRef: { current: { _editor: { getValue: () => 'owned', setValue() {}, getModel: () => ({}) }, _monaco: { editor: {} } } } };
+  const document = { querySelectorAll: () => [{ offsetParent: {}, __reactFiber$test: { memoizedProps: { value: controller } } }] };
+  const context = { window: page.window, document };
+  const snapshotFactory = () => runInNewContext(`(() => {${WORKSPACE_PAGE_CODE};return readWorkspacePage(window,document);})()`, context);
+  const f = await fixture(t, expression => runInNewContext(expression, context), {
+    snapshotFactory, epochFactory: () => page.window.__tvCliCompilation,
+  });
+  const workspace = loadWorkspace(join(f.root, 'contract.json'), f.options);
+  runInNewContext(`(() => {${WORKSPACE_PAGE_CODE};return bindWorkspacePage(window,document,${JSON.stringify(workspace)},'fixture-generation');})()`, context);
+  const user = 'long-user-input-'.repeat(1000);
+  function compile(text) {
+    runInNewContext(`(() => {${WORKSPACE_PAGE_CODE};return startWorkspacePage(window,document,${JSON.stringify({ ...workspace, nonce: 'fixture-generation' })},'compile-fixture',{compile:true});})()`, context);
+    page.window.__tvCliCompilation?.dispose?.();
+    delete page.window.__tvCliCompilation; delete page.window.__tvCliVerifiedStrategies;
+    beginCompilation(page.window, 'same-token', sourceHash('owned'), true); page.compile(text); page.input(user); page.update();
+    runInNewContext(`(() => {${WORKSPACE_PAGE_CODE};return finishWorkspacePage(window,document,${JSON.stringify({ ...workspace, nonce: 'fixture-generation' })},'compile-fixture');})()`, context);
+  }
+  const commands = [['workspace', 'wait'], ['data', 'strategy'], ['data', 'trades'], ['data', 'ledger', '--limit', '1']];
+  const sizes = [], revisions = [];
+  for (const text of ['compiled-small', 'private-compiled-'.repeat(30000)]) {
+    compile(text);
+    const row = [];
+    for (const args of commands) {
+      const result = await f.run(['--workspace', 'contract', ...args]);
+      const value = jsonResult(result);
+      assert.equal(value.success, true, value.error);
+      const inputs = value.strategy_inputs || value.inputs;
+      assert.equal(inputs.find(i => i.id === 'text').value, undefined);
+      assert.equal(inputs.find(i => i.id === 'text').sha256, sourceHash(text));
+      assert.equal(inputs.find(i => i.id === 'in_0').value, user);
+      assert.ok(!result.stdout.includes(text));
+      row.push(Buffer.byteLength(result.stdout));
+      if (args[1] === 'ledger') revisions.push(value.report_revision);
+    }
+    sizes.push(row);
+  }
+  sizes[1].forEach((size, i) => assert.ok(Math.abs(size - sizes[0][i]) < 16));
+  assert.notEqual(revisions[0], revisions[1]);
+  const changed = jsonResult(await f.run(['--workspace', 'contract', 'data', 'ledger', '--limit', '1', '--report-revision', revisions[0]]), 1);
+  assert.equal(changed.code, 'REPORT_CHANGED');
+  page.compile('external-compiled');
+  jsonError(await f.run(['--workspace', 'contract', 'data', 'strategy']), /outside the requested/, 'WORKSPACE_EXTERNAL_CHANGE');
+});
+
 it('real extraction CLI returns structured error codes and study details on stderr with exit 1', async t => {
   let failure;
   const f = await fixture(t, () => ({ extraction_error: failure }));
@@ -122,7 +229,7 @@ it('real extraction CLI returns structured error codes and study details on stde
 });
 
 function jsonResult(result, exitCode = 0) {
-  assert.equal(result.exitCode, exitCode, result.stderr);
+  assert.equal(result.exitCode, exitCode, result.stderr || result.stdout);
   assert.equal(result.stderr, '', 'A returned result belongs on stdout only.');
   const value = JSON.parse(result.stdout); // Also rejects banners or a second JSON object.
   assert.equal(typeof value.success, 'boolean');

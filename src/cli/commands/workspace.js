@@ -31,7 +31,7 @@ register('workspace', {
       target: { type: 'string', description: 'Optional exact CDP target for migration' }, pine: { type: 'string', description: 'Optional dedicated saved Pine document ID' },
     }, handler: (opts, args) => createWorkspace(args[0], opts) }],
     ['select', { description: 'Verify workspace/layout selection; PowerShell module applies it to the calling terminal', handler: (_, args) => verifyWorkspaceSelection(args[0]) }],
-    ['show', { description: 'Inspect a named workspace without changing terminal selection', handler: (_, args) => workspaceStatus(resolveWorkspace(args[0])) }],
+    ['show', { description: 'Inspect a named workspace without changing terminal selection', handler: (_, args) => workspaceStatus(resolveWorkspace(args[0]), { name: args[0] }) }],
     ['inventory', { description: 'HTTP-only target/layout inventory (no page execution)', handler: workspaceInventory }],
     ['gate-status', { description: 'Inspect admission metadata ownership', handler: () => admissionGateStatus() }],
     ['gate-clear', { description: 'Clear an exact dead admission gate; retain all reservations', options: { token: { type: 'string', description: 'Exact dead admission gate token from gate-status' }, 'repair-token': { type: 'string', description: 'Exact dead repair token from gate-status' } }, handler: opts => clearAdmissionGate(opts.token, { repairToken: opts['repair-token'] }) }],

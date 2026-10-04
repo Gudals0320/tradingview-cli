@@ -13,7 +13,7 @@ process.env.TV_STATE_DIR = join(runtimeSessionRoot, 'tradingview-cli-sessions');
 process.env.TV_CDP_HOST = `runtime-fixture-${randomUUID()}`;
 process.env.TV_CDP_PORT = '1';
 const { reserveWorkspace, acquireWorkspace, workspaceStatus, abandonWorkspace } = await import('../src/workspace-store.js');
-const { runWorkspace, rebindWorkspace } = await import('../src/workspace.js');
+const { runWorkspace, rebindWorkspace, closeWorkspace } = await import('../src/workspace.js');
 const { sourceHash } = await import('../src/session.js');
 function fixture() {
   const suffix=randomUUID(), directory=mkdtempSync(join(tmpdir(),'tv-runtime-'));
@@ -40,6 +40,52 @@ it('an unverified report is a clean failure and the next verified read can conti
     const result=await runWorkspace(f.workspace.file,'data strategy',{},[],async()=>({success:true,strategy_id:'study'}),{_deps:f.deps});
     assert.equal(result.success,true);
   }finally{f.cleanup();}
+});
+
+it('queued quote builds its restore permission after admission from the latest page context', async () => {
+  const f = fixture(); let releaseWait, waiting;
+  const admitted = new Promise(resolve => { waiting = resolve; });
+  const gate = new Promise(resolve => { releaseWait = resolve; });
+  let observedPermit;
+  const raw = f.deps.raw;
+  f.deps.raw = async (client, expression) => {
+    if (expression.startsWith('startWorkspacePage')) {
+      observedPermit = JSON.parse(expression.slice(expression.lastIndexOf(',') + 1, -1));
+      assert.equal(observedPermit.quote_symbol, 'BITSTAMP:BTCUSD');
+    }
+    return raw(client, expression);
+  };
+  f.deps.acquireResources = async () => { waiting(); await gate; return { waited_ms: 10, waited_for: [{ command: 'symbol' }], resources: ['layout:test'], release() {} }; };
+  try {
+    f.snapshot.context.symbol = 'BINANCE:ETHUSDT';
+    const resultPromise = runWorkspace(f.workspace.file, 'quote', {}, ['BITSTAMP:BTCUSD'], async () => ({ success: true, symbol: 'BITSTAMP:BTCUSD', restored: true }), { _deps: f.deps });
+    await admitted;
+    f.snapshot.context.symbol = 'BINANCE:SOLUSDT';
+    const updater = acquireWorkspace(f.workspace.file); updater.saveBinding({ ...updater.workspace.binding, snapshot: f.snapshot }); updater.finish({ success: true });
+    releaseWait();
+    const result = await resultPromise;
+    assert.ok(result.provenance.locks.waited_ms > 0);
+    assert.equal(result.provenance.context.symbol, 'BINANCE:SOLUSDT');
+    assert.equal(workspaceStatus(f.workspace.file).interrupted, null);
+    assert.equal((await runWorkspace(f.workspace.file, 'state', {}, [], async () => ({ success: true }), { _deps: f.deps })).success, true);
+    assert.equal(observedPermit.symbols, undefined);
+  } finally { releaseWait(); f.cleanup(); }
+});
+
+it('release preflight failures stay clean but a page timeout or native pending remains protected', async () => {
+  for (const code of ['WORKSPACE_TARGET_LOST', 'WORKSPACE_DISCONNECTED', 'WORKSPACE_IDENTITY_MISMATCH', 'WORKSPACE_LAYOUT_SHARED', 'CDP_TIMEOUT', 'WORKSPACE_NATIVE_BUSY']) {
+    const f = fixture();
+    try {
+      const error = Object.assign(new Error(code), { code });
+      const preflight = !['CDP_TIMEOUT', 'WORKSPACE_NATIVE_BUSY'].includes(code);
+      const deps = { checkLayout: async () => { if (preflight) throw error; }, getClient: async () => ({}), raw: async () => { throw error; } };
+      await assert.rejects(closeWorkspace(f.workspace.file, { _deps: deps }), { code });
+      assert.equal(Boolean(workspaceStatus(f.workspace.file).interrupted), !preflight);
+    } finally {
+      const state = workspaceStatus(f.workspace.file);
+      abandonWorkspace(f.workspace.file, { workspaceId: f.workspace.id, operationId: state.interrupted?.operation_id });
+    }
+  }
 });
 it('a handler exception is clean when final resource state can be verified', async()=>{
   const f=fixture();try {

@@ -113,20 +113,31 @@ export async function fullscreen() {
   return { success: true, action: 'fullscreen_toggled' };
 }
 
-export async function layoutList() {
-  const layouts = await evaluateAsync(`
-    new Promise(function(resolve) {
-      try {
-        window.TradingViewApi.getSavedCharts(function(charts) {
-          if (!charts || !Array.isArray(charts)) { resolve({layouts: [], source: 'internal_api', error: 'getSavedCharts returned no data'}); return; }
-          var result = charts.map(function(c) { return { id: c.url || c.chartId || c.id || null, storage_id: c.id || null, name: c.name || c.title || 'Untitled', symbol: c.symbol || null, resolution: c.resolution || null, modified: c.timestamp || c.modified || null }; });
-          resolve({layouts: result, source: 'internal_api'});
-        });
-        setTimeout(function() { resolve({layouts: [], source: 'internal_api', error: 'getSavedCharts timed out'}); }, 5000);
-      } catch(e) { resolve({layouts: [], source: 'internal_api', error: e.message}); }
-    })
-  `);
-  return { success: true, layout_count: layouts?.layouts?.length || 0, source: layouts?.source, layouts: layouts?.layouts || [], error: layouts?.error };
+export function readSavedCharts(window, timeout = 5000) {
+  return new Promise(resolve => {
+    let active = true, timer;
+    const finish = result => { if (!active) return; active = false; clearTimeout(timer); resolve(result); };
+    timer = setTimeout(() => finish({ success: false, code: 'LAYOUT_LIST_TIMEOUT', error: 'getSavedCharts timed out' }), timeout);
+    try {
+      window.TradingViewApi.getSavedCharts(charts => {
+        if (!active) return;
+        try {
+          if (!Array.isArray(charts) || charts.some(c => !c || typeof c !== 'object' || !(c.url || c.chartId || c.id))) {
+            return finish({ success: false, code: 'LAYOUT_LIST_MALFORMED', error: 'getSavedCharts returned malformed saved layouts' });
+          }
+          finish({ success: true, charts });
+        } catch (error) { finish({ success: false, code: 'LAYOUT_LIST_FAILED', error: error.message }); }
+      });
+    } catch (error) { finish({ success: false, code: 'LAYOUT_LIST_FAILED', error: error.message }); }
+  });
+}
+
+export async function layoutList({ _deps } = {}) {
+  const result = await (_deps?.evaluateAsync || evaluateAsync)(`(${readSavedCharts.toString()})(window)`);
+  if (!result?.success) throw Object.assign(new Error(result?.error || 'Saved layout lookup failed'), { code: result?.code || 'LAYOUT_LIST_FAILED' });
+  const layouts = result.charts.map(c => ({ id: String(c.url || c.chartId || c.id), storage_id: c.id || null,
+    name: c.name || c.title || 'Untitled', symbol: c.symbol || null, resolution: c.resolution || null, modified: c.timestamp || c.modified || null }));
+  return { success: true, layout_count: layouts.length, source: 'internal_api', layouts };
 }
 
 export function resolveSavedLayout(window, name, timeout = 5000) {

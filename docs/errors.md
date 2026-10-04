@@ -14,7 +14,7 @@ an unknown native operation.
 | WORKSPACE_CONFLICT / WORKSPACE_LAYOUT_SHARED | Use dedicated layouts/documents/targets or explicit copies. |
 | WORKSPACE_PINE_REQUIRED / WORKSPACE_SAVED_DOCUMENT_REQUIRED | Mount/attach a dedicated saved document. Drafts are not saved ownership. |
 | WORKSPACE_DISCONNECTED | Restore CDP, retaining binding. Exit2 does not prove target termination or authorize reset. |
-| WORKSPACE_TARGET_LOST | Reachable CDP proved absence: open saved layout and explicitly reconnect. |
+| WORKSPACE_TARGET_LOST | Reachable CDP proved absence: follow named `workspace show` commands to explicitly open/reconnect the saved layout, or confirm exact reset to preserve artifacts and stop restoration. A release preflight failure creates no interrupted operation. |
 | WORKSPACE_GENERATION_CHANGED | Inspect show; acknowledge exact generation with reconnect/rebind, re-read IDs and compile. |
 | WORKSPACE_EXTERNAL_CHANGE | Inspect source/context/inputs; explicitly acknowledge intended changes without overwriting foreign drafts. |
 | WORKSPACE_OBSERVATION_CHANGED | Retry after the operation settles; discard the changing sample. |
@@ -46,6 +46,8 @@ an unknown native operation.
 | REPORT_CHANGED | Discard pages and restart offset0 with new revision. |
 | STUDY_NOT_FOUND / WORKSPACE_STUDY_MISMATCH | Read current owned IDs; IDs do not survive reconnect. |
 | LAYOUT_UNVERIFIED / WORKSPACE_LAYOUT_UNVERIFIED | Inspect owned layout and preserve uncertain records before changes. |
+| LAYOUT_LIST_FAILED / LAYOUT_LIST_TIMEOUT / LAYOUT_LIST_MALFORMED | Saved-layout lookup failed; no empty-list success or open dispatch is inferred. Retry only after resolving the cause. |
+| LAYOUT_IDENTITY_MISMATCH | Opened URL differs from the requested saved ID. Inspect the reported new target; preserve it and do not assume the requested layout opened. |
 | CDP_TIMEOUT | Native work was not cancelled. Inspect status; mutation journals need reconciliation, pure reads may retry without fabricating recovery. |
 | LEGACY_BATCH_REMOVED | Use workspace-batch.mjs with names; reconcile old journals through migration route. |
 

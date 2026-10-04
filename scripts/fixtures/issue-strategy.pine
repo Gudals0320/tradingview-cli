@@ -1,0 +1,8 @@
+//@version=6
+strategy("CLI_Issues_20261004", overlay=true, initial_capital=10000)
+n = input.int(10, "Cycle", minval=2)
+if bar_index % n == 0
+    strategy.entry("L", strategy.long)
+if bar_index % n == 5
+    strategy.close("L")
+plot(ta.sma(close, n))

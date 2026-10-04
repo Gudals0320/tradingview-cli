@@ -122,6 +122,14 @@ tv layout open LAYOUT_URL_ID
 tv workspace reconnect research-a --target NEW_TARGET --generation OLD_GENERATION
 ```
 
+`layout open`은 정확한 저장 ID를 끝까지 유지하며 열린 URL ID를 검증합니다. 이름을 사용하면 정확히 일치하는 유일한 이름만 허용합니다. `new`/`NEW`도 저장 이름으로 열 수 있고 생성은 `layout create`로 지정합니다. 목록 조회 실패는 빈 목록으로 취급하지 않습니다.
+
+FIFO 대기한 `quote`의 복원 종목은 잠금 획득 후 page guard가 확인한 실행 baseline에서 정합니다. 이전 CLI 종목 변경을 외부 편집으로 오인하지 않으며 실제 외부 변경/복원 실패 검사는 유지합니다.
+
+`pine set`은 LF/CRLF/단독 CR/혼합 줄바꿈을 LF로 정규화해 전체 본문을 엄격 비교합니다. 공백·들여쓰기·BOM·마지막 개행은 보존하며, 실제 변경은 기존 전략 결과를 무효화합니다. 비교 불일치는 `PINE_SOURCE_MISMATCH`와 적용/무효화 여부를 보고합니다.
+
+wait/compile/strategy/trades/ledger의 내부 input `text`는 CLI 출력에서 `{id,omitted,length,sha256}`로 요약합니다. 입력 원본은 compiled identity/fingerprint/revision/최신성 검증에 그대로 사용하며 사용자 input은 길이에 관계없이 보존합니다. 공개 raw 옵션은 제공하지 않습니다.
+
 Reconnect compares the exact old generation. The replacement must already show
 the same saved layout/document. Competing reconnects cannot both commit. Old study
 IDs, source proofs and report verification are invalidated; compile again. Rebind

@@ -222,20 +222,28 @@ export function acquireWorkspace(file, { recover = false, recoveryOperation, ...
 export function workspaceStatus(file, options = {}) {
   const workspace = loadWorkspace(file, options), row = match(readReservations(options), workspace);
   const quotedFile = `'${workspace.file.replace(/'/g, "''")}'`;
+  const reference = options.name ? `'${options.name.replace(/'/g, "''")}'` : quotedFile;
+  const lostCommands = options.name ? [
+    `tv layout open ${workspace.layout}`,
+    `tv workspace reconnect ${reference} --generation ${workspace.binding?.nonce}`,
+    `tv workspace reset ${reference} --id ${workspace.id}${row.interrupted ? ` --operation ${row.interrupted.operation_id}` : ''}`,
+  ] : [`tv layout open ${workspace.layout}`, `tv workspace abandon --file ${quotedFile} --id ${workspace.id}${row.interrupted ? ` --operation ${row.interrupted.operation_id}` : ''}`];
   let aliveOwner = false;
   if (row.operation) {
     aliveOwner = ownerAlive(row.operation);
   }
   const nextCommands = row.operation
     ? aliveOwner ? [] : [`tv workspace interrupt --file ${quotedFile} --operation ${row.operation.id}`]
-    : row.interrupted ? [`tv workspace recover --file ${quotedFile} --operation ${row.interrupted.operation_id}${workspace.binding ? '' : ' --rebind'}`]
-      : workspace.binding ? [`tv --workspace ${quotedFile} state`, `tv workspace release --file ${quotedFile}`]
+    : row.connection_state === 'target_lost' ? lostCommands
+      : row.interrupted ? [`tv --workspace ${reference} workspace recover --operation ${row.interrupted.operation_id}${workspace.binding ? '' : ' --rebind'}`]
+      : workspace.binding ? [`tv --workspace ${reference} state`, `tv --workspace ${reference} workspace release`]
         : [`tv workspace abandon --file ${quotedFile} --id ${workspace.id}`];
   return { success: true, workspace_id: workspace.id, target: workspace.target, layout: workspace.layout, pine: workspace.pine,
     generation: workspace.binding?.nonce || null, browser_generation: workspace.binding?.browser || null,
     state: row.interrupted ? 'interrupted' : row.operation ? 'running' : row.connection_state || 'idle',
     bound: Boolean(workspace.binding), operation: row.operation || null, interrupted: row.interrupted || null,
     owner_alive: aliveOwner, next_commands: nextCommands, handle_schema: workspace.schema,
+    ...(row.connection_state === 'target_lost' ? { next_commands_note: 'Choose reconnect after explicitly opening the saved layout, or confirm reset/abandon to preserve artifacts and stop restoration. Reconnect without --target requires exactly one matching target.' } : {}),
     result_path: row.result_path || null, result_committed: row.result_path && existsSync(row.result_path) ? read(row.result_path).committed === true : false };
 }
 

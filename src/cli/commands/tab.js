@@ -14,7 +14,7 @@ register('tab', {
         layout: { type: 'string', description: 'Saved layout name, or new' },
         name: { type: 'string', description: 'Name for a new saved layout' },
       },
-      handler: (opts) => core.newTab({ layout: opts.layout, name: opts.name }),
+      handler: (opts) => core.newTab({ layout: opts.layout, create: opts.layout?.trim().toLowerCase() === 'new', name: opts.name }),
     }],
     ['close', {
       description: 'Close only the selected workspace owned CLI-created tab; preserve save/discard decisions',
