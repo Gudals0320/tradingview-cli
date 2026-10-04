@@ -124,7 +124,7 @@ export function buildCatalog(commands, filter = [], { brief = false } = {}) {
     invocations: INVOCATIONS,
     desktop_values: DESKTOP,
     endpoint_lease_values: LEASES,
-    ownership_fields: { workspace_required: 'Selection must resolve before any chart access.', locks: 'Resource kinds acquired together; reads use no mutation lock. Mixed commands depend on arguments.', foreground: 'background targets the owned page; required verifies the selected Desktop tab; changes opens/selects tabs.', observation_admission: 'workspace_read: read-only observations never adopt interrupted/proven-dead operation results. Unknown liveness stays protected; offline show remains available. Generation and operation identity are rechecked after awaited reads.' },
+    ownership_fields: { workspace_required: 'Selection must resolve before any chart access.', locks: 'Resource kinds acquired together; reads use no mutation lock. Mixed commands depend on arguments.', foreground: 'background targets the owned page; required verifies the selected Desktop tab; changes opens/selects tabs.', observation_admission: 'workspace_read: never adopt interrupted/proven-dead results; unknown liveness stays protected and offline show remains available. Reports recheck generation/operation identity. Wait discards/reobserves healthy FIFO transitions within its original timeout; resource/generation changes still fail.' },
     read_only_values: {
       true: 'Pure read.',
       false: 'Changes Desktop state.',

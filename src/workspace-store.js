@@ -267,7 +267,7 @@ export function noteWorkspaceState(file, state, options = {}) {
 }
 
 /** Read-only admission shared by observations and wait; never interrupts/reconciles. */
-export function assertObservationAdmission(status, reference, baseline = null) {
+export function assertObservationAdmission(status, reference, baseline = null, { followOperations = false } = {}) {
   const quoted = `'${String(reference).replace(/'/g, "''")}'`;
   const operation = status.operation ? { id: status.operation.id, command: status.operation.command, started_at: status.operation.started_at } : null;
   const details = { workspace_id: status.workspace_id, generation: status.generation,
@@ -284,13 +284,17 @@ export function assertObservationAdmission(status, reference, baseline = null) {
     throw Object.assign(workspaceError('WORKSPACE_OWNER_DEAD', 'Recorded operation owner terminated; do not adopt its unreconciled result.'), { details: { ...details, next_commands,
       next_commands_note: 'Interrupt the exact dead operation, wait for native settlement and recover it, then inspect/repair only its exact dead resource tokens. Never replay or clear a live/unverifiable owner.' } });
   }
-  const sameOperation = ['id', 'pid', 'process_started_at', 'command', 'started_at'].every(key => status.operation?.[key] === baseline?.operation?.[key])
-    || (baseline?.operation && !status.operation && status.result_committed === true && status.result_operation_id === baseline.operation.id);
+  const sameOperation = observationOperationMatches(status, baseline || {});
   if (baseline && (status.workspace_id !== baseline.workspace_id || status.target !== baseline.target || status.layout !== baseline.layout
     || status.pine !== baseline.pine || status.generation !== baseline.generation || status.browser_generation !== baseline.browser_generation
-    || !sameOperation)) throw Object.assign(workspaceError('WORKSPACE_OBSERVATION_CHANGED', 'Workspace generation or operation identity changed during observation; retry after it settles.'), { details: { ...details,
+    || !followOperations && !sameOperation)) throw Object.assign(workspaceError('WORKSPACE_OBSERVATION_CHANGED', 'Workspace generation or operation identity changed during observation; retry after it settles.'), { details: { ...details,
       previous_operation_id: baseline.operation?.id || null, next_commands: [`tv --workspace ${quoted} workspace wait`] } });
   return status;
+}
+
+export function observationOperationMatches(current, baseline) {
+  return ['id', 'pid', 'process_started_at', 'command', 'started_at'].every(key => current.operation?.[key] === baseline.operation?.[key])
+    || Boolean(baseline.operation && !current.operation && current.result_committed === true && current.result_operation_id === baseline.operation.id);
 }
 
 /** A killed PID releases only its operation, never its persistent resources. */

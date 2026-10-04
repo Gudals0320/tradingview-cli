@@ -17,6 +17,7 @@ import { runInNewContext } from 'node:vm';
 import { WORKSPACE_PAGE_CODE } from '../src/workspace-page.js';
 import { beginCompilation } from '../src/strategy-state.js';
 import { reportPage } from './fixtures/report-page.mjs';
+import { resourceLockStatus } from '../src/resource-lock.js';
 
 const CLI = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
 
@@ -277,9 +278,15 @@ async function reportFixture(t, onExpression) {
   page.bind(loadWorkspace(join(f.root, 'contract.json'), f.options)); page.compile();
   return { ...f, page };
 }
-async function operationOwner(f) {
+async function operationOwner(f, { resources = false, deferred = false } = {}) {
   const module = new URL('../src/workspace-store.js', import.meta.url).href;
-  const script = `import {acquireWorkspace} from ${JSON.stringify(module)};const lease=acquireWorkspace(${JSON.stringify(join(f.root, 'contract.json'))},{...${JSON.stringify(f.options)},command:'pine compile'});console.log(JSON.stringify({id:lease.operation,pid:process.pid}));process.stdin.once('data',()=>{lease.finish({success:true,result:{success:true}});process.stdin.pause();});`;
+  const resourceModule = new URL('../src/resource-lock.js', import.meta.url).href;
+  const id = loadWorkspace(join(f.root, 'contract.json'), f.options).id;
+  const script = `import {acquireWorkspace} from ${JSON.stringify(module)};import {acquireResources} from ${JSON.stringify(resourceModule)};
+    const options={...${JSON.stringify(f.options)},command:'pine compile',workspace_id:${JSON.stringify(id)}};
+    const resources=${resources ? `await acquireResources(['layout:fixture-layout'],options)` : 'null'};
+    const lease=acquireWorkspace(${JSON.stringify(join(f.root, 'contract.json'))},options);console.log(JSON.stringify({id:lease.operation,pid:process.pid}));
+    process.stdin.once('data',()=>{lease.finish({success:true,result:{success:true}});resources?.release();process.stdin.pause();});`;
   const child = spawn(process.execPath, ['--input-type=module', '-e', script], { stdio: ['pipe', 'pipe', 'pipe'] });
   const stopped = once(child, 'close'); let buffer = '', stderr = '';
   child.stderr.on('data', chunk => stderr += chunk);
@@ -287,8 +294,10 @@ async function operationOwner(f) {
     child.once('error', reject); child.once('close', () => { if (!buffer.includes('\n')) reject(new Error(stderr)); });
     child.stdout.on('data', chunk => { buffer += chunk; if (buffer.includes('\n')) resolve(JSON.parse(buffer.trim())); });
   });
-  const identity = await ready;
-  return { child, identity, async kill() { child.kill('SIGKILL'); await stopped; }, async finish() { child.stdin.end('finish'); await stopped; } };
+  let identity;
+  const observed = ready.then(value => { identity = value; return value; });
+  if (!deferred) await observed;
+  return { child, ready: observed, get identity() { return identity; }, async kill() { child.kill('SIGKILL'); await stopped; }, async finish() { child.stdin.end('finish'); await stopped; } };
 }
 
 it('report/wait real entry points reject dead owners before or during production report evaluation without adopting/deleting records', async t => {
@@ -320,6 +329,27 @@ it('real report observations preserve living-owner continuity and accept only it
   const lease = acquireWorkspace(other.file, f.options); lease.finish({ success: true });
   assert.equal(jsonResult(await f.run(['--workspace', 'contract', 'data', 'ledger'])).success, true);
   await live.finish();
+});
+
+it('real wait follows FIFO A-to-B live leases, discards transition samples and waits for B committed completion', async t => {
+  let a, b, samples = 0, queueSeen = false, transitionSeen = false;
+  const f = await reportFixture(t, async expression => {
+    if (!expression.includes('function compilationState')) return;
+    samples++;
+    if (samples === 1) {
+      assert.equal(resourceLockStatus(f.options).queue.length, 1); queueSeen = true;
+      await a.finish(); await b.ready;
+      assert.notEqual(a.identity.id, b.identity.id);
+      assert.equal(workspaceStatus(join(f.root, 'contract.json'), f.options).operation.id, b.identity.id); transitionSeen = true;
+    } else if (samples === 2) await b.finish();
+  });
+  a = await operationOwner(f, { resources: true }); b = await operationOwner(f, { resources: true, deferred: true });
+  for (let i = 0; i < 100 && resourceLockStatus(f.options).queue.length !== 1; i++) await new Promise(resolve => setTimeout(resolve, 20));
+  const result = jsonResult(await f.run(['--workspace', 'contract', 'workspace', 'wait', '--timeout', '10000']));
+  assert.equal(result.phase, 'ready'); assert.ok(samples >= 3); assert.equal(queueSeen, true); assert.equal(transitionSeen, true);
+  const status = workspaceStatus(join(f.root, 'contract.json'), f.options);
+  assert.equal(status.result_committed, true); assert.equal(status.result_operation_id, b.identity.id); assert.equal(status.operation, null);
+  assert.equal(resourceLockStatus(f.options).queue.length, 0); assert.equal(resourceLockStatus(f.options).holders.length, 0);
 });
 
 it('four real report entry points distinguish unknown/removed/foreign/valid IDs and keep pending/zero/equity contracts', async t => {

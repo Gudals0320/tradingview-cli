@@ -9,7 +9,7 @@ import { configureTarget, getClient } from './connection.js';
 import { WORKSPACE_PAGE_CODE } from './workspace-page.js';
 import { normalizeTimeframe } from './chart-context.js';
 import { WORKSPACE_READS, pureRead, PINE_COMMANDS, FOREGROUND_COMMANDS, resourceKinds, workspaceRequired } from './cli/policy.js';
-import { acquireResources } from './resource-lock.js';
+import { acquireResources, resourceLockStatus } from './resource-lock.js';
 import { getDesktopInventory } from './desktop.js';
 import { withSharedSession, withSharedTarget } from './session.js';
 import { sessionPaths,readReservations } from './session.js';
@@ -268,10 +268,14 @@ export async function runWorkspace(file, command, values, positionals, handler, 
     const workspace = loadWorkspace(file);
     const getStatus = _deps?.workspaceStatus || workspaceStatus, reference = values.workspaceReference || file;
     const admission = assertObservationAdmission(getStatus(file), reference);
+    const followingWait = command === 'workspace wait';
+    const checkAdmission = () => assertObservationAdmission(getStatus(file), reference, admission, { followOperations: followingWait });
     const observer = { workspace, observe: true, endpoint_key: workspace.endpoint_key, assertOwner: () => {
       loadWorkspace(file); assertObservationAdmission(getStatus(file), reference);
     } };
     return withWorkspaceSession(observer, async () => {
+      for (;;) {
+      checkAdmission();
       await (_deps?.checkLayout || checkLayout)(workspace);
       if (await (_deps?.browserIdentity || browserIdentity)() !== workspace.binding?.browser) throw workspaceError('WORKSPACE_GENERATION_CHANGED', 'Desktop browser generation changed.');
       configureTarget(workspace.target);
@@ -290,10 +294,10 @@ export async function runWorkspace(file, command, values, positionals, handler, 
           next_commands: [`tv --workspace ${quoted} state`, `tv --workspace ${quoted} workspace wait`], calculation_pending: false } });
       }
       const result = await handler(values, positionals);
-      assertObservationAdmission(getStatus(file), reference, admission);
+      checkAdmission();
       if (command.startsWith('stream ') && result === undefined) return;
       const after = await inspect(client, pageCall('guardWorkspacePage', owner(workspace), { observe: true }));
-      assertObservationAdmission(getStatus(file), reference, admission);
+      checkAdmission();
       const stable = sourceHash(before.source) === sourceHash(after.source)
         && JSON.stringify(before.context) === JSON.stringify(after.context)
         && JSON.stringify(before.studies.map(study => [study.id, study.inputs])) === JSON.stringify(after.studies.map(study => [study.id, study.inputs]));
@@ -313,13 +317,18 @@ export async function runWorkspace(file, command, values, positionals, handler, 
         && proof.version === String(after.version)
         && (proof.applied_version || proof.version) === String(study?.inputs.find(input => input.id === 'pineVersion')?.value));
       if (result === undefined) return;
-      assertObservationAdmission(getStatus(file), reference, admission);
+      const finalAdmission = checkAdmission();
+      if (followingWait && result?.success) {
+        const locks = (_deps?.resourceLockStatus || resourceLockStatus)();
+        if (finalAdmission.operation || [...locks.holders, ...locks.queue].some(row => row.workspace_id === workspace.id)) continue;
+      }
       return { ...result, ...(['data strategy','data trades','data ledger','data equity'].includes(command) ? {report_revision:result.report_revision || (result.success?sourceHash(JSON.stringify(result)):null),calculation_pending:after.calculating} : {}), provenance: { workspace_id: workspace.id, observation: true, target: workspace.target,
         ...(reportEpoch?{calculation:{phase:reportEpoch.phase,accepted_cycle:reportEpoch.accepted_cycle,cycle:reportEpoch.calculation?.cycle,events:reportEpoch.calculation?.events,completed:reportEpoch.calculation?.completed?{cycle:reportEpoch.calculation.completed.cycle,key_hash:sourceHash(reportEpoch.calculation.completed.key)}:null}}:{}),
         source_hash: sourceHash(after.source), source_scope: 'editor', persisted_applied_source_verified: persistedApplied,
         study: study ? { id: study.id, status: study.status, compiled_hash: sourceHash(JSON.stringify(study.inputs)) } : null,
         context: after.context, page_generation: workspace.binding.nonce,
         changed_during_read: !stable } };
+      }
     });
   }
   const permit = await permitFor(command, values, positionals);
