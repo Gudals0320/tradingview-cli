@@ -60,6 +60,22 @@ it('unknown PID/identity stays protected and generation/operation/recovery races
   } finally { f.cleanup(); }
 });
 
+it('wait outer publication retries cannot extend the original deadline under a perpetual admitted queue', async () => {
+  const f = fixture(); let calls = 0;
+  try {
+    f.deps.resourceLockStatus = () => ({ holders: [], queue: [{ workspace_id: f.workspace.id }] });
+    const values = { timeout: '10' };
+    const start = Date.now();
+    const result = await runWorkspace(f.workspace.file, 'workspace wait', values, [], async opts => {
+      opts.workspaceWaitStartedAt ??= Date.now(); calls++;
+      await new Promise(resolve => setTimeout(resolve, 4)); return { success: true, phase: 'ready' };
+    }, { _deps: f.deps });
+    assert.equal(result.code, 'REPORT_TIMEOUT'); assert.equal(result.calculation_pending, true);
+    assert.ok(calls > 0 && calls < 10); assert.ok(Date.now() - start < 1000);
+    assert.equal(workspaceStatus(f.workspace.file).interrupted, null);
+  } finally { f.cleanup(); }
+});
+
 it('queued quote builds its restore permission after admission from the latest page context', async () => {
   const f = fixture(); let releaseWait, waiting;
   const admitted = new Promise(resolve => { waiting = resolve; });

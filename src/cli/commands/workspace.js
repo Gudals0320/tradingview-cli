@@ -1,7 +1,7 @@
 import { register } from '../router.js';
 import { initWorkspace, recoverWorkspace, closeWorkspace, workspaceInventory, rebindWorkspace, createWorkspace, verifyWorkspaceSelection, reconnectWorkspace,resetWorkspace } from '../../workspace.js';
 import { listWorkspaceNames, registerWorkspaceName, resolveWorkspace } from '../../workspace-registry.js';
-import { workspaceStatus, markInterrupted, abandonWorkspace, assertObservationAdmission, observationOperationMatches } from '../../workspace-store.js';
+import { workspaceStatus, markInterrupted, abandonWorkspace, assertObservationAdmission, observationOperationMatches, workspaceWaitTimeout } from '../../workspace-store.js';
 import { compilationState, STRATEGY_PAGE_CODE } from '../../strategy-state.js';
 import { evaluate } from '../../connection.js';
 import { admissionGateStatus, clearAdmissionGate,currentWorkspaceSession } from '../../session.js';
@@ -59,21 +59,24 @@ register('workspace', {
         const owned=currentWorkspaceSession()?.workspace;
         const status=owned?getStatus(owned.file):null;
         if(status)assertObservationAdmission(status,opts.workspaceReference||owned.file);
+        if(Date.now()-start>=timeout)return workspaceWaitTimeout();
         const locks=owned?getLocks():null;
         const admitted=owned?[...(locks?.holders||[]),...(locks?.queue||[])].filter(row=>row.workspace_id===owned.id):[];
         const state = await inspect(`(() => {${STRATEGY_PAGE_CODE};return (${compilationState.toString()})(window);})()`);
         const afterStatus=owned?getStatus(owned.file):null;
         if(afterStatus) {
           assertObservationAdmission(afterStatus,opts.workspaceReference||owned.file,status,{followOperations:true});
+          if(Date.now()-start>=timeout)return workspaceWaitTimeout();
           if(!observationOperationMatches(afterStatus,status)) { await (opts._deps?.sleep||(ms=>new Promise(resolve=>setTimeout(resolve,ms))))(100); continue; }
         }
+        if(Date.now()-start>=timeout)return workspaceWaitTimeout();
         if(!status?.operation&&!admitted.length) {
           if (state.phase === 'ready') return { success: true, ...state };
           if (['failed', 'invalidated', 'not-strategy', 'unverified'].includes(state.phase)) return { success: false, ...state };
         }
         await (opts._deps?.sleep|| (ms=>new Promise(resolve=>setTimeout(resolve,ms))))(100);
       } while (Date.now() - start < timeout);
-      return { success: false, code: 'REPORT_TIMEOUT',calculation_pending:true, error: 'Workspace calculation did not complete.' };
+      return workspaceWaitTimeout();
     } }],
   ]),
 });

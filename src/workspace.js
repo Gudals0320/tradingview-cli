@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { readFileSync,existsSync } from 'node:fs';
 import { CDP_HOST, CDP_PORT } from './config.js';
-import { acquireWorkspace, reserveWorkspace, releaseWorkspace, workspaceError, loadWorkspace, workspaceStatus, noteWorkspaceState, assertObservationAdmission } from './workspace-store.js';
+import { acquireWorkspace, reserveWorkspace, releaseWorkspace, workspaceError, loadWorkspace, workspaceStatus, noteWorkspaceState, assertObservationAdmission, workspaceWaitTimeout } from './workspace-store.js';
 import { withWorkspaceSession, sourceHash, canonicalSessionHost, assertLegacyCompatibility } from './session.js';
 import { configureTarget, getClient } from './connection.js';
 import { WORKSPACE_PAGE_CODE } from './workspace-page.js';
@@ -276,6 +276,7 @@ export async function runWorkspace(file, command, values, positionals, handler, 
     return withWorkspaceSession(observer, async () => {
       for (;;) {
       checkAdmission();
+      if (followingWait && values.workspaceWaitStartedAt !== undefined && Date.now() - values.workspaceWaitStartedAt >= Number(values.timeout || 30000)) return workspaceWaitTimeout();
       await (_deps?.checkLayout || checkLayout)(workspace);
       if (await (_deps?.browserIdentity || browserIdentity)() !== workspace.binding?.browser) throw workspaceError('WORKSPACE_GENERATION_CHANGED', 'Desktop browser generation changed.');
       configureTarget(workspace.target);
@@ -318,6 +319,7 @@ export async function runWorkspace(file, command, values, positionals, handler, 
         && (proof.applied_version || proof.version) === String(study?.inputs.find(input => input.id === 'pineVersion')?.value));
       if (result === undefined) return;
       const finalAdmission = checkAdmission();
+      if (followingWait && result?.success && Date.now() - values.workspaceWaitStartedAt >= Number(values.timeout || 30000)) return workspaceWaitTimeout();
       if (followingWait && result?.success) {
         const locks = (_deps?.resourceLockStatus || resourceLockStatus)();
         if (finalAdmission.operation || [...locks.holders, ...locks.queue].some(row => row.workspace_id === workspace.id)) continue;

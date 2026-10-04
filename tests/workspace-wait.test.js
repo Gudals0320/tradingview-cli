@@ -21,3 +21,18 @@ it('wait discards a ready sample across healthy FIFO A-to-B transition and accep
   } }));
   assert.equal(result.token, 'final-B'); assert.equal(samples, 2);
 });
+it('expired retry returns timeout before a ready sample, while dead-owner error retains priority', async () => {
+  let samples = 0;
+  const deps = { status: () => ({ operation: null }), locks: () => ({ holders: [], queue: [] }), evaluate: async () => { samples++; return { phase: 'ready' }; } };
+  const result = await withWorkspaceSession({ workspace: { id: 'worker', file: 'mock' } }, () => wait({ timeout: '1', workspaceWaitStartedAt: Date.now() - 1000, _deps: deps }));
+  assert.equal(result.code, 'REPORT_TIMEOUT'); assert.equal(result.calculation_pending, true); assert.equal(samples, 0);
+  deps.status = () => ({ operation: { id: 'dead-owner' }, owner_alive: false });
+  await assert.rejects(withWorkspaceSession({ workspace: { id: 'worker', file: 'mock' } }, () => wait({ timeout: '1', workspaceWaitStartedAt: Date.now() - 1000, _deps: deps })), { code: 'WORKSPACE_OWNER_DEAD' });
+});
+it('ready page returned after the original deadline is not adopted', async () => {
+  const result = await withWorkspaceSession({ workspace: { id: 'worker', file: 'mock' } }, () => wait({ timeout: '1', _deps: {
+    status: () => ({ operation: null }), locks: () => ({ holders: [], queue: [] }),
+    evaluate: async () => { await new Promise(resolve => setTimeout(resolve, 5)); return { phase: 'ready' }; },
+  } }));
+  assert.equal(result.code, 'REPORT_TIMEOUT'); assert.equal(result.calculation_pending, true);
+});

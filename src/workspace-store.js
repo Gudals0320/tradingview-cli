@@ -296,6 +296,7 @@ export function observationOperationMatches(current, baseline) {
   return ['id', 'pid', 'process_started_at', 'command', 'started_at'].every(key => current.operation?.[key] === baseline.operation?.[key])
     || Boolean(baseline.operation && !current.operation && current.result_committed === true && current.result_operation_id === baseline.operation.id);
 }
+export function workspaceWaitTimeout() { return { success: false, code: 'REPORT_TIMEOUT', calculation_pending: true, error: 'Workspace calculation did not complete within the original wait deadline.' }; }
 
 /** A killed PID releases only its operation, never its persistent resources. */
 export function markInterrupted(file, operationId, options = {}) {
