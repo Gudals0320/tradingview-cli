@@ -145,6 +145,7 @@ export function guardWorkspacePage(window, document, owner, { observe = false } 
     if (permit.compile) {
       if (old && current && old.id !== current.id) fail();
     } else if (permit.properties && old && current && old.id===current.id) {
+      if(actual.version!==before.version||old.pine!==current.pine)fail();
       const patch=strategyPropertyInputPatch(window,current.id,permit.properties).inputs;
       const expected=old.inputs.map(input=>Object.hasOwn(patch,input.id)?{...input,value:patch[input.id]}:input);
       if(JSON.stringify(current.inputs)!==JSON.stringify(expected))fail();

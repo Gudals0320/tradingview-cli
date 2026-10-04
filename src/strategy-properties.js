@@ -5,7 +5,7 @@ export function strategyPropertySchema(){return {
   initial_capital:{type:'number',unit:'currency',min:0},currency:{type:'currency',unit:'currency_code'},
   default_qty_value:{type:'number',unit:'order_size',min:0},default_qty_type:{type:'enum',unit:'order_size_mode',values:['fixed','cash_per_order','percent_of_equity']},
   pyramiding:{type:'integer',unit:'entries',min:0},commission_type:{type:'enum',unit:'commission_mode',values:['percent','cash_per_contract','cash_per_order']},commission_value:{type:'number',unit:'commission',min:0},
-  slippage:{type:'integer',unit:'ticks',min:0},backtest_fill_limits_assumption:{type:'integer',unit:'ticks',min:0},margin_long:{type:'number',unit:'percent',min:0,max:100},margin_short:{type:'number',unit:'percent',min:0,max:100},
+  slippage:{type:'integer',unit:'ticks',min:0},backtest_fill_limits_assumption:{type:'integer',unit:'ticks',min:0},margin_long:{type:'number',unit:'percent',min:0},margin_short:{type:'number',unit:'percent',min:0},
   calc_on_order_fills:{type:'boolean',unit:'flag'},calc_on_every_tick:{type:'boolean',unit:'flag'},process_orders_on_close:{type:'boolean',unit:'flag'},use_bar_magnifier:{type:'boolean',unit:'flag'},fill_orders_on_standard_ohlc:{type:'boolean',unit:'flag'},
 };}
 
@@ -47,6 +47,7 @@ export function strategyPropertyInputPatch(window,strategyId,patch){
   for(const [name,value] of Object.entries(patch)){
     const field=properties?.fields[name];
     if(!field?.mutation_supported)throw Object.assign(new Error(`STRATEGY_PROPERTY_UNSUPPORTED: ${name} has no verified native typed setter; set it explicitly in Pine strategy() source.`),{code:'STRATEGY_PROPERTY_UNSUPPORTED',details:{field:name,mutation_dispatched:false}});
+    if(['text','pineId','pineVersion','pineFeatures'].includes(field.input_id))throw Object.assign(new Error('STRATEGY_PROPERTY_UNSUPPORTED: Native mapping overlaps protected compiled identity.'),{code:'STRATEGY_PROPERTY_UNSUPPORTED',details:{field:name,mutation_dispatched:false}});
     if(field.native_options&&!field.native_options.includes(value)||field.native_min!==null&&typeof value==='number'&&value<field.native_min||field.native_max!==null&&typeof value==='number'&&value>field.native_max)throw Object.assign(new Error(`INVALID_STRATEGY_PROPERTIES: ${name} is outside native options/bounds.`),{code:'INVALID_STRATEGY_PROPERTIES',details:{field:name,mutation_dispatched:false}});
     inputs[field.input_id]=value;
   }
@@ -57,7 +58,7 @@ export function effectiveStrategyProperties(window,strategyId){
   const chart=window.TradingViewApi?._activeChartWidgetWV?.value();
   const source=chart?._chartWidget?.model?.().model?.().dataSources?.().find(source=>source.id?.()===strategyId);
   const meta=source?.metaInfo?.();if(!meta?.isTVScriptStrategy&&!meta?.is_strategy)return null;
-  let report=source.reportData?.();if(typeof report?.value==='function')report=report.value();
+  let report;try{report=source.reportData?.();if(typeof report?.value==='function')report=report.value();}catch{/* Current inputs remain observable while report is unavailable. */}
   const inputs=chart.getStudyById(strategyId).getInputValues();
   return normalizeStrategyProperties(meta.inputs,inputs,report?.currency);
 }

@@ -6,7 +6,14 @@ const publicProperties=projectStrategyProperties;
 
 export async function getProperties({strategy_id,_deps}={}){
   const inspect=_deps?.evaluate||evaluate;
-  const result=await inspect(`(()=>{${STRATEGY_PAGE_CODE};const report=readStrategyReport(window,${JSON.stringify({strategy_id})});if(!report.success)return report;return {success:true,strategy_id:report.strategy_id,effective_properties:effectiveStrategyProperties(window,report.strategy_id),report_verified:true};})()`);
+  const result=await inspect(`(()=>{${STRATEGY_PAGE_CODE};const report=readStrategyReport(window,${JSON.stringify({strategy_id})});
+    const owned=window.__tvCliWorkspace?.pine,requested=${JSON.stringify(strategy_id||null)};
+    const matches=pageStrategies(window).filter(s=>(!requested||s.id===requested)&&(!owned||s.inputs.some(i=>i.id==='pineId'&&i.value===owned)));
+    if(matches.length!==1)return {success:false,code:matches.length?'REPORT_AMBIGUOUS':'STUDY_NOT_FOUND',error:'Exactly one owned current strategy is required to inspect Properties.'};
+    const properties=effectiveStrategyProperties(window,matches[0].id),verified=report.success===true&&report.strategy_id===matches[0].id;
+    const currency=properties.effective_currency;if(!verified)properties.effective_currency=null;
+    return {success:true,strategy_id:matches[0].id,effective_properties:properties,report_verified:verified,report_status:{ready:verified,code:verified?null:report.code,currency_observed:currency,currency_verified:verified}};
+  })()`);
   if(result.effective_properties)result.effective_properties=publicProperties(result.effective_properties);
   return result;
 }

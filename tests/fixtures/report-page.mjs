@@ -5,7 +5,7 @@ import { sourceHash } from '../../src/session.js';
 export function reportPage() {
   const event = () => { const callbacks = []; return { subscribe: (_, fn) => callbacks.push(fn), unsubscribe: (_, fn) => { const i = callbacks.indexOf(fn); if (i >= 0) callbacks.splice(i, 1); }, fire: () => callbacks.slice().forEach(fn => fn()) }; };
   const reports = event(), statuses = event();
-  let id = 'owned-study', inputs = [{ id: 'text', value: 'compiled-old' }, { id: 'pineId', value: 'owned-document' }, { id: 'pineVersion', value: 1 }], type = 2;
+  let id = 'owned-study', inputs = [{ id: 'text', value: 'compiled-old' }, { id: 'pineId', value: 'owned-document' }, { id: 'pineVersion', value: 1 }], type = 2,documentVersion=1;
   let report = { performance: { all: { netProfit: 10, totalTrades: 1, numberOfWiningTrades: 1, numberOfLosingTrades: 0 } },
     settings: { dateRange: { backtest: { from: 1704067200000, to: 1704153600000 } } }, currency: 'USD', trades: [{ e: { tm: 1704067200 }, x: { tm: 1704153600 } }] };
   const source = { id: () => id, metaInfo: () => ({ isTVScript: true, isTVScriptStrategy: true, description: 'Owned fixture' }),
@@ -15,7 +15,7 @@ export function reportPage() {
   const model = { mainSeries: () => series, model: () => ({ dataSources: () => sources }) };
   const chart = { _chartWidget: { model: () => model }, model: () => model, symbol: () => 'FIXTURE:OWNED', resolution: () => '60', chartType: () => 1,
     getStudyById: requested => ({ getInputValues: () => requested === id ? inputs : [{ id: 'pineId', value: 'foreign-document' }] }) };
-  const controller = { openNewScript() {}, openScript() {}, setScript() {}, isModified: () => false, getScriptIdVersion: () => ({ scriptIdPart: 'owned-document', version: 1 }),
+  const controller = { openNewScript() {}, openScript() {}, setScript() {}, isModified: () => false, getScriptIdVersion: () => ({ scriptIdPart: 'owned-document', version: documentVersion }),
     _editorStore: { getStore: () => ({ getState: () => ({ ui: { pendingRequests: {} } }) }) },
     _editorRef: { current: { _editor: { getValue: () => 'owned', setValue() {}, getModel: () => ({}) }, _monaco: { editor: {} } } } };
   const document = { querySelectorAll: () => [{ offsetParent: {}, __reactFiber$fixture: { memoizedProps: { value: controller } } }] };
@@ -39,6 +39,7 @@ export function reportPage() {
       call('finishWorkspacePage', owner, 'fixture-remove'); id = next; },
     pending() { type = 1; statuses.fire(); },
     completeInputs() { type=2;report={...report};reports.fire(); },
+    setDocumentVersion(value) { documentVersion=value; },
     runtimeError() { type = 3; report = {}; },
     zero() { report = { ...report, performance: { all: { netProfit: 0, totalTrades: 0, numberOfWiningTrades: 0, numberOfLosingTrades: 0 } }, trades: [] }; },
   };

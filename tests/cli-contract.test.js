@@ -39,6 +39,11 @@ it('real Properties guard rejects an unrequested simultaneous native change inst
   const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile();page.extraChange();
   const result=jsonError(await f.run(['--workspace','contract','strategy','set-properties','--values','{"commission_value":0.2}']),/WORKSPACE_EXTERNAL_CHANGE/,'WORKSPACE_EXTERNAL_CHANGE');assert.equal(result.success,false);assert.equal(page.mutations(),1);assert.ok(workspaceStatus(ws.file,f.options).interrupted);
 });
+it('real Properties permission never adopts an unrequested Pine saved-version change',async t=>{
+  const page=propertiesPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile();page.changeVersionDuringSetter();
+  jsonError(await f.run(['--workspace','contract','strategy','set-properties','--values','{"commission_value":0.2}']),/WORKSPACE_EXTERNAL_CHANGE/,'WORKSPACE_EXTERNAL_CHANGE');assert.equal(page.mutations(),1);assert.ok(workspaceStatus(ws.file,f.options).interrupted);assert.notEqual(loadWorkspace(ws.file,f.options).binding.snapshot?.version,2);
+});
 
 it('real Pine preparation reassigns then binds, retains browser proof, and resumes without duplicate creation',async t=>{
   const page=preparationPage();
