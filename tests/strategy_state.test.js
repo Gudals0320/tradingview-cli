@@ -40,6 +40,9 @@ function fixture() {
 
 describe('Strategy report identity and metadata', () => {
   it('source setter accepts Monaco LF/CRLF/mixed/lone CR normalization and rejects all other edits', async () => {
+    let reads = 0;
+    await assert.rejects(setSource({ source: '\uFEFFa\n', _deps: { evaluate() { reads++; } } }), e => e.code === 'PINE_SOURCE_UNSUPPORTED_BOM' && e.details.editor_changed === false);
+    assert.equal(reads, 0);
     for (const source of ['a\nb\n', 'a\r\nb\r\n', 'a\nb\r\n', 'a\rb\r']) {
       let draft = 'old';
       const editor = { getValue: () => draft, setValue: value => { draft = canonicalPineSource(value); }, getModel: () => ({}) };

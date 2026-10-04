@@ -1,7 +1,7 @@
 import CDP from './cdp.js';
 import { CDP_HOST, CDP_PORT } from './config.js';
 import { acquireSession, sourceHash } from './session.js';
-import { readFileSync, writeFileSync, renameSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { findPineController } from './core/desktop-dom.js';
 import { LAYOUT_PAGE_CODE, layoutOperationDetails } from './layout-state.js';
@@ -55,8 +55,8 @@ export function sessionPageQuiescence(window, document, expectedGeneration, expe
         const pine = Boolean(info?.isTVScript || info?.isTVScriptStrategy || info?.is_strategy);
         let state, basis;
         if (pine) {
-          state = sourceLoading === true || status?.type === 0 || status?.type === 1 ? 'busy' : status?.type === 2 ? 'idle' : 'unknown';
-          basis = 'Pine status 0/1 pending, 2 completed';
+          state = sourceLoading === true || status?.type === 0 || status?.type === 1 ? 'busy' : status?.type === 2 ? 'idle' : status?.type === 3 ? 'terminal_error' : 'unknown';
+          basis = 'Pine status 0/1 pending, 2 completed, 3 terminal execution error';
         } else if (sourceLoading === true) { state = 'busy'; basis = 'source isLoading'; }
         else if (info || typeof source.status === 'function' && typeof status !== 'number') {
           state = status?.type === 2 && sourceLoading !== true ? 'idle' : 'unknown';
@@ -92,7 +92,7 @@ export function auxiliaryUnknownOnly(state) {
 export async function recoverSession({ runId, targetId, directory, acknowledgeUnknown, _deps } = {}) {
   const lease = (_deps?.acquireSession || acquireSession)({ recover: true, shared:true, command: 'session recover',...(directory?{directory}:{}) });
   const clients = [], remoteObjects = [], probes = [];
-  let primaryError;
+  let primaryError, validatedRunId = null;
   try {
     const pending = lease.pending();
     if (!runId || pending?.run_id !== runId || !pending.native_quiescence_required) {
@@ -102,6 +102,7 @@ export async function recoverSession({ runId, targetId, directory, acknowledgeUn
     if (!target || (pending.target_id && targetId && pending.target_id !== targetId)) {
       throw Object.assign(new Error('Recovery requires the exact recorded target, or --target-id if dispatch did not identify it.'), { code: 'TARGET_REQUIRED' });
     }
+    validatedRunId = pending.run_id;
     const targets = [...new Set([...(pending.targets || []), target])];
     if (!_deps?.connect || _deps?.list) {
       let inventory;
@@ -172,6 +173,7 @@ export async function recoverSession({ runId, targetId, directory, acknowledgeUn
       if (sourceHash(readFileSync(lease.paths.journal)) !== journalHash) throw Object.assign(new Error('Journal changed during acknowledgement.'), { code: 'UNKNOWN_ACK_MISMATCH', details });
       const backup = `${lease.paths.journal}.${randomUUID()}.unknown-acknowledged`;
       renameSync(lease.paths.journal, backup);
+      try { if (existsSync(`${lease.paths.journal}.diagnostics.json`)) renameSync(`${lease.paths.journal}.diagnostics.json`, `${backup}.diagnostics.json`); } catch { /* The archived journal remains intact; optional diagnostics stay preserved. */ }
       lease.release();
       return { success: true, recovered: false, restoration_abandoned: true, unknown_acknowledged: true,
         unknown_hash: hash, incomplete: true, restored: false, outcome: 'unknown', journal_archived: true, backup_path: backup,
@@ -183,10 +185,10 @@ export async function recoverSession({ runId, targetId, directory, acknowledgeUn
       note: 'All recorded targets and panes are quiescent. The interrupted outcome remains unknown; inspect state before retrying.' };
   } catch(error) {
     primaryError=error;
-    if (lease.paths?.journal) try {
+    if (validatedRunId && !['RUN_ID_MISMATCH', 'TARGET_REQUIRED', 'UNKNOWN_ACK_MISMATCH'].includes(error.code) && lease.paths?.journal) try {
       const diagnostic = { journal_hash: sourceHash(readFileSync(lease.paths.journal)), code: error.code,
         blocker_class: error.details?.target_state || (error.code === 'WORKSPACE_DISCONNECTED' ? 'disconnected' : 'unreadable'),
-        unknown_hash: error.details?.unknown_hash || null, next_commands: error.details?.next_commands || [`tv session recover --run-id ${runId}`],
+        unknown_hash: error.details?.unknown_hash || null, next_commands: error.details?.next_commands || [`tv session recover --run-id ${validatedRunId}`],
         confirmation_required: Boolean(error.details?.confirmation_required) };
       writeFileSync(`${lease.paths.journal}.diagnostics.json`, JSON.stringify(diagnostic), { mode: 0o600 });
     } catch { /* Preserve the original error and journal even if diagnostics cannot be saved. */ }

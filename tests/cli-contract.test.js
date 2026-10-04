@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -253,6 +253,21 @@ it('real wait/report CLI projects large compiled text after raw production fresh
   assert.equal(changed.code, 'REPORT_CHANGED');
   page.compile('external-compiled');
   jsonError(await f.run(['--workspace', 'contract', 'data', 'strategy']), /outside the requested/, 'WORKSPACE_EXTERNAL_CHANGE');
+});
+
+it('BOM file and stdin fail at the real entry point before any Desktop access or new admission journal', async t => {
+  const f = await fixture(t, () => ({}));
+  const file = join(f.root, 'bom.pine');
+  const source = '\uFEFF//@version=6\nstrategy("BOM")\n';
+  writeFileSync(file, source);
+  const before = snapshot(f.options.directory);
+  for (const args of [['--file', file], []]) {
+    const error = jsonError(await f.run(['--workspace', 'contract', 'pine', 'set', ...args], args.length ? '' : source), /BOM/, 'PINE_SOURCE_UNSUPPORTED_BOM');
+    assert.equal(error.details.editor_changed, false); assert.equal(error.details.results_invalidated, false);
+    assert.equal(f.requests.length, 0); assert.deepEqual(snapshot(f.options.directory), before);
+    const state = workspaceStatus(join(f.root, 'contract.json'), f.options);
+    assert.equal(state.operation, null); assert.equal(state.interrupted, null);
+  }
 });
 
 it('real extraction CLI returns structured error codes and study details on stderr with exit 1', async t => {

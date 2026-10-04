@@ -199,6 +199,7 @@ async function permitFor(command, values, positionals) {
   if (command === 'pine set') {
     const source = values.file ? readFileSync(values.file, 'utf8') : await readInput();
     if (!source) throw workspaceError('PINE_SOURCE_REQUIRED', 'A nonempty Pine source is required.');
+    if (source.startsWith('\uFEFF')) throw Object.assign(workspaceError('PINE_SOURCE_UNSUPPORTED_BOM', 'Remove the leading BOM before pine set; no editor write was dispatched.'), { details: { editor_changed: false, results_invalidated: false } });
     // Preserve the CLI adapter's stdin behavior without consuming it twice.
     values.workspaceSource = source;
     return { source: canonicalPineSource(source) };

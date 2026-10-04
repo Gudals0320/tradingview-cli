@@ -273,6 +273,7 @@ export async function getSource() {
 }
 
 export async function setSource({ source, _deps }) {
+  if (source.startsWith('\uFEFF')) throw Object.assign(new Error('Leading BOM is not supported by Monaco source readback; remove the BOM before pine set.'), { code: 'PINE_SOURCE_UNSUPPORTED_BOM', details: { editor_changed: false, results_invalidated: false } });
   const editorReady = await ensurePineEditorOpen({ _deps });
   if (!editorReady) throw new Error('Could not open Pine Editor.');
 

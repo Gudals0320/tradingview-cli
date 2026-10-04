@@ -42,9 +42,9 @@ it('Pine indicator and strategy status plus auxiliary loading have idle/busy/unk
   const window = { TradingViewApi: { _activeChartWidgetWV: { value: () => chart }, _chartWidgetCollection: { getAll: () => [chart], metaInfo: { uid: 'layout' } } } };
   const document = { querySelectorAll: () => [] };
   const sample = () => runInNewContext(`(() => {${LAYOUT_PAGE_CODE};${findPineController.toString()};${readChartContext.toString()};return (${sessionPageQuiescence.toString()})(window,document);})()`, { window, document });
-  for (const strategy of [false, true]) for (const [type, expected] of [[0, 'busy'], [1, 'busy'], [2, 'idle'], [99, 'unknown'], [undefined, 'unknown']]) {
+  for (const strategy of [false, true]) for (const [type, expected] of [[0, 'busy'], [1, 'busy'], [2, 'idle'], [3, 'terminal_error'], [7, 'unknown'], [99, 'unknown'], [undefined, 'unknown']]) {
     source = { id: () => 'pine', metaInfo: () => ({ isTVScript: true, isTVScriptStrategy: strategy }), status: () => ({ type }), isLoading: () => false };
-    const state = sample(); assert.equal(state.source_states[0].state, expected); assert.equal(state.ready, expected === 'idle');
+    const state = sample(); assert.equal(state.source_states[0].state, expected); assert.equal(state.ready, ['idle', 'terminal_error'].includes(expected));
   }
   source = { id: () => 'ESD$FIXTURE', metaInfo: () => ({}), status: () => ({ type: 1 }), isLoading: () => false };
   assert.equal(sample().ready, false); assert.equal(sample().source_states[0].state, 'unknown');
@@ -80,6 +80,10 @@ it('exact stable auxiliary-only unknown acknowledgement archives raw journal and
   await assert.rejects(recoverSession({ runId: first.run_id, _deps: deps }), e => { hash = e.details.unknown_hash; return e.code === 'NATIVE_BUSY' && e.details.target_state === 'unknown'; });
   assert.match(hash, /^[a-f0-9]{64}$/); assert.equal(sessionStatus(opts).recovery_blocker_class, 'unknown');
   assert.equal(sessionStatus(opts).recovery_unknown_hash, hash); assert.equal(sessionStatus(opts).recovery_confirmation_required, true);
+  const diagnosis = JSON.stringify(sessionStatus(opts));
+  for (const runId of ['WRONG', undefined]) await assert.rejects(recoverSession({ runId, _deps: deps }), { code: 'RUN_ID_MISMATCH' });
+  await assert.rejects(recoverSession({ runId: first.run_id, targetId: 'wrong-target', _deps: deps }), { code: 'TARGET_REQUIRED' });
+  assert.equal(JSON.stringify(sessionStatus(opts)), diagnosis);
   await assert.rejects(recoverSession({ runId: first.run_id, acknowledgeUnknown: '0'.repeat(64), _deps: deps }), { code: 'UNKNOWN_ACK_MISMATCH' });
   state.blockers.registry_tokens = ['native-pending'];
   await assert.rejects(recoverSession({ runId: first.run_id, acknowledgeUnknown: hash, _deps: deps }), { code: 'NATIVE_BUSY' });
@@ -88,7 +92,16 @@ it('exact stable auxiliary-only unknown acknowledgement archives raw journal and
   await assert.rejects(recoverSession({ runId: first.run_id, acknowledgeUnknown: hash, _deps: deps }), { code: 'UNKNOWN_ACK_MISMATCH' });
   assert.equal(readFileSync(first.paths.journal, 'utf8'), original);
   state.blockers.pane_loading = []; deps.sleep = async () => {};
+  deps.list = async () => [{ id: 'other-target' }];
+  await assert.rejects(recoverSession({ runId: first.run_id, acknowledgeUnknown: hash, _deps: deps }), { code: 'RECOVERY_TARGET_LOST' });
+  deps.list = async () => { throw new Error('offline'); };
+  await assert.rejects(recoverSession({ runId: first.run_id, acknowledgeUnknown: hash, _deps: deps }), { code: 'WORKSPACE_DISCONNECTED' });
+  delete deps.list;
+  state.source_states[0].kind = 'pine';
+  await assert.rejects(recoverSession({ runId: first.run_id, acknowledgeUnknown: hash, _deps: deps }), { code: 'NATIVE_BUSY' });
+  state.source_states[0].kind = 'auxiliary';
   const result = await recoverSession({ runId: first.run_id, acknowledgeUnknown: hash, _deps: deps });
   assert.equal(result.recovered, false); assert.equal(result.outcome, 'unknown'); assert.equal(result.journal_archived, true);
   assert.equal(readFileSync(result.backup_path, 'utf8'), original); assert.equal(sessionStatus(opts).recovery_required, false);
+  acquireSession(opts).release();
 });
