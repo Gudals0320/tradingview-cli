@@ -26,7 +26,7 @@ tv --version
 tv status
 ```
 
-현재 버전은 `2.0.0`입니다. 전역 연결 없이 `node src/cli/index.js ...`로 실행할 수
+현재 버전은 `2.1.0`입니다. 전역 연결 없이 `node src/cli/index.js ...`로 실행할 수
 있습니다. PowerShell 모듈을 쓰는 동안 저장소 진입점을 고정하려면
 `$env:TV_CLI_ENTRY = (Resolve-Path .\src\cli\index.js).Path`를 설정합니다.
 

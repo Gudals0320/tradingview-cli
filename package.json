@@ -1,6 +1,6 @@
 {
   "name": "tradingview-cli",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Personal TradingView Desktop CLI with Pine development and repeatable experiments",
   "type": "module",
   "bin": {
