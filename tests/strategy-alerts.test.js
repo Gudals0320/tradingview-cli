@@ -1,6 +1,6 @@
 import {it} from 'node:test';
 import assert from 'node:assert/strict';
-import {createStrategyServerAlert,getStrategyServerAlert} from '../src/core/strategy-alerts.js';
+import {createStrategyServerAlert,getStrategyServerAlert,operateStrategyServerAlert} from '../src/core/strategy-alerts.js';
 import {strategyAlertPage} from './fixtures/strategy-alert-page.mjs';
 
 const memoryStore=()=>{let row=null;return {read:()=>row,write:value=>{row=structuredClone(value);},list:()=>row?[{record:row}]:[]};};
@@ -72,4 +72,26 @@ it('repeated cached factory definitions retain one exact SDK getter and one nati
   const p=strategyAlertPage(),chunks=p.window.webpackChunktradingview,factory=chunks[0][1].alerts;
   const repeated=Function('return '+String(factory).replace('{','{"use strict";'))();chunks.push([['repeated'],{alerts:repeated}]);
   const result=await createStrategyServerAlert(options(p,memoryStore()));assert.equal(result.success,true);assert.equal(p.counts().posts,1);
+});
+it('owned strategy alert lifecycle verifies pause/resume/delete while preserving the user alert',async()=>{
+  const p=strategyAlertPage(),store=memoryStore(),input=options(p,store),created=await createStrategyServerAlert(input);assert.equal(created.success,true);
+  for(const action of ['pause','resume','delete']){const operationStore=memoryStore(),opts={request_id:input.request_id,operation_id:'owned-'+action,action,_deps:{...input._deps,operationStore}};
+    const result=await operateStrategyServerAlert(opts);assert.equal(result.success,true);assert.equal(result.desired_state_verified,true);const repeated=await operateStrategyServerAlert(opts);assert.equal(repeated.success,true);assert.equal(repeated.reused,true);assert.equal(operationStore.read().phase,'verified');
+  }
+  assert.equal(p.counts().actions,3);assert.equal(p.server.has(created.alert_id),false);assert.equal(p.server.get(7).message,'private user message');
+});
+it('lost owned lifecycle replies reconcile desired state without retrying a mutation',async()=>{
+  for(const action of ['pause','delete']){const p=strategyAlertPage(),store=memoryStore(),input=options(p,store);await createStrategyServerAlert(input);p.loseActionResponse();const operationStore=memoryStore(),opts={request_id:input.request_id,operation_id:'lost-'+action,action,_deps:{...input._deps,operationStore}};
+    const unknown=await operateStrategyServerAlert(opts);assert.equal(unknown.code,'STRATEGY_ALERT_ACTION_UNKNOWN');assert.equal(operationStore.read().phase,'unknown');assert.equal(p.counts().actions,1);
+    const actual=await operateStrategyServerAlert(opts);assert.equal(actual.success,true);assert.equal(actual.reused,true);assert.equal(actual.mutation_dispatched,false);assert.equal(p.counts().actions,1);
+  }
+});
+it('GUI-edited server settings prevent owned lifecycle mutation and an operation ID cannot change actions',async()=>{
+  const p=strategyAlertPage(),store=memoryStore(),input=options(p,store),created=await createStrategyServerAlert(input),operationStore=memoryStore(),opts={request_id:input.request_id,operation_id:'exact-operation',action:'pause',_deps:{...input._deps,operationStore}};
+  p.server.get(created.alert_id).message='GUI modified';const refused=await operateStrategyServerAlert(opts);assert.equal(refused.code,'STRATEGY_ALERT_READBACK_UNVERIFIED');assert.equal(p.counts().actions,0);
+  const conflict=await operateStrategyServerAlert({...opts,action:'delete'});assert.equal(conflict.code,'STRATEGY_ALERT_OPERATION_CONFLICT');assert.equal(p.counts().actions,0);
+});
+it('reconciliation that observes the wrong active state stays unsuccessful and never replays the operation',async()=>{
+  const p=strategyAlertPage(),store=memoryStore(),input=options(p,store),created=await createStrategyServerAlert(input);p.loseActionResponse();const operationStore=memoryStore(),opts={request_id:input.request_id,operation_id:'lost-pause',action:'pause',_deps:{...input._deps,operationStore}};
+  await operateStrategyServerAlert(opts);p.server.get(created.alert_id).active=true;const result=await operateStrategyServerAlert(opts);assert.equal(result.success,false);assert.equal(result.desired_state_verified,false);assert.equal(result.code,'STRATEGY_ALERT_ACTION_UNCONFIRMED');assert.equal(operationStore.read().phase,'unknown');assert.equal(p.counts().actions,1);
 });

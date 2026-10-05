@@ -8,6 +8,8 @@
 # tv --workspace research-a data equity --plot-id plot_1 --export results/equity.csv
 # tv --workspace research-a alert strategy-create --request-id strategy-week-1 --mode both --name 'Research QA' --message '{{strategy.order.alert_message}}' --expiration 2027-01-01T00:00:00Z
 # tv --workspace research-a alert strategy-get --request-id strategy-week-1
+# tv --workspace research-a alert strategy-pause --request-id strategy-week-1 --operation-id stop-week-1
+# tv --workspace research-a alert strategy-resume --request-id strategy-week-1 --operation-id restart-week-1
 $script:TvModulePath = $PSCommandPath
 function Invoke-TvApplication {
     param([string[]]$Arguments, [object[]]$InputValues = @())

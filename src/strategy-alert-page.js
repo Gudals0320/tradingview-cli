@@ -122,4 +122,36 @@ export async function createStrategyAlert(window,document,request){
   }finally{if(rest._fetch===transport)rest._fetch=original;}
 }
 
-export const STRATEGY_ALERT_PAGE_CODE=DEEP_PAGE_CODE+'\n'+[strategyAlertToolkit,strategyAlertDto,ownedStrategyAlertTarget,prepareStrategyAlert,strategyAlertHash,strategyAlertFieldsMatch,readStrategyAlert,createStrategyAlert].map(fn=>fn.toString()).join('\n');
+export async function observeStrategyAlertAction(window,request){
+  if(request.action!=='delete'){const result=await readStrategyAlert(window,request);return {...result,desired_state_verified:result.success&&result.active===(request.action==='resume')};}
+  const toolkit=strategyAlertToolkit(window);if(!toolkit)return {success:false,code:'STRATEGY_ALERT_NATIVE_UNSUPPORTED'};
+  const userId=toolkit.getAlertSession().user.value()?.id;if(userId===undefined||await strategyAlertHash(window,String(userId))!==request.account_hash)return {success:false,code:'STRATEGY_ALERT_ACCOUNT_CHANGED'};
+  const raw=await toolkit.getAlertsRestApi().getAlerts({alert_ids:[request.alert_id]});
+  if(toolkit.getAlertSession().user.value()?.id!==userId||!Array.isArray(raw))return {success:false,code:'STRATEGY_ALERT_READBACK_UNVERIFIED'};
+  if(raw.length===0)return {success:true,alert_id:request.alert_id,deleted:true,desired_state_verified:true,readback:'fresh_native_rest'};
+  return {success:false,code:'STRATEGY_ALERT_ACTION_UNCONFIRMED',alert_id:request.alert_id,desired_state_verified:false};
+}
+
+export async function mutateStrategyAlert(window,request){
+  if(!['pause','resume','delete'].includes(request.action)||!request.alert_id)return {success:false,code:'INVALID_STRATEGY_ALERT_ACTION',mutation_dispatched:false};
+  const before=await readStrategyAlert(window,request);if(!before.success)return {...before,mutation_dispatched:false};
+  if(request.action!=='delete'&&before.active===(request.action==='resume'))return {...before,success:true,desired_state_verified:true,performed:false,mutation_dispatched:false};
+  const toolkit=strategyAlertToolkit(window),rest=toolkit.getAlertsRestApi(),method={pause:'stopAlerts',resume:'restartAlerts',delete:'deleteAlerts'}[request.action],path={pause:'/stop_alerts',resume:'/restart_alerts',delete:'/delete_alerts'}[request.action];
+  if(typeof rest[method]!=='function'||typeof rest._fetch!=='function')return {success:false,code:'STRATEGY_ALERT_NATIVE_UNSUPPORTED',mutation_dispatched:false};
+  const original=rest._fetch,userId=toolkit.getAlertSession().user.value()?.id,target=new window.URL(rest._options.baseRestUrl+path,rest._options.originUrl);let attempted=false,knownRejected=false,rejectionCode=null;
+  if(userId===undefined||await strategyAlertHash(window,String(userId))!==request.account_hash||toolkit.getAlertSession().user.value()?.id!==userId)return {success:false,code:'STRATEGY_ALERT_ACCOUNT_CHANGED',mutation_dispatched:false};
+  const transport=async(url,options)=>{
+    const actual=new window.URL(url),expected={payload:{alert_ids:[request.alert_id]}};let body;try{body=JSON.parse(options.body);}catch{throw Error('STRATEGY_ALERT_REQUEST_CHANGED');}
+    if(actual.origin!==target.origin||actual.pathname!==target.pathname||attempted||options.method!=='POST'||options.credentials!=='include'||options.headers!==undefined||toolkit.getAlertSession().user.value()?.id!==userId||!strategyAlertFieldsMatch(body,expected)||!strategyAlertFieldsMatch(expected,body))throw Error('STRATEGY_ALERT_REQUEST_CHANGED');
+    attempted=true;const start=Date.now(),send=toolkit.native_fetch,response=await send(url,options,{logBodyOnError:false});
+    try{const value=await response.clone().json();if(value.err){knownRejected=true;rejectionCode=value.err.code??null;}}catch{/* An invalid response preserves uncertainty. */}
+    return {response,metrics:{delay:Date.now()-start,statusCode:response.status}};
+  };
+  rest._fetch=transport;
+  try{try{await rest[method]({alert_ids:[request.alert_id]});}catch{return {success:false,code:!attempted?'STRATEGY_ALERT_NOT_DISPATCHED':knownRejected?'STRATEGY_ALERT_SERVER_REJECTED':'STRATEGY_ALERT_ACTION_UNKNOWN',native_error_code:rejectionCode,mutation_dispatched:attempted,known_no_mutation:!attempted||knownRejected,replay_safe:false};}}
+  finally{if(rest._fetch===transport)rest._fetch=original;}
+  if(!attempted)return {success:false,code:'STRATEGY_ALERT_ACTION_UNKNOWN',mutation_dispatched:true,replay_safe:false};
+  const after=await observeStrategyAlertAction(window,request);return {...after,success:after.success&&after.desired_state_verified===true,code:after.desired_state_verified?undefined:after.code||'STRATEGY_ALERT_ACTION_UNCONFIRMED',performed:true,mutation_dispatched:true};
+}
+
+export const STRATEGY_ALERT_PAGE_CODE=DEEP_PAGE_CODE+'\n'+[strategyAlertToolkit,strategyAlertDto,ownedStrategyAlertTarget,prepareStrategyAlert,strategyAlertHash,strategyAlertFieldsMatch,readStrategyAlert,createStrategyAlert,observeStrategyAlertAction,mutateStrategyAlert].map(fn=>fn.toString()).join('\n');

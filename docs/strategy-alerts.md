@@ -70,3 +70,26 @@ occur on real-time bars, and strategy fills refer to the broker emulator.
 describes these snapshot and event semantics. Lifecycle controls and internal fire
 logs are separate roadmap work; their acceptance and live receipts are tracked
 independently of these creation fixtures.
+
+## Explicit owned controls
+
+```powershell
+tv --workspace research-a alert strategy-pause --request-id strategy-week-1 --operation-id stop-week-1
+tv --workspace research-a alert strategy-resume --request-id strategy-week-1 --operation-id restart-week-1
+tv --workspace research-a alert strategy-delete --request-id strategy-week-1 --operation-id delete-week-1
+```
+
+These controls resolve only an already verified local creation to its exact server
+ID. Fresh settings/account readback precedes the mutation. GUI-edited settings
+refuse; arbitrary user alerts cannot be adopted. Each stable operation ID records
+its intent before one native request. Lost replies remain unknown and repeated
+IDs inspect the desired active/deleted state without resending. The same operation
+ID cannot change actions. A conflicting observed end state returns failure even
+when the underlying read succeeded. Native security/session behavior is retained;
+no native SDK retry fallback is used for the owned mutation.
+
+Successful deletion preserves the creation record and marks verified deletion.
+`strategy-get` still makes a fresh absence check; the old creation ID cannot create
+again. A successful control means the observed server state, not absence of queued
+events or broker execution. Update/replacement and internal fire logs remain separate
+implementation/acceptance work.

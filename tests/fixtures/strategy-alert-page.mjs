@@ -3,7 +3,7 @@ import {equityPage} from './equity-page.mjs';
 export function strategyAlertPage(){
   const p=equityPage(),server=new Map([[7,{alert_id:7,type:'price',name:'user alert',message:'private user message'}]]),user={id:123};
   p.window.URL=URL;
-  let serial=100,posts=0,reads=0,securityChecks=0,lost=false,beforeSend=null,afterSend=null,rejection=null;
+  let serial=100,posts=0,reads=0,securityChecks=0,actions=0,lost=false,lostAction=false,beforeSend=null,afterSend=null,rejection=null;
   const scalarInputs=()=>Object.fromEntries(p.chart.getStudyById('owned-study').getInputValues().map(i=>[i.id,i.value]));
   const mainSeries=p.chart._chartWidget.model().mainSeries();mainSeries.interval=()=> '60';mainSeries.getAlertSymbolString=()=> '='+JSON.stringify({symbol:'FIXTURE:OWNED'});p.source.series=()=>mainSeries;
   p.source.stateForAlert=()=>({fullId:'StrategyScript@fixture$owned-document',scriptIdPart:'owned-document',scriptVersion:'1',hasAlertFunction:true,inputs:scalarInputs()});
@@ -16,16 +16,18 @@ export function strategyAlertPage(){
     const path=new URL(url).pathname,payload=options?.body&&JSON.parse(options.body).payload;
     let result;
     if(path==='/create_alert'){posts++;if(rejection!==null)result={s:'error',err:{code:rejection},errmsg:'private server rejection details'};else{const id=++serial;server.set(id,structuredClone({...payload,alert_id:id,type:'strategy'}));afterSend?.();if(lost)throw Error('private response details must not escape');result={s:'ok',r:server.get(id)};}}
+    else if(['/stop_alerts','/restart_alerts','/delete_alerts'].includes(path)){actions++;for(const id of payload.alert_ids){if(path==='/delete_alerts')server.delete(id);else if(server.has(id))server.get(id).active=path==='/restart_alerts';}if(lostAction)throw Error('lost action response');result={s:'ok'};}
     else{reads++;result={s:'ok',r:path==='/get_alerts'?payload.alert_ids.map(id=>server.get(Number(id))).filter(Boolean):[...server.values()]};}
     const json=async()=>structuredClone(result);return {status:200,json,clone:()=>({json})};
   };
   const rest={_fetch:async(...args)=>{let last;for(let i=0;i<3;i++){try{const response=await p.window.fetch(...args);return {response,metrics:{statusCode:response.status,delay:0}};}catch(error){last=error;}}throw last;},async request(path,payload){const {response}=await this._fetch('https://pricealerts.tradingview.com/'+path,{method:payload?'POST':'GET',credentials:'include',...(payload?{body:JSON.stringify({payload})}:{})});return (await response.json()).r;},createAlert(payload){return this.request('create_alert',payload);},getAlerts(payload){return this.request('get_alerts',payload);},listAlerts(){return this.request('list_alerts');}};
   const collection={readyState:()=>({value:()=>({status:'ready'})}),ensureLoadedAlerts:async()=>{},async createAlert(dto,options){if(options.checkSecurityIssues!==true)throw Error('security required');securityChecks++;await beforeSend?.();return convertApiAlert(await rest.createAlert({...convertEditableAlertState(dto),active:true,ignore_warnings:true,symbol_style:undefined}));}};
   rest._options={baseRestUrl:'https://pricealerts.tradingview.com',originUrl:'https://tradingview.com'};collection._restRequestsHandler={_restApi:rest};
+  rest.stopAlerts=payload=>rest.request('stop_alerts',payload);rest.restartAlerts=payload=>rest.request('restart_alerts',payload);rest.deleteAlerts=payload=>rest.request('delete_alerts',payload);
   const exports={getAlertsCollection:()=>collection,getAlertSession:()=>session,getAlertsRestApi:()=>rest,convertApiAlert,convertEditableAlertState,StudyMetaInfo,deriveSymbolStyle:()=>undefined,decodeExtendedSymbol:text=>JSON.parse(text.slice(1)),getEditorStateForAlertFromStudy:()=>({type:'strategy',pineId:'owned-document',pineVersion:'1',studyId:'StrategyScript@fixture',hasAlertFunction:true,symbol:{symbol:'FIXTURE:OWNED'},inputs:scalarInputs()})};
   const factory=Function('return function(e,t,n){n.d(t,{getAlertsCollection:()=>a,getAlertSession:()=>b,getAlertsRestApi:()=>c,convertApiAlert:()=>d,convertEditableAlertState:()=>f,getEditorStateForAlertFromStudy:()=>g,StudyMetaInfo:()=>h,decodeExtendedSymbol:()=>i,deriveSymbolStyle:()=>j});var c=n(99);function m(){var t;return(t=c.fetch,async(...args)=>t(...args));}}')();
   const chunks=p.window.webpackChunktradingview||[];chunks.push([['alerts'],{alerts:factory}]);const originalPush=chunks.push;
   chunks.push=function(chunk){if(typeof chunk[2]==='function')chunk[2](id=>{if(id==='alerts')return exports;if(String(id)==='99')return {fetch:(...args)=>p.window.fetch(...args)};throw Error('unobserved native export');});return Array.prototype.push.call(this,chunk);};
   p.window.webpackChunktradingview=chunks;
-  return {...p,server,user,rest,collection,exports,mainSeries,counts:()=>({posts,reads,securityChecks}),loseResponse:()=>{lost=true;},rejectCreate:code=>{rejection=code;},beforeSend:fn=>{beforeSend=fn;},afterSend:fn=>{afterSend=fn;},originalPush};
+  return {...p,server,user,rest,collection,exports,mainSeries,counts:()=>({posts,reads,securityChecks,actions}),loseResponse:()=>{lost=true;},loseActionResponse:()=>{lostAction=true;},rejectCreate:code=>{rejection=code;},beforeSend:fn=>{beforeSend=fn;},afterSend:fn=>{afterSend=fn;},originalPush};
 }

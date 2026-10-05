@@ -15,7 +15,7 @@ export function validateStrategyAlert(options){
   if(typeof options.active!=='boolean')error('Active must be explicitly represented by the adapter.');
 }
 const digest=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const pageCall=(inspect,name,request,mutation=false)=>inspect(`(async()=>{${STRATEGY_ALERT_PAGE_CODE};return ${name}(window,${name==='readStrategyAlert'?'':'document,'}${JSON.stringify(request)});})()`,mutation?{mutation:true}:undefined);
+const pageCall=(inspect,name,request,mutation=false)=>inspect(`(async()=>{${STRATEGY_ALERT_PAGE_CODE};return ${name}(window,${['readStrategyAlert','observeStrategyAlertAction','mutateStrategyAlert'].includes(name)?'':'document,'}${JSON.stringify(request)});})()`,mutation?{mutation:true}:undefined);
 function storeFor(request_id,_deps){const workspace=currentWorkspaceSession()?.workspace,store=_deps?.store||(workspace&&nativeRequestStore(workspace,'strategy-alert',request_id));if(!store)throw Object.assign(Error('A persistent named workspace alert ledger is required.'),{code:'WORKSPACE_REQUIRED'});return store;}
 function project(record,result){const {_private_diagnostic,...output}=result;return {...output,request_id:record.request_id,run_id:record.run_id,creation_provenance:{scope:'local_creation_record',document_id:record.source_proof.document_id,document_version:record.source_proof.document_version,source_hash:record.source_proof.source_hash,properties_fingerprint:createHash('sha256').update(record.source_proof.properties_fingerprint).digest('hex'),inputs_hash:record.source_proof.inputs_fingerprint,server_source_hash_verified:false},snapshot_automatically_updated:false};}
 
@@ -24,6 +24,7 @@ export async function createStrategyServerAlert(options){
   const parameters={mode:options.mode,name:options.name,message:options.message,expiration:new Date(options.expiration).toISOString(),active:options.active,strategy_id:options.strategy_id??null},fingerprint=digest(parameters),previous=store.read();
   if(previous){
     if(previous.fingerprint!==fingerprint)return {success:false,code:'STRATEGY_ALERT_REQUEST_CONFLICT',mutation_dispatched:false};
+    if(previous.phase==='deleted')return {success:false,code:'STRATEGY_ALERT_DELETED',request_id,alert_id:previous.alert_id,mutation_dispatched:false,replay_safe:false};
     if(previous.phase==='rejected_known')return project(previous,{...previous.result,reused:true,mutation_dispatched:false});
     const actual=await pageCall(inspect,'readStrategyAlert',previous);if(actual.success)store.write({...previous,phase:'created',alert_id:actual.alert_id,result:actual});
     return project(previous,{...actual,reused:true,mutation_dispatched:false});
@@ -40,6 +41,22 @@ export async function createStrategyServerAlert(options){
 export async function getStrategyServerAlert({request_id,_deps}={}){
   if(!request_id)throw Object.assign(Error('Pass the exact owned creation request ID.'),{code:'INVALID_STRATEGY_ALERT'});
   const record=storeFor(request_id,_deps).read();if(!record)return {success:false,code:'STRATEGY_ALERT_NOT_OWNED',mutation_dispatched:false};
+  if(record.phase==='deleted')return project(record,await pageCall(_deps?.evaluateAsync||evaluateAsync,'observeStrategyAlertAction',{...record,action:'delete'}));
   if(record.phase==='rejected_known')return project(record,{...record.result,mutation_dispatched:false});
   return project(record,await pageCall(_deps?.evaluateAsync||evaluateAsync,'readStrategyAlert',record));
+}
+
+export async function operateStrategyServerAlert({request_id,operation_id,action,_deps}={}){
+  if(!/^[-a-zA-Z0-9_]{1,100}$/.test(operation_id||'')||!['pause','resume','delete'].includes(action))throw Object.assign(Error('Pass a stable operation ID and pause/resume/delete action.'),{code:'INVALID_STRATEGY_ALERT_ACTION'});
+  const creation=storeFor(request_id,_deps),record=creation.read();if(!record||!['created','deleted'].includes(record.phase)||!record.alert_id)return {success:false,code:'STRATEGY_ALERT_NOT_OWNED',mutation_dispatched:false};
+  if(record.phase==='deleted'&&action!=='delete')return {success:false,code:'STRATEGY_ALERT_DELETED',alert_id:record.alert_id,mutation_dispatched:false};
+  const workspace=currentWorkspaceSession()?.workspace,store=_deps?.operationStore||(workspace&&nativeRequestStore(workspace,'strategy-alert-operation',operation_id));if(!store)throw Object.assign(Error('Persistent operation ledger required.'),{code:'WORKSPACE_REQUIRED'});
+  const inspect=_deps?.evaluateAsync||evaluateAsync,fingerprint=digest({request_id,alert_id:record.alert_id,action}),previous=store.read();
+  if(previous&&previous.fingerprint!==fingerprint)return {success:false,code:'STRATEGY_ALERT_OPERATION_CONFLICT',mutation_dispatched:false};
+  const request={...record,action,operation_id};
+  if(previous){const result=await pageCall(inspect,'observeStrategyAlertAction',request),verified=result.success&&result.desired_state_verified===true;if(verified){store.write({...previous,phase:'verified',reconciliation:result});if(action==='delete'&&record.phase!=='deleted')creation.write({...record,phase:'deleted',deletion:{operation_id,verified_at:new Date().toISOString(),original_creation_preserved:true}});}return project(record,{...result,success:verified,code:verified?undefined:result.code||'STRATEGY_ALERT_ACTION_UNCONFIRMED',operation_id,reused:true,mutation_dispatched:false});}
+  if(store.list().some(entry=>['dispatching','unknown'].includes(entry.record.phase)&&entry.record.alert_id===record.alert_id))return {success:false,code:'STRATEGY_ALERT_ACTION_UNKNOWN',mutation_dispatched:false,replay_safe:false};
+  const intent={schema:1,operation_id,fingerprint,request_id,alert_id:record.alert_id,action,phase:'dispatching',started_at:new Date().toISOString()};store.write(intent);
+  try{const result=await pageCall(inspect,record.phase==='deleted'?'observeStrategyAlertAction':'mutateStrategyAlert',request,record.phase!=='deleted');store.write({...intent,phase:result.success?'verified':result.known_no_mutation||result.mutation_dispatched===false?'rejected_known':'unknown',result});if(result.success&&action==='delete')creation.write({...record,phase:'deleted',deletion:{operation_id,verified_at:new Date().toISOString(),original_creation_preserved:true}});return project(record,{...result,operation_id});}
+  catch(error){store.write({...intent,phase:'unknown',error_code:error.code||'STRATEGY_ALERT_ACTION_UNKNOWN'});throw error;}
 }

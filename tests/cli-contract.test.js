@@ -54,6 +54,19 @@ it('real strategy alert entry refuses foreign native targets and unexpected crea
     const result=jsonResult(await f.run(['--workspace','contract','alert','strategy-create','--request-id','foreign-target','--mode','fills','--name','QA','--message','private message','--expiration','2099-01-01T00:00:00Z']),1);assert.equal(result.mutation_dispatched,false);assert.ok(['STRATEGY_ALERT_TARGET_UNVERIFIED','STRATEGY_ALERT_NOT_DISPATCHED'].includes(result.code));assert.equal(page.counts().posts,0);assert.equal(page.server.size,1);
   }
 });
+it('real owned strategy alert lifecycle verifies pause/resume/delete and never retries lost action responses',async t=>{
+  const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('lifecycle-alert-entry-v2');page.refreshReport();page.completeInputs();
+  const created=jsonResult(await f.run(['--workspace','contract','alert','strategy-create','--request-id','owned-alert','--mode','both','--name','QA','--message','private message','--expiration','2099-01-01T00:00:00Z']));
+  for(const action of ['pause','resume','delete']){const args=['--workspace','contract','alert','strategy-'+action,'--request-id','owned-alert','--operation-id','owned-'+action],result=jsonResult(await f.run(args));assert.equal(result.desired_state_verified,true);assert.equal(result.alert_id,created.alert_id);const again=jsonResult(await f.run(args));assert.equal(again.reused,true);assert.equal(again.mutation_dispatched,false);}
+  assert.equal(page.counts().actions,3);assert.equal(page.server.get(7).message,'private user message');assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+});
+it('real owned strategy alert action reconciles the desired state after response loss with one mutation',async t=>{
+  const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('lost-lifecycle-entry-v2');page.refreshReport();page.completeInputs();
+  jsonResult(await f.run(['--workspace','contract','alert','strategy-create','--request-id','owned-alert','--mode','fills','--name','QA','--message','private message','--expiration','2099-01-01T00:00:00Z']));page.loseActionResponse();
+  const args=['--workspace','contract','alert','strategy-pause','--request-id','owned-alert','--operation-id','lost-pause'];const lost=jsonResult(await f.run(args),1);assert.equal(lost.code,'STRATEGY_ALERT_ACTION_UNKNOWN');assert.equal(page.counts().actions,1);const read=jsonResult(await f.run(args));assert.equal(read.reused,true);assert.equal(read.desired_state_verified,true);assert.equal(page.counts().actions,1);
+});
 it('real strategy alert entry reconciles a lost server response without SDK or CLI create retries',async t=>{
   const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
   const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('lost-alert-entry-v2');page.refreshReport();page.completeInputs();page.loseResponse();

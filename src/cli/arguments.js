@@ -7,6 +7,7 @@ import {validateStrategyAlert} from '../core/strategy-alerts.js';
 // A command without an entry accepts no positional arguments.
 export const POSITIONALS = new Map([
   ['alert strategy-create',[0,0]],['alert strategy-get',[0,0]],
+  ['alert strategy-pause',[0,0]],['alert strategy-resume',[0,0]],['alert strategy-delete',[0,0]],
   ['workspace backtest-archive',[1,1]],
   ['workspace pine-prepare',[1,1]],
   ['workspace reconnect', [1, 1]], ['workspace attach', [1, 1]], ['workspace detach', [1, 1]],
@@ -29,6 +30,7 @@ export const POSITIONALS = new Map([
 ]);
 
 export function validateArguments(command, values, positionals) {
+  if(['alert strategy-pause','alert strategy-resume','alert strategy-delete'].includes(command)&&!['request-id','operation-id'].every(key=>/^[-a-zA-Z0-9_]{1,100}$/.test(values[key]||'')))throw Object.assign(Error('Pass exact creation and stable operation IDs.'),{code:'INVALID_STRATEGY_ALERT_ACTION'});
   if(command==='alert strategy-create')validateStrategyAlert({request_id:values['request-id'],mode:values.mode,name:values.name,message:values.message,expiration:values.expiration,active:!values.paused});
   if(command==='alert strategy-get'&&!/^[-a-zA-Z0-9_]{1,100}$/.test(values['request-id']||''))throw Object.assign(Error('Pass the exact owned creation request ID.'),{code:'INVALID_STRATEGY_ALERT'});
   if(command==='workspace backtest-archive'&&(!values['request-id']||!values['run-id']||!values['acknowledge-no-adoption']))throw Object.assign(new Error('Exact request/run IDs and --acknowledge-no-adoption are required.'),{code:'DEEP_ARCHIVE_CONFIRMATION_REQUIRED'});
