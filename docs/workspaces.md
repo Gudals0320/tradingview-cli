@@ -256,3 +256,10 @@ reference matching both a name and local file is rejected. `--target` and
 `TV_CDP_TARGET` are preparation/migration selectors and cannot replace workspace
 selection for chart work. Update scripts to names and replace the old active-tab
 batch entry point with `examples/workspace-batch.mjs`.
+
+Owned strategy server alerts require explicit workspace names and private stable
+creation records. `alert strategy-create` takes app/layout/workspace/document
+resources and verifies the exact saved/applied snapshot before dispatch.
+`alert strategy-get` is a pure server observation with no private outcome writes.
+An unknown creation stays fenced against another creation; recovery does not
+authorize replay. [Strategy alert contract](strategy-alerts.md).

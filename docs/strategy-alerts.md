@@ -1,0 +1,57 @@
+# Owned strategy server alerts
+
+`alert strategy-create` creates a server alert for the exact saved/applied strategy
+in the named workspace. It requires a verified normal baseline, full inputs and
+effective Properties, a matching saved document/version, and the current account.
+The native modes are `fills`, `alerts` and `both`. The latter two require native
+alert() capability. Dependency-bearing inputs and unsupported interval mappings
+fail before dispatch. The Desktop's native permission/security checks remain on.
+
+```powershell
+tv --workspace research-a alert strategy-create --request-id strategy-week-1 --mode both --name 'Research QA' --message '{{strategy.order.alert_message}}' --expiration 2027-01-01T00:00:00Z
+tv --workspace research-a alert strategy-get --request-id strategy-week-1
+```
+
+Names gain a unique `[tv:UUID]` suffix for exact request reconciliation. Text/JSON
+and TV placeholders pass through unchanged. Outputs omit the message body and
+return its SHA-256. Full native DTO/source/input evidence remains in the private
+workspace artifact directory. Existing user alerts are never adopted by name alone:
+only a previously recorded unique correlation and matching account/settings can
+identify an uncertain creation. No arbitrary alert ID is accepted by these commands.
+
+Expiration is a future ISO timestamp with an explicit offset. `--paused` creates
+the alert initially inactive. Popup, sound, email, SMS and mobile notifications are
+disabled; webhook is explicitly null. There is no webhook configuration or external
+delivery claim. Native account/limit/server rejection codes remain distinct from
+unknown transport/readback outcomes. Server messages are not printed as errors.
+
+Before native transport, the full owned identity/account and generated wire fields
+are checked again. The native request builder supplies its authenticated URL and
+payload, while a scoped one-attempt transport prevents the SDK's create retry from
+duplicating an uncertain request. Native operation tracking retains unfinished work
+after CDP timeout. A private intent is written before dispatch. Its stable request
+ID is never blindly sent again: repetitions inspect the original server snapshot.
+Changed parameters conflict. An unrelated new creation is refused while an earlier
+creation intent is unknown. Exact fresh readback can reconcile a lost response.
+An absent list result does not prove that creation failed or permit replay.
+
+`strategy-get` performs a fresh native server read and never changes alerts or
+private outcomes. It can inspect an uncertain creation through its private
+correlation, but only repeated `strategy-create` persists a reconciled creation.
+If native work remains pending after timeout, wait and use the exact existing
+workspace recovery contract before resuming. Never clear ownership or discard the
+creation intent to retry it.
+
+Readback verifies the type, mode, study/input snapshot, symbol, interval, name,
+message, expiration and disabled notifications. Creation's active setting is
+verified immediately; later reads report the current active state independently.
+Source hash and effective Properties provenance are explicitly local creation
+evidence, not a claim that the server returned a Pine source hash. Creation success
+means server configuration/readback, not a real-time event or broker execution.
+
+Server alerts retain their creation snapshot when the chart/source changes. Events
+occur on real-time bars, and strategy fills refer to the broker emulator.
+[TradingView's official alert documentation](https://www.tradingview.com/pine-script-docs/concepts/alerts/)
+describes these snapshot and event semantics. Lifecycle controls and internal fire
+logs are separate roadmap work; their acceptance and live receipts are tracked
+independently of these creation fixtures.

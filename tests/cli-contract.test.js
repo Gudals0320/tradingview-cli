@@ -22,9 +22,34 @@ import { preparationPage } from './fixtures/preparation-page.mjs';
 import { propertiesPage } from './fixtures/properties-page.mjs';
 import { deepPage } from './fixtures/deep-page.mjs';
 import { equityPage } from './fixtures/equity-page.mjs';
+import {strategyAlertPage} from './fixtures/strategy-alert-page.mjs';
 import {createHash} from 'node:crypto';
 
 const CLI = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
+
+it('real strategy alert entry verifies modes and inactive creation, hides private payloads and reuses exact IDs without duplicate sends',async t=>{
+  for(const mode of ['fills','alerts','both']){
+    const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+    const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('native-alert-entry-v2');page.refreshReport();page.completeInputs();
+    const args=['--workspace','contract','alert','strategy-create','--request-id','owned-alert','--mode',mode,'--name','QA','--message','{"secret":"{{strategy.order.alert_message}}"}','--expiration','2099-01-01T00:00:00Z',...(mode==='both'?['--paused']:[])];
+    const output=await f.run(args),created=jsonResult(output);assert.equal(created.settings_verified,true);assert.equal(created.active,mode!=='both');assert.equal(created.server_event_observed,false);assert.equal(created.creation_provenance.server_source_hash_verified,false);assert.equal(created.creation_provenance.properties_fingerprint.length,64);assert.equal(output.stdout.includes('{{strategy.order.alert_message}}'),false);assert.equal(output.stdout.includes('private user message'),false);assert.equal(page.counts().posts,1);
+    const reused=jsonResult(await f.run(args));assert.equal(reused.reused,true);assert.equal(reused.alert_id,created.alert_id);assert.equal(page.counts().posts,1);
+    const before=snapshot(f.root),read=jsonResult(await f.run(['--workspace','contract','alert','strategy-get','--request-id','owned-alert']));assert.equal(read.alert_id,created.alert_id);assert.deepEqual(snapshot(f.root),before);assert.equal(page.counts().posts,1);
+    const catalog=jsonResult(await f.run(['help','--json','alert','strategy-create'])).commands[0];assert.equal(catalog.scope,'app-shared');assert.equal(catalog.invocation,'native');assert.deepEqual(catalog.locks,['app','layout','workspace','document']);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+  }
+});
+it('real strategy alert entry reconciles a lost server response without SDK or CLI create retries',async t=>{
+  const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('lost-alert-entry-v2');page.refreshReport();page.completeInputs();page.loseResponse();
+  const args=['--workspace','contract','alert','strategy-create','--request-id','lost-alert','--mode','both','--name','QA','--message','private message','--expiration','2099-01-01T00:00:00Z'];
+  const unknown=jsonResult(await f.run(args),1);assert.equal(unknown.code,'STRATEGY_ALERT_OUTCOME_UNKNOWN');assert.equal(page.counts().posts,1);
+  const reused=jsonResult(await f.run(args));assert.equal(reused.reused,true);assert.equal(reused.settings_verified,true);assert.equal(page.counts().posts,1);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+});
+it('invalid strategy alert options fail before Desktop or intent writes and foreign readback never publishes secrets',async t=>{
+  const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch}),before=snapshot(f.root);
+  jsonError(await f.run(['--workspace','contract','alert','strategy-create','--request-id','invalid','--mode','wrong']),/Mode must be/,'INVALID_STRATEGY_ALERT');assert.deepEqual(snapshot(f.root),before);assert.equal(f.connections,0);
+  jsonResult(await f.run(['--workspace','contract','alert','strategy-get','--request-id','not-owned']),1);assert.equal(page.counts().posts,0);assert.equal(page.server.get(7).message,'private user message');
+});
 
 it('real equity entry refuses malformed time/schema/count and ambiguous same-bar allocation without points or CSV',async t=>{
   const changes=[

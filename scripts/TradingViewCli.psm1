@@ -6,6 +6,8 @@
 # tv workspace backtest-archive research-a --request-id historical-week-1 --run-id EXACT_RUN_ID --acknowledge-no-adoption
 # tv --workspace research-a data equity --list-plots
 # tv --workspace research-a data equity --plot-id plot_1 --export results/equity.csv
+# tv --workspace research-a alert strategy-create --request-id strategy-week-1 --mode both --name 'Research QA' --message '{{strategy.order.alert_message}}' --expiration 2027-01-01T00:00:00Z
+# tv --workspace research-a alert strategy-get --request-id strategy-week-1
 $script:TvModulePath = $PSCommandPath
 function Invoke-TvApplication {
     param([string[]]$Arguments, [object[]]$InputValues = @())

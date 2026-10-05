@@ -109,6 +109,16 @@ status/wait/results는 순수 관측이며 일반 `data strategy`를 딥 결과�
 않습니다. [기간·timezone·응답 귀속·불명 작업 계약](docs/deep-backtesting.md)은 현재
 실환경 인수 검증 중입니다. 설치된 정식 2.2.0의 지원 목록과 구분하세요.
 
+개발 브랜치의 `alert strategy-create`는 검증된 전략의 체결·alert()·both 서버
+스냅샷을 만들고 정확한 ID로 설정을 재조회합니다. 고정 request ID 재호출은 기존
+결과를 확인하며 중복 생성하지 않습니다. 메시지는 그대로 전달하고 출력에는 hash만
+남깁니다. [전략 알림 계약](docs/strategy-alerts.md)의 fixture와 live 인수는 구분됩니다.
+
+```powershell
+tv --workspace research-a alert strategy-create --request-id strategy-week-1 --mode both --name 'Research QA' --message '{{strategy.order.alert_message}}' --expiration 2027-01-01T00:00:00Z
+tv --workspace research-a alert strategy-get --request-id strategy-week-1
+```
+
 Pine 문서는 기본 생성 조건이 아닙니다. chart-only workspace에서 명시적으로 새 저장
 문서를 준비하거나 정확한 저장 ID를 엽니다. 현재 generation과 재호출에 사용할 고정
 request ID가 필요합니다. `--mount`는 에디터만 열며 기존 수정 draft를 저장/폐기하지

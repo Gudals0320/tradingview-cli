@@ -83,6 +83,11 @@ an unknown native operation.
 | DEEP_RUN_SUPERSEDED | Later GUI/native work owns the visible state; no reset/result adoption. Archive requires archive_eligible:true and an exact prior terminal/no-history outcome. With archive_eligible:false, the earlier unknown/pending intent remains fenced and unchanged. |
 | DEEP_ARCHIVE_CONFIRMATION_REQUIRED / DEEP_ARCHIVE_ID_MISMATCH | Explicit exact request/run IDs and --acknowledge-no-adoption are required; wrong/missing values leave the record unchanged. |
 | DEEP_ARCHIVE_OUTCOME_UNKNOWN | Genuine pending/unknown outcome cannot be archived. Replacement alone is insufficient; an exact prior terminal/no-history outcome is required. Original record bytes and GUI/native work remain untouched. |
+| INVALID_STRATEGY_ALERT | Supply stable request ID, fills/alerts/both, explicit name/message and future explicit-offset expiration. Input rejection precedes Desktop access. |
+| STRATEGY_ALERT_REQUEST_CONFLICT | This exact ID already pins different creation parameters; no replay. Inspect its original request. |
+| STRATEGY_ALERT_OUTCOME_UNKNOWN / STRATEGY_ALERT_PENDING | Preserve intent; an absent readback is not proof of no creation. Observe the exact request, wait for native quiescence, recover exact workspace ownership if needed, then repeat only the same request to reconcile. |
+| STRATEGY_ALERT_NOT_DISPATCHED / STRATEGY_ALERT_SERVER_REJECTED | A known zero dispatch or exact native server rejection is preserved. Same-ID retries do not create; native_error_code is reported without message/body secrets. |
+| STRATEGY_ALERT_READBACK_UNVERIFIED / STRATEGY_ALERT_ACCOUNT_CHANGED | Exact settings/account do not match the pinned request. Do not adopt or modify that alert. |
 | DEEP_RUN_ARCHIVED | The original request evidence remains preserved without adoption; use a new request ID after current native/GUI work is idle. |
 | DEEP_REQUEST_CONFLICT | Stable request ID describes different source/full inputs/context/settings/period; use an explicit new request after old work settles. |
 | DEEP_RESULT_STALE / DEEP_REQUEST_CHANGED / DEEP_RESULT_GENERATION_CHANGED | Current source or native run/provider identity changed; no stale result adoption. |

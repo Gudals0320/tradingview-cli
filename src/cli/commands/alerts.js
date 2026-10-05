@@ -1,9 +1,12 @@
 import { register } from '../router.js';
 import * as core from '../../core/alerts.js';
+import {createStrategyServerAlert,getStrategyServerAlert} from '../../core/strategy-alerts.js';
 
 register('alert', {
   description: 'Alert tools (list, create, delete)',
   subcommands: new Map([
+    ['strategy-create',{description:'Create a pinned owned strategy server snapshot and verify exact fresh readback; stable requests never blindly replay',options:{'request-id':{type:'string',description:'Stable creation ID; repeated requests inspect the original snapshot'},mode:{type:'string',description:'fills, alerts or both'},name:{type:'string',description:'Explicit name; a unique tv request suffix is appended'},message:{type:'string',description:'Exact text/JSON or TV placeholders; output contains only its SHA-256'},expiration:{type:'string',description:'Future explicit-offset ISO timestamp'},paused:{type:'boolean',description:'Create initially inactive'},'strategy-id':{type:'string',description:'Exact current owned strategy ID'}},handler:opts=>createStrategyServerAlert({request_id:opts['request-id'],mode:opts.mode,name:opts.name,message:opts.message,expiration:opts.expiration,active:!opts.paused,strategy_id:opts['strategy-id']})}],
+    ['strategy-get',{description:'Fresh read of an exact owned creation request; no server changes or private outcome writes',options:{'request-id':{type:'string',description:'Exact recorded creation request ID'}},handler:opts=>getStrategyServerAlert({request_id:opts['request-id']})}],
     ['list', {
       description: 'List active alerts',
       handler: () => core.list(),

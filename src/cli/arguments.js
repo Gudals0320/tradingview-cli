@@ -2,9 +2,11 @@ import { requireFinite, requireInteger } from '../connection.js';
 import { alertCondition } from '../core/alerts.js';
 import { validateStrategyProperties } from '../strategy-properties.js';
 import { deepPeriod } from '../core/deep-backtest.js';
+import {validateStrategyAlert} from '../core/strategy-alerts.js';
 
 // A command without an entry accepts no positional arguments.
 export const POSITIONALS = new Map([
+  ['alert strategy-create',[0,0]],['alert strategy-get',[0,0]],
   ['workspace backtest-archive',[1,1]],
   ['workspace pine-prepare',[1,1]],
   ['workspace reconnect', [1, 1]], ['workspace attach', [1, 1]], ['workspace detach', [1, 1]],
@@ -27,6 +29,8 @@ export const POSITIONALS = new Map([
 ]);
 
 export function validateArguments(command, values, positionals) {
+  if(command==='alert strategy-create')validateStrategyAlert({request_id:values['request-id'],mode:values.mode,name:values.name,message:values.message,expiration:values.expiration,active:!values.paused});
+  if(command==='alert strategy-get'&&!/^[-a-zA-Z0-9_]{1,100}$/.test(values['request-id']||''))throw Object.assign(Error('Pass the exact owned creation request ID.'),{code:'INVALID_STRATEGY_ALERT'});
   if(command==='workspace backtest-archive'&&(!values['request-id']||!values['run-id']||!values['acknowledge-no-adoption']))throw Object.assign(new Error('Exact request/run IDs and --acknowledge-no-adoption are required.'),{code:'DEEP_ARCHIVE_CONFIRMATION_REQUIRED'});
   if(command==='backtest run'){deepPeriod(values);if(values.mode!=='deep'||!values['request-id']||!/^[-a-zA-Z0-9_]{1,100}$/.test(values['request-id']))throw Object.assign(new Error('Pass --mode deep and a stable --request-id.'),{code:'INVALID_DEEP_REQUEST'});}
   if(command==='strategy set-properties')validateStrategyProperties(JSON.parse(values.values||'null'));
