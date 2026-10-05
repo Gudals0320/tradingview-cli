@@ -69,3 +69,20 @@ export async function getStrategyAlertFires({request_id,limit=50,before,_deps}={
   const record=storeFor(request_id,_deps).read();if(!record||!['created','deleted'].includes(record.phase)||!record.alert_id)return {success:false,code:'STRATEGY_ALERT_NOT_OWNED'};
   return pageCall(_deps?.evaluateAsync||evaluateAsync,'readStrategyAlertFires',{...record,limit,before});
 }
+
+export async function createStrategyAlertThenPause(options){
+  const {request_id,_deps}=options;validateStrategyAlert({...options,active:true});
+  if(!storeFor(request_id,_deps).read())validateStrategyAlert({...options,active:true},{require_future:true});
+  const workspace=currentWorkspaceSession()?.workspace,store=_deps?.pauseCreationStore||(workspace&&nativeRequestStore(workspace,'strategy-alert-paused-create',request_id));if(!store)throw Object.assign(Error('Persistent two-step policy record required.'),{code:'WORKSPACE_REQUIRED'});
+  const parameters={request_id,mode:options.mode,name:options.name,message:options.message,expiration:new Date(options.expiration).toISOString()},fingerprint=digest(parameters),previous=store.read();
+  if(previous&&previous.fingerprint!==fingerprint)return {success:false,code:'STRATEGY_ALERT_REQUEST_CONFLICT',mutation_dispatched:false};
+  let record=previous||{schema:1,request_id,fingerprint,policy:'create_active_then_pause',pause_operation_id:'initial-pause-'+digest(request_id).slice(0,40)};
+  if(!previous)store.write(record);
+  const create=await createStrategyServerAlert({...options,active:true});
+  record={...record,create_result:create,...(!record.create_confirmed_at&&create.success?{create_confirmed_at:new Date().toISOString()}:{}),alert_id:create.alert_id??record.alert_id};store.write(record);
+  if(!create.success)return {...create,policy:'create_active_then_pause',steps:{create},atomic:false,transient_active_possible:true};
+  const pause=await operateStrategyServerAlert({request_id,operation_id:record.pause_operation_id,action:'pause',_deps});
+  record={...record,pause_result:pause,...(pause.success&&!record.pause_confirmed_at?{pause_confirmed_at:new Date().toISOString()}:{}),phase:pause.success?'paused_verified':'pause_unconfirmed'};store.write(record);
+  const windowMs=record.pause_confirmed_at?Date.parse(record.pause_confirmed_at)-Date.parse(record.create_confirmed_at):null;
+  return {success:pause.success,code:pause.success?undefined:'STRATEGY_ALERT_CREATED_PAUSE_UNCONFIRMED',request_id,alert_id:create.alert_id,policy:'create_active_then_pause',atomic:false,steps:{create,pause},active:pause.success?false:true,active_state:pause.success?'inactive_verified':'ACTIVE_UNTIL_INACTIVE_VERIFIED',transient_active_possible:true,could_fire_during_active_window:true,active_window:{create_confirmed_at:record.create_confirmed_at,pause_confirmed_at:record.pause_confirmed_at??null,milliseconds:windowMs,scope:'client confirmation times; creation may predate first confirmation'},automatic_delete:false,replayed:false,...(!pause.success?{next_commands:['tv --workspace WORKSPACE alert strategy-get --request-id '+request_id,'tv --workspace WORKSPACE alert strategy-pause --request-id '+request_id+' --operation-id '+record.pause_operation_id],deletion_requires_explicit_confirmation:true}:{})};
+}

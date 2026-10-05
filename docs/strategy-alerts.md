@@ -24,8 +24,8 @@ identify an uncertain creation. No arbitrary alert ID is accepted by these comma
 
 New creation requires a future ISO timestamp with an explicit offset. The same
 recorded request can reconcile after expiration; its expiration and snapshot are
-preserved and no new POST is sent. `--paused` creates
-the alert initially inactive. Popup, sound, email, SMS and mobile notifications are
+preserved and no new POST is sent. Native initial `--paused` creation was rejected
+by the observed server and is not silently reinterpreted. Popup, sound, email, SMS and mobile notifications are
 disabled; webhook is explicitly null. There is no webhook configuration or external
 delivery claim. Native account/limit/server rejection codes remain distinct from
 unknown transport/readback outcomes. Server messages are not printed as errors.
@@ -125,3 +125,18 @@ coverage unknown and returns next_before. A short page ends this server observat
 No log deletion or event replay is performed. Native log Date(value) semantics
 interpret numbers as milliseconds and explicit-offset ISO strings as timestamps.
 These fixtures do not substitute for a dedicated live server event receipt.
+
+## Explicit two-step paused policy
+
+```powershell
+tv --workspace research-a alert strategy-create-then-pause --request-id paused-week-1 --mode both --name 'Research QA paused' --message '{{strategy.order.alert_message}}' --expiration 2027-01-01T00:00:00Z
+```
+
+This distinct opt-in command creates active, verifies creation, then pauses the
+exact owned ID and verifies inactivity. It is not atomic initial paused creation.
+The result includes both steps and measured create-confirmed to pause-confirmed
+times; the alert could fire during that window and creation may predate the first
+confirmation. A failed or unknown pause returns failure, an ACTIVE-until-verified
+warning, the exact alert ID and next get/pause commands. It never auto-deletes or
+blindly retries. Deletion requires explicit human confirmation. Stable requests
+and pause-operation IDs reconcile their original steps rather than duplicate them.

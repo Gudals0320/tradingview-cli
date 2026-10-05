@@ -1,6 +1,6 @@
 import {it} from 'node:test';
 import assert from 'node:assert/strict';
-import {createStrategyServerAlert,getStrategyServerAlert,operateStrategyServerAlert,getStrategyAlertFires} from '../src/core/strategy-alerts.js';
+import {createStrategyServerAlert,getStrategyServerAlert,operateStrategyServerAlert,getStrategyAlertFires,createStrategyAlertThenPause} from '../src/core/strategy-alerts.js';
 import {strategyAlertPage} from './fixtures/strategy-alert-page.mjs';
 
 const memoryStore=()=>{let row=null;return {read:()=>row,write:value=>{row=structuredClone(value);},list:()=>row?[{record:row}]:[]};};
@@ -129,5 +129,15 @@ it('nested symbol values cannot smuggle unowned keys through requested or pinned
   for(const kind of ['requested','added']){const p=strategyAlertPage(),store=memoryStore(),input=options(p,store);if(kind==='requested'){const state=p.exports.getEditorStateForAlertFromStudy;p.exports.getEditorStateForAlertFromStudy=()=>({...state(),symbol:{symbol:'FIXTURE:OWNED',extra:{original:'owned'}}});p.mainSeries.getAlertSymbolString=()=> '='+JSON.stringify({symbol:'FIXTURE:OWNED',extra:{original:'owned'}});}else p.mainSeries.getSymbolString=()=> '='+JSON.stringify({symbol:'FIXTURE:OWNED',adjustment:{mode:'splits'}});
     const created=await createStrategyServerAlert(input);assert.equal(created.success,true);p.server.get(created.alert_id).symbol='='+JSON.stringify(kind==='requested'?{symbol:'FIXTURE:OWNED',extra:{original:'owned',foreign:'unowned'}}:{symbol:'FIXTURE:OWNED',adjustment:{mode:'splits',foreign:'unowned'}});
     const result=await getStrategyServerAlert({request_id:input.request_id,_deps:input._deps});assert.equal(result.success,false);assert.equal(result.code,'STRATEGY_ALERT_READBACK_UNVERIFIED');assert.equal(p.counts().posts,1);
+  }
+});
+it('explicit create-then-pause reports both steps and measured non-atomic active window',async()=>{
+  const p=strategyAlertPage(),store=memoryStore(),input=options(p,store),operationStore=memoryStore(),pauseCreationStore=memoryStore(),opts={...input,_deps:{...input._deps,operationStore,pauseCreationStore}};
+  const result=await createStrategyAlertThenPause(opts);assert.equal(result.success,true);assert.equal(result.active,false);assert.equal(result.atomic,false);assert.equal(result.steps.create.success,true);assert.equal(result.steps.pause.success,true);assert.equal(result.could_fire_during_active_window,true);assert.ok(result.active_window.milliseconds>=0);assert.equal(p.counts().posts,1);assert.equal(p.counts().actions,1);
+  const repeated=await createStrategyAlertThenPause(opts);assert.equal(repeated.success,true);assert.equal(p.counts().posts,1);assert.equal(p.counts().actions,1);
+});
+it('explicit create-then-pause failure/unknown leaves an ACTIVE warning and exact no-replay next commands',async()=>{
+  for(const lost of [false,true]){const p=strategyAlertPage(),store=memoryStore(),input=options(p,store),operationStore=memoryStore(),pauseCreationStore=memoryStore();if(lost)p.loseActionResponse();else p.rest.stopAlerts=async()=>{throw Error('native preflight failure');};
+    const result=await createStrategyAlertThenPause({...input,_deps:{...input._deps,operationStore,pauseCreationStore}});assert.equal(result.success,false);assert.equal(result.steps.create.success,true);assert.equal(result.active,true);assert.equal(result.active_state,'ACTIVE_UNTIL_INACTIVE_VERIFIED');assert.equal(result.automatic_delete,false);assert.equal(result.deletion_requires_explicit_confirmation,true);assert.ok(result.next_commands[1].includes('--operation-id initial-pause-'));assert.equal(p.counts().posts,1);assert.equal(p.server.size,2);
   }
 });

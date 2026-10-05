@@ -46,7 +46,7 @@ export const NATIVE_COMMANDS = new Set(['launch', 'range', 'scroll', 'pine set',
   'backtest run','backtest normal',
   'pine save', 'pine new', 'pine open', 'indicator set', 'indicator add', 'indicator remove', 'indicator toggle',
   'layout switch', 'pane layout', 'pane focus', 'pane symbol', 'tab new', 'tab close', 'tab switch',
-  'alert create', 'alert delete','alert strategy-create','alert strategy-pause','alert strategy-resume','alert strategy-delete', 'draw shape', 'draw remove', 'draw clear', 'replay start', 'replay step',
+  'alert create', 'alert delete','alert strategy-create','alert strategy-create-then-pause','alert strategy-pause','alert strategy-resume','alert strategy-delete', 'draw shape', 'draw remove', 'draw clear', 'replay start', 'replay step',
   'replay stop', 'replay autoplay', 'replay trade', 'watchlist add', 'watchlist add-bulk', 'watchlist remove',
   'ui click', 'ui keyboard', 'ui hover', 'ui scroll', 'ui eval', 'ui type', 'ui panel', 'ui fullscreen', 'ui mouse']);
 NATIVE_COMMANDS.add('workspace pine-prepare');
@@ -64,7 +64,7 @@ export function invocationClass(command) {
   throw new Error(`Unclassified invocation contract: ${command}`);
 }
 export const LEGACY_COMMANDS = new Set(['status', 'launch', 'range', 'scroll', 'discover', 'ui-state', 'screenshot',
-  'alert list', 'alert create', 'alert delete','alert strategy-create','alert strategy-get','alert strategy-fires','alert strategy-pause','alert strategy-resume','alert strategy-delete', 'data depth', 'data indicator',
+  'alert list', 'alert create', 'alert delete','alert strategy-create','alert strategy-create-then-pause','alert strategy-get','alert strategy-fires','alert strategy-pause','alert strategy-resume','alert strategy-delete', 'data depth', 'data indicator',
   'draw shape', 'draw list', 'draw get', 'draw remove', 'draw clear', 'indicator add', 'indicator remove', 'indicator toggle',
   'layout list', 'layout switch', 'pane list', 'pane layout', 'pane focus', 'pane symbol', 'pine new', 'pine open', 'pine list',
   'replay start', 'replay step', 'replay stop', 'replay status', 'replay autoplay', 'replay trade',
@@ -83,7 +83,7 @@ export function commandScope(command) {
 export const PREPARATION_COMMANDS = new Set(['status', 'tab list', 'layout list', 'layout create', 'layout open','layout select', 'workspace create', 'workspace select', 'pine list']);
 DESKTOP_REQUIREMENTS.set('layout select','none');
 for (const name of PREPARATION_COMMANDS) LEGACY_COMMANDS.delete(name);
-export const APP_COMMANDS = new Set(['launch', 'alert list', 'alert create', 'alert delete','alert strategy-create','alert strategy-get','alert strategy-fires','alert strategy-pause','alert strategy-resume','alert strategy-delete', 'watchlist get', 'watchlist raw', 'watchlist add', 'watchlist add-bulk', 'watchlist remove',
+export const APP_COMMANDS = new Set(['launch', 'alert list', 'alert create', 'alert delete','alert strategy-create','alert strategy-create-then-pause','alert strategy-get','alert strategy-fires','alert strategy-pause','alert strategy-resume','alert strategy-delete', 'watchlist get', 'watchlist raw', 'watchlist add', 'watchlist add-bulk', 'watchlist remove',
   'tab new', 'tab close', 'tab switch', 'layout switch', 'stream ohlcv', 'ui click', 'ui keyboard', 'ui hover', 'ui scroll', 'ui find', 'ui eval', 'ui type', 'ui panel', 'ui fullscreen', 'ui mouse']);
 for (const name of [...LEGACY_COMMANDS]) {
   if (APP_COMMANDS.has(name)) continue;
@@ -100,7 +100,7 @@ WORKSPACE_READS.add('workspace wait');WORKSPACE_READS.add('stream ohlcv');
 for(const name of ['symbol','timeframe','type','range','screenshot'])WORKSPACE_READS.add(name);
 // Results have their own revision/source validation; do not open panels while observing.
 export const PINE_COMMANDS = new Set(['pine get', 'pine set', 'pine compile', 'pine raw-compile', 'pine save', 'pine errors', 'pine console', 'pine new', 'pine open',
-  'alert strategy-create',
+  'alert strategy-create','alert strategy-create-then-pause',
   'strategy properties','strategy set-properties',
   'backtest run','backtest status','backtest wait','backtest results','backtest normal',
   'data strategy', 'data trades', 'data ledger', 'data equity', 'workspace wait']);
@@ -115,6 +115,6 @@ export function resourceKinds(command, values = {}, positionals = []) {
   if (scope === 'app-shared' || ['layout create', 'layout open', 'workspace reconnect'].includes(command)) kinds.push('app');
   if(command==='screenshot'&&values.method==='api')kinds.push('app');
   if (workspaceRequired(command)) kinds.push('layout', 'workspace');
-  if (['pine save', 'pine compile', 'pine raw-compile', 'pine new', 'pine open','strategy set-properties','backtest run','backtest normal','alert strategy-create'].includes(command)) kinds.push('document');
+  if (['pine save', 'pine compile', 'pine raw-compile', 'pine new', 'pine open','strategy set-properties','backtest run','backtest normal','alert strategy-create','alert strategy-create-then-pause'].includes(command)) kinds.push('document');
   return kinds;
 }

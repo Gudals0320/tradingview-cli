@@ -112,6 +112,11 @@ it('real symbol readback rejects nested foreign attributes in requested and orig
     const result=jsonResult(await f.run(['--workspace','contract','alert','strategy-get','--request-id','nested-symbol']),1);assert.equal(result.code,'STRATEGY_ALERT_READBACK_UNVERIFIED');assert.equal(page.counts().posts,1);
   }
 });
+it('real explicit create-then-pause distinguishes a non-atomic success and partial ACTIVE outcomes',async t=>{
+  for(const kind of ['success','failure','unknown']){const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch}),ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('two-step-paused-entry-v2');page.refreshReport();page.completeInputs();if(kind==='failure')page.rest.stopAlerts=async()=>{throw Error('native preflight failure');};if(kind==='unknown')page.loseActionResponse();
+    const args=['--workspace','contract','alert','strategy-create-then-pause','--request-id','two-step','--mode','both','--name','QA','--message','private','--expiration','2099-01-01T00:00:00Z'],result=jsonResult(await f.run(args),kind==='success'?0:1);assert.equal(result.atomic,false);assert.equal(result.steps.create.success,true);assert.equal(result.could_fire_during_active_window,true);assert.equal(page.counts().posts,1);if(kind==='success'){assert.equal(result.active,false);assert.ok(result.active_window.milliseconds>=0);jsonResult(await f.run(args));assert.equal(page.counts().posts,1);assert.equal(page.counts().actions,1);}else{assert.equal(result.active,true);assert.equal(result.active_state,'ACTIVE_UNTIL_INACTIVE_VERIFIED');assert.equal(result.automatic_delete,false);assert.ok(result.next_commands[1].includes('--operation-id'));}
+  }
+});
 it('real strategy alert entry reconciles a lost server response without SDK or CLI create retries',async t=>{
   const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
   const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('lost-alert-entry-v2');page.refreshReport();page.completeInputs();page.loseResponse();
