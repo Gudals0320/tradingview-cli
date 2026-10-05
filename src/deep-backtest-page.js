@@ -36,7 +36,7 @@ export function nativeDeepToolkit(window){
   let runtime;window.webpackChunktradingview.push([['tv-cli-deep-read-'+Date.now()],{},r=>{runtime=r;}]);
   if(typeof runtime!=='function')return null;
   const unpack=runtime(decodeId).unpackNonSeriesDataCompressed,Connection=runtime(connectionId).WSBackendConnection;
-  return typeof unpack==='function'&&typeof Connection?.prototype?.on==='function'?{unpack,Connection}:null;
+  return typeof unpack==='function'&&typeof Connection?.prototype?.on==='function'?{unpack,Connection,consumer_source:text}:null;
 }
 
 export function nativeKernelMatchesChart(window,strategyId,native){
@@ -65,6 +65,12 @@ export function ownedDeepContext(window){
   const symbol=series?.getSymbolString?.(),resolution=series?.interval?.();
   if(typeof symbol!=='string'||!symbol||typeof resolution!=='string'||!resolution)return null;
   return {symbol,resolution};
+}
+
+export function originalDeepSender(manager,consumerSource,noHistoryVerified){
+  const current=manager._sendRequest,text=String(current),native=Object.getPrototypeOf(manager)?._sendRequest;
+  const cliClosure=text.includes('sendVerifiedDeepFrame(window,document,this,run')||text.includes('run.history_send_completed=true')&&text.includes('originalSend.call(this,method,args)');
+  return noHistoryVerified&&cliClosure&&typeof native==='function'&&consumerSource?.includes(String(manager.constructor))?native:current;
 }
 
 export function installDeepAttribution(manager,run,toolkit){
@@ -225,13 +231,17 @@ export async function startDeepRun(window,document,request){
   const kernel=JSON.stringify({study:nativeInputs.studyName,inputs:nativeInputs.inputs,deps:[...nativeInputs.dependencies]});
   const ownedContext=ownedDeepContext(window),native_symbol=ownedContext?.symbol,native_resolution=ownedContext?.resolution;
   if(!ownedContext||manager._symbolString?.value?.()!==native_symbol||nativeInterval.value?.()!==native_resolution)return {success:false,code:'DEEP_CONTEXT_UNVERIFIED',error:'Native symbol definition/session/currency or resolution differs from the owned main series.',mutation_dispatched:false};
+  const oldNoHistory=old&&inspectDeepRun(window,document,old.run_id).no_history_dispatch_verified===true;
   old?.dispose?.();
   const run=window.__tvCliDeepRun={run_id:request.run_id,request_id:request.request_id,request_fingerprint:request.fingerprint,strategy_id:report.strategy_id,source_hash:report.source_hash,properties_hash:request.properties_hash,
     identity,kernel,native_symbol,native_resolution,Connection:toolkit.Connection,native_timezone:request.period.timezone==='UTC'?'Etc/UTC':request.period.timezone,from_ms:request.from_ms,to_ms:request.to_ms,requested_period:request.period,request_before:manager._requestId,facade,snapshot:null,report_cycle:0};
   const signal=manager.activeStrategyReportData;
   if(typeof signal?.subscribe!=='function'||typeof signal?.unsubscribe!=='function'){delete window.__tvCliDeepRun;return {success:false,code:'DEEP_NATIVE_PATH_UNAVAILABLE',error:'Native report revision monitoring is unavailable.',mutation_dispatched:false};}
   const changed=()=>{run.report_cycle++;run.snapshot=null;};signal.subscribe(changed);
-  const originalSend=manager._sendRequest;
+  // Older CLI setup failures could leave their temporary send closure installed.
+  // Recover only that recognizable CLI closure, using the exact native class
+  // already present in the cached observed consumer; never unwrap foreign hooks.
+  const originalSend=originalDeepSender(manager,toolkit.consumer_source,oldNoHistory);
   const tracedSend=function(method,args){
     const result=sendVerifiedDeepFrame(window,document,this,run,method,args,originalSend);
     if(method==='history_create_session')sendVerifiedDeepFrame(window,document,this,run,'switch_timezone',[run.created_session,run.native_timezone],originalSend);
@@ -274,4 +284,4 @@ export async function deepReportSnapshot(window,document,runId){
   return {success:true,status,snapshot:run.snapshot};
 }
 
-export const DEEP_PAGE_CODE=STRATEGY_PAGE_CODE+'\n'+[canonicalPineSource,findPineController,findPineEditor,verifyDeepSource,nativeDeepToolkit,nativeKernelMatchesChart,ownedDeepContext,installDeepAttribution,findDeepReportProviders,deepCurrentIdentity,sendVerifiedDeepFrame,inspectDeepRun,inspectDeepSettlement,startDeepRun,deepReportSnapshot].map(fn=>fn.toString()).join('\n');
+export const DEEP_PAGE_CODE=STRATEGY_PAGE_CODE+'\n'+[canonicalPineSource,findPineController,findPineEditor,verifyDeepSource,nativeDeepToolkit,nativeKernelMatchesChart,ownedDeepContext,originalDeepSender,installDeepAttribution,findDeepReportProviders,deepCurrentIdentity,sendVerifiedDeepFrame,inspectDeepRun,inspectDeepSettlement,startDeepRun,deepReportSnapshot].map(fn=>fn.toString()).join('\n');

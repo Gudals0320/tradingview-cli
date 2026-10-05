@@ -1,7 +1,7 @@
 import { it } from 'node:test';
 import { setImmediate } from 'node:timers';
 import assert from 'node:assert/strict';
-import { DEEP_PAGE_CODE } from '../src/deep-backtest-page.js';
+import { DEEP_PAGE_CODE,originalDeepSender } from '../src/deep-backtest-page.js';
 import { deepPeriod,deepResults,runDeep,waitDeep,resetNormal } from '../src/core/deep-backtest.js';
 import { getProperties } from '../src/core/strategy-properties.js';
 import { deepPage } from './fixtures/deep-page.mjs';
@@ -10,6 +10,13 @@ import { compilationState,invalidateEditedSource,prepareInputChange } from '../s
 const call=(p,name,...args)=>p.evaluate(`(async()=>{${DEEP_PAGE_CODE};return ${name}(window,${name==='inspectDeepSettlement'?'':'document,'}${args.map(a=>JSON.stringify(a)).join(',')});})()`);
 async function start(p){const proof=await call(p,'verifyDeepSource','owned-study');assert.equal(proof.verified,true);const request={run_id:'exact-run',request_id:'exact-request',fingerprint:'fp',strategy_id:'owned-study',source_proof:proof,from_ms:1704067200000,to_ms:1704153600000,period:{from:'2024-01-01T00:00:00Z',to:'2024-01-02T00:00:00Z',timezone:'UTC'},properties_hash:'props-hash'};return call(p,'startDeepRun',request);}
 const memoryStore=()=>{let row=null;return {read:()=>row,write:value=>{row=structuredClone(value);},list:()=>row?[{file:'private',record:row}]:[],update:(_,value)=>{row=structuredClone(value);}};};
+it('only a recognized zero-history CLI closure can unwind to the exact cached native class sender',()=>{
+  class NativeManager{_sendRequest(){return 'native';}}const manager=new NativeManager();
+  const legacy=Function('return function(method,args){run.history_send_completed=true;return originalSend.call(this,method,args);} ')();manager._sendRequest=legacy;
+  assert.equal(originalDeepSender(manager,String(NativeManager),true),NativeManager.prototype._sendRequest);
+  assert.equal(originalDeepSender(manager,String(NativeManager),false),legacy);assert.equal(originalDeepSender(manager,'another consumer',true),legacy);
+  const foreign=function(){return 'foreign hook';};manager._sendRequest=foreign;assert.equal(originalDeepSender(manager,String(NativeManager),true),foreign);
+});
 
 it('Deep periods require explicit offsets, real calendar dates and nonempty whole-second native bounds',()=>{
   for(const args of [{from:'2024-01-01',to:'2024-01-02'},{from:'2024-02-30T00:00:00Z',to:'2024-03-02T00:00:00Z'},{from:'2024-01-01T00:00:00.100Z',to:'2024-01-01T00:00:00.900Z'},{from:'2024-01-02T00:00:00Z',to:'2024-01-01T00:00:00Z'}])assert.throws(()=>deepPeriod(args),e=>e.code==='INVALID_DEEP_PERIOD'&&e.details.mutation_dispatched===false);

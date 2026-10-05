@@ -85,5 +85,9 @@ export async function resetNormal({_deps}={}){
     store.update(entry,{...entry.record,phase:'settled',settlement});
   }
   return inspect(`(()=>{${DEEP_PAGE_CODE};const run=window.__tvCliDeepRun;if(run){const status=inspectDeepSettlement(window,run.run_id);if(!status.settled)return {success:false,code:'DEEP_RUN_UNSETTLED',error:'Wait/reconcile the exact native job; normal reset does not abandon unknown outcomes.'};}
-    const {facade,history}=findDeepReportProviders(document);if(!facade||!history)return {success:false,code:'DEEP_NATIVE_PATH_UNAVAILABLE',error:'Open the owned report explicitly.'};history.handleSetIsDeepHistoryMode(false);run?.dispose?.();delete window.__tvCliDeepRun;return {success:true,mode:'normal',results_invalidated:true};})()`,{mutation:true});
+    const {facade,history}=findDeepReportProviders(document);if(!facade||!history)return {success:false,code:'DEEP_NATIVE_PATH_UNAVAILABLE',error:'Open the owned report explicitly.'};
+    const noHistory=run&&inspectDeepSettlement(window,run.run_id).no_history_dispatch_verified===true;
+    history.handleSetIsDeepHistoryMode(false);run?.dispose?.();
+    if(noHistory){const manager=facade._deepBacktestingManager,toolkit=nativeDeepToolkit(window);manager._sendRequest=originalDeepSender(manager,toolkit?.consumer_source,true);}
+    delete window.__tvCliDeepRun;return {success:true,mode:'normal',results_invalidated:true};})()`,{mutation:true});
 }
