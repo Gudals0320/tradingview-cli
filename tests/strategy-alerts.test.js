@@ -108,3 +108,9 @@ it('owned internal fire pages preserve native IDs/time bounds and hash messages 
   const next=await getStrategyAlertFires({request_id:input.request_id,limit:2,before:first.next_before,_deps:input._deps});assert.equal(next.count,1);assert.equal(next.end_of_observed_log,true);assert.equal(next.data[0].fire_id,'1');assert.equal(p.counts().actions,0);assert.equal(p.counts().posts,1);
   p.rest.listFires=async()=>[{fire_id:4,alert_id:7,fire_time:Date.now(),message:'other user message'}];assert.equal((await getStrategyAlertFires({request_id:input.request_id,_deps:input._deps})).code,'STRATEGY_ALERT_LOG_UNVERIFIED');
 });
+it('failed deletion absence reads are sanitized and preserve the exact unknown/deleted records',async()=>{
+  for(const lost of [false,true]){const p=strategyAlertPage(),store=memoryStore(),input=options(p,store);await createStrategyServerAlert(input);const operationStore=memoryStore(),opts={request_id:input.request_id,operation_id:'safe-delete',action:'delete',_deps:{...input._deps,operationStore}};
+    if(lost)p.loseActionResponse();await operateStrategyServerAlert(opts);const previous=JSON.stringify(store.read());p.rest.getAlerts=async()=>{throw Object.assign(Error('private https://user:secret@example.test/body'),{code:'offline'});};
+    const result=lost?await operateStrategyServerAlert(opts):await getStrategyServerAlert({request_id:input.request_id,_deps:input._deps});assert.equal(result.success,false);assert.equal(result.code,'STRATEGY_ALERT_READBACK_FAILED');assert.equal(JSON.stringify(result).includes('secret'),false);assert.equal(JSON.stringify(store.read()),previous);assert.equal(p.counts().actions,1);
+  }
+});

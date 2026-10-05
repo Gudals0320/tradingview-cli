@@ -126,7 +126,7 @@ export async function observeStrategyAlertAction(window,request){
   if(request.action!=='delete'){const result=await readStrategyAlert(window,request);return {...result,desired_state_verified:result.success&&result.active===(request.action==='resume')};}
   const toolkit=strategyAlertToolkit(window);if(!toolkit)return {success:false,code:'STRATEGY_ALERT_NATIVE_UNSUPPORTED'};
   const userId=toolkit.getAlertSession().user.value()?.id;if(userId===undefined||await strategyAlertHash(window,String(userId))!==request.account_hash)return {success:false,code:'STRATEGY_ALERT_ACCOUNT_CHANGED'};
-  const raw=await toolkit.getAlertsRestApi().getAlerts({alert_ids:[request.alert_id]});
+  let raw;try{raw=await toolkit.getAlertsRestApi().getAlerts({alert_ids:[request.alert_id]});}catch(error){return {success:false,code:'STRATEGY_ALERT_READBACK_FAILED',native_error_code:typeof error.code==='string'||typeof error.code==='number'?error.code:null,desired_state_verified:false};}
   if(toolkit.getAlertSession().user.value()?.id!==userId||!Array.isArray(raw))return {success:false,code:'STRATEGY_ALERT_READBACK_UNVERIFIED'};
   if(raw.length===0)return {success:true,alert_id:request.alert_id,deleted:true,desired_state_verified:true,readback:'fresh_native_rest'};
   return {success:false,code:'STRATEGY_ALERT_ACTION_UNCONFIRMED',alert_id:request.alert_id,desired_state_verified:false};
