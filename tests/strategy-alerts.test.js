@@ -125,3 +125,9 @@ it('server-added symbol fields must match the independently pinned wire symbol a
   raw.symbol='='+JSON.stringify({symbol:'FIXTURE:OWNED',adjustment:'dividends'});assert.equal((await getStrategyServerAlert({request_id:input.request_id,_deps:input._deps})).code,'STRATEGY_ALERT_READBACK_UNVERIFIED');
   raw.symbol='='+JSON.stringify({symbol:'FIXTURE:OWNED',unexpected:'value'});assert.equal((await getStrategyServerAlert({request_id:input.request_id,_deps:input._deps})).code,'STRATEGY_ALERT_READBACK_UNVERIFIED');
 });
+it('nested symbol values cannot smuggle unowned keys through requested or pinned extra attributes',async()=>{
+  for(const kind of ['requested','added']){const p=strategyAlertPage(),store=memoryStore(),input=options(p,store);if(kind==='requested'){const state=p.exports.getEditorStateForAlertFromStudy;p.exports.getEditorStateForAlertFromStudy=()=>({...state(),symbol:{symbol:'FIXTURE:OWNED',extra:{original:'owned'}}});p.mainSeries.getAlertSymbolString=()=> '='+JSON.stringify({symbol:'FIXTURE:OWNED',extra:{original:'owned'}});}else p.mainSeries.getSymbolString=()=> '='+JSON.stringify({symbol:'FIXTURE:OWNED',adjustment:{mode:'splits'}});
+    const created=await createStrategyServerAlert(input);assert.equal(created.success,true);p.server.get(created.alert_id).symbol='='+JSON.stringify(kind==='requested'?{symbol:'FIXTURE:OWNED',extra:{original:'owned',foreign:'unowned'}}:{symbol:'FIXTURE:OWNED',adjustment:{mode:'splits',foreign:'unowned'}});
+    const result=await getStrategyServerAlert({request_id:input.request_id,_deps:input._deps});assert.equal(result.success,false);assert.equal(result.code,'STRATEGY_ALERT_READBACK_UNVERIFIED');assert.equal(p.counts().posts,1);
+  }
+});

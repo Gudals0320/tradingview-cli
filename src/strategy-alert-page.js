@@ -73,7 +73,8 @@ export async function readStrategyAlert(window,request){
   if(candidates.length!==1)return {success:false,code:candidates.length?'STRATEGY_ALERT_AMBIGUOUS':'STRATEGY_ALERT_OUTCOME_UNKNOWN',replay_safe:false,mutation_dispatched:false};
   let actual,wire;try{actual=toolkit.convertApiAlert(candidates[0]);wire=JSON.parse(JSON.stringify(toolkit.convertEditableAlertState(actual,session.sendLegacyExpiration)));}catch{return {success:false,code:'STRATEGY_ALERT_READBACK_UNVERIFIED'};}
   let requestedSymbol,actualSymbol,ownedWireSymbol;try{requestedSymbol=toolkit.decodeExtendedSymbol(request.wire.symbol);actualSymbol=toolkit.decodeExtendedSymbol(wire.symbol);ownedWireSymbol=toolkit.decodeExtendedSymbol(request.source_proof.semantic_context.wire.symbol);}catch{return {success:false,code:'STRATEGY_ALERT_READBACK_UNVERIFIED',result_adopted:false};}
-  const symbolValid=strategyAlertFieldsMatch(actualSymbol,requestedSymbol)&&Object.keys(actualSymbol).every(key=>Object.hasOwn(requestedSymbol,key)||Object.hasOwn(ownedWireSymbol,key)&&strategyAlertFieldsMatch(actualSymbol[key],ownedWireSymbol[key]));
+  const exact=(actual,expected)=>strategyAlertFieldsMatch(actual,expected)&&strategyAlertFieldsMatch(expected,actual);
+  const symbolValid=Object.keys(requestedSymbol).every(key=>Object.hasOwn(actualSymbol,key)&&exact(actualSymbol[key],requestedSymbol[key]))&&Object.keys(actualSymbol).every(key=>Object.hasOwn(requestedSymbol,key)||Object.hasOwn(ownedWireSymbol,key)&&exact(actualSymbol[key],ownedWireSymbol[key]));
   const expectedFields={...request.wire};delete expectedFields.symbol;
   if(actual.type!=='strategy'||!symbolValid||!strategyAlertFieldsMatch(wire,expectedFields)||typeof actual.active!=='boolean')return {success:false,code:'STRATEGY_ALERT_READBACK_UNVERIFIED',alert_id:actual.alertId,result_adopted:false};
   const expectedInputs=request.wire.conditions[0].series[0].inputs,actualInputs=wire.conditions?.[0]?.series?.[0]?.inputs;
