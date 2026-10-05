@@ -73,6 +73,9 @@ an unknown native operation.
 | INVALID_DEEP_PERIOD / INVALID_DEEP_REQUEST | Invalid explicit period/precision/timezone/request ID; no native dispatch. |
 | DEEP_SOURCE_UNVERIFIED / DEEP_KERNEL_UNVERIFIED | Current saved/applied/compiled/full-input proof or native payload mapping is missing; compile and inspect the exact owned strategy. |
 | DEEP_NATIVE_PATH_UNAVAILABLE | Native report provider/decoder/monitor shape is unsupported; reads never mount or create it. |
+| DEEP_CONTEXT_UNVERIFIED | Native extended symbol/session/currency or resolution differs from the owned main series; no history frame is sent. |
+| DEEP_NOT_DISPATCHED | Exact terminal/disconnected preparation has unchanged request counter and no history send attempt; its preserved intent can be recorded as known rejection without replay. |
+| DEEP_TRANSPORT_UNCONFIRMED | Native transport was invoked but frame admission/completion is unknown; preserve intent, never assume the manager's void return proves dispatch. |
 | DEEP_NATIVE_JOB_PENDING / DEEP_RUN_PENDING / WORKSPACE_DEEP_JOB_PENDING | Inspect/wait for exact native work, including GUI jobs; no implicit disconnect, cancellation or overlapping mutation. |
 | DEEP_RUN_UNKNOWN / DEEP_RUN_UNSETTLED | Preserve persistent intent after response/page/owner loss; do not resend or discard uncertain work. |
 | DEEP_REQUEST_CONFLICT | Stable request ID describes different source/full inputs/context/settings/period; use an explicit new request after old work settles. |
@@ -81,6 +84,7 @@ an unknown native operation.
 | DEEP_SERVER_ERROR | Exact native server rejection is separate from an unknown transport outcome; inspect its request and observed error. |
 | DEEP_WAIT_TIMEOUT | Original finite wait expired; server work was not cancelled. |
 | DEEP_PERIOD_MISMATCH | Native trades fall outside requested absolute bounds; metrics/ledger are refused and the actual native window is reported. |
+| DEEP_PERIOD_UNVERIFIED | Native decoded window or applicable trade timestamps are missing; no vacuous coverage proof or legacy timestamp-unit guessing. |
 | PINE_COMPILE_ERROR | Fix diagnostic locations and compile requested source. |
 | REPORT_UNVERIFIED / REPORT_INVALIDATED | Compile owned source or perform verified input change; never adopt prior metrics. |
 | REPORT_PENDING / REPORT_TIMEOUT / STRATEGY_CALCULATION_PENDING | Wait for existing calculation; normal waiting does not imply cancellation/manual recovery. |

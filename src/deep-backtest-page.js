@@ -100,6 +100,7 @@ export function installDeepAttribution(manager,run,toolkit){
   }
   const attach=connection=>{
     if(typeof connection?.on!=='function')throw Error('DEEP_NATIVE_PATH_UNAVAILABLE: Native response listener unavailable before dispatch.');
+    if(Object.hasOwn(connection,'_socket')&&connection._socket===null)return;
     // This Desktop's WSBackendConnection has on() but no off(). Install one
     // bounded dispatcher per connection and detach this run's receiver on dispose.
     const socket=connection._socket||connection;
@@ -107,7 +108,7 @@ export function installDeepAttribution(manager,run,toolkit){
   };
   const active={attach,response,changed:raw_report=>{const report=manager.activeStrategyReportData?.value?.();run.cycle_report=report;run.cycle_report_json=JSON.stringify(report??null);cycles.push({cycle:run.report_cycle,raw_report});bind();}};
   hooks.active=active;
-  if(manager._wsConnection)attach(manager._wsConnection);
+  try{if(manager._wsConnection)attach(manager._wsConnection);}catch(error){if(hooks.active===active)hooks.active=null;throw error;}
   return ()=>{if(hooks.active===active)hooks.active=null;};
 }
 
@@ -132,15 +133,55 @@ export function deepCurrentIdentity(window,document,strategyId){
     editor_modified:controller.isModified?.(),editor_draft:controller.isDraft?.(),compile:{token:window.__tvCliCompilation?.token,phase:window.__tvCliCompilation?.phase,source_hash:window.__tvCliCompilation?.source_hash,report_verified:window.__tvCliCompilation?.report_verified},context:{symbol:context.symbol,resolution:context.resolution,chart_type:context.chart_type,wire:ownedDeepContext(window),session:window.TradingViewApi.activeChart?.().symbolExt?.()?.session||null,timezone:window.TradingViewApi.activeChart?.().getTimezone?.()||null},page_generation:window.__tvCliWorkspace?.nonce});
 }
 
+export function sendVerifiedDeepFrame(window,document,manager,run,method,args,originalSend){
+  if(!['history_create_session','switch_timezone','request_history_data'].includes(method))return originalSend.call(manager,method,args);
+  const reject=message=>{if(!run.history_send_attempted)run.pre_wire_failure={code:'DEEP_REQUEST_CHANGED',error:message};throw Error('DEEP_REQUEST_CHANGED: '+message);};
+  if(run.pre_wire_failure)return reject(run.pre_wire_failure.error);
+  const connection=manager._wsConnection,socket=connection?._socket;
+  if(window.__tvCliDeepRun!==run||!(connection instanceof run.Connection)||!socket||connection.isConnected?.()!==true||typeof connection.send!=='function')return reject('Exact current connected native transport required; no queued history request.');
+  let session;try{session=JSON.parse(connection.getSessionId()).session_id;}catch{return reject('Native connection session is unavailable.');}
+  if(typeof session!=='string'||!session||args[0]!==session)return reject('Frame session does not match the native connection handshake.');
+  if(method==='history_create_session'){
+    if(args.length!==1||run.created_session)return reject('Unexpected or repeated native session creation.');
+    run.connection=connection;run.socket=socket;run.created_session=session;
+  }else if(connection!==run.connection||socket!==run.socket||session!==run.created_session)return reject('Native connection/socket/created session changed.');
+  if(method==='switch_timezone'){
+    if(args.length!==2)return reject('Unsupported timezone frame.');
+    args=[run.created_session,run.native_timezone];
+  }
+  if(method==='request_history_data'){
+    const sent={session:args[0],request_number:args[1],symbol:args[2],resolution:args[3],from_seconds:args[5]?.from_to?.from,to_seconds:args[5]?.from_to?.to,kernel:JSON.stringify({study:args[6],inputs:args[7],deps:args[8]})};
+    if(args.length!==9||Object.keys(args[5]||{}).join(',')!=='from_to'||Object.keys(args[5]?.from_to||{}).sort().join(',')!=='from,to'||deepCurrentIdentity(window,document,run.strategy_id)!==run.identity||!nativeKernelMatchesChart(window,run.strategy_id,{studyName:args[6],inputs:args[7],dependencies:args[8]})||sent.kernel!==run.kernel||sent.symbol!==run.native_symbol||sent.resolution!==run.native_resolution||sent.session!==run.created_session||sent.request_number!==run.request_before||args[4]!==0||sent.from_seconds!==Math.floor(run.from_ms/1000)||sent.to_seconds!==Math.floor(run.to_ms/1000)||run.sent_timezone!==run.native_timezone||run.timezone_session!==run.created_session)return reject('Owned baseline and actual wire payload differ; history request was not dispatched.');
+    run.sent=sent;
+  }
+  const originalTransport=connection.send,expected=JSON.stringify({m:method,p:args});let observed=false,admitted=false;
+  const transport=function(raw){
+    if(raw!==expected||manager._wsConnection!==connection||connection._socket!==socket||connection.isConnected()!==true||window.__tvCliDeepRun!==run)return reject('Actual native transport frame/connection differs before send.');
+    observed=true;if(method==='request_history_data')run.history_send_attempted=true;
+    const result=originalTransport.call(this,raw);admitted=result===true;
+    if(!admitted)throw Error('DEEP_TRANSPORT_UNCONFIRMED: Native transport did not confirm admission; preserve unknown intent and do not replay.');
+    return result;
+  };
+  connection.send=transport;
+  let result;try{result=originalSend.call(manager,method,args);}finally{if(connection.send===transport)connection.send=originalTransport;}
+  if(!observed||!admitted)return reject('Native manager returned without an admitted transport frame.');
+  if(method==='request_history_data')run.history_send_completed=true;
+  if(method==='switch_timezone'){run.sent_timezone=run.native_timezone;run.timezone_session=run.created_session;}
+  return result;
+}
+
 export function inspectDeepRun(window,document,runId){
   const run=window.__tvCliDeepRun;
   if(!run||runId&&run.run_id!==runId)return {success:false,code:'DEEP_RUN_UNKNOWN',error:'This page has no exact native Deep run; preserve private intent and never fall back to chart results.'};
+  if(run.pre_wire_failure&&!run.history_send_attempted)return {success:false,...run.pre_wire_failure,phase:'rejected_known',run_id:run.run_id,request_id:run.request_id,server_request_dispatched:false,mutation_dispatched:false,no_history_dispatch_verified:true,intent_preserved:true};
+  if(run.history_send_attempted&&!run.history_send_completed)return {success:false,code:'DEEP_TRANSPORT_UNCONFIRMED',error:'Transport send was attempted but admission/completion is unknown; preserve intent and do not replay.',phase:'unknown',run_id:run.run_id,request_id:run.request_id,server_request_dispatched:false,native_send_attempted:true,intent_preserved:true};
   if(deepCurrentIdentity(window,document,run.strategy_id)!==run.identity)return {success:false,code:'DEEP_RESULT_STALE',error:'Source, inputs, Properties, context or generation changed; explicitly run a new request.',run_id:run.run_id,mode:'deep',result_adopted:false};
   const manager=run.facade._deepBacktestingManager;
   const visible=findDeepReportProviders(document).facade;
   if(visible&&visible!==run.facade)return {success:false,code:'DEEP_RESULT_GENERATION_CHANGED',error:'The native report provider was replaced; do not adopt the old job.',run_id:run.run_id,result_adopted:false};
   if(!run.facade._isDeepBacktesting||manager._fromDate!==run.from_ms||manager._toDate!==run.to_ms||manager._requestId>run.request_before+1)return {success:false,code:'DEEP_REQUEST_CHANGED',error:'Native mode/period/request identity changed outside this run.',run_id:run.run_id,mode:'deep',result_adopted:false};
   const status=manager.activeStrategyStatus?.value?.(),sent=run.history_send_completed===true;
+  if(!run.history_send_attempted&&run.report_cycle===0&&manager._requestId===run.request_before&&[2,3].includes(status?.type)&&manager._isConnected!==true&&manager._wsConnection?.isConnected?.()!==true&&manager._wsConnection?.isConnecting?.()!==true)return {success:false,code:'DEEP_NOT_DISPATCHED',error:'Exact native run ended before a history request: counter unchanged, no send attempt/cycle, terminal and disconnected.',phase:'rejected_known',run_id:run.run_id,request_id:run.request_id,server_request_dispatched:false,mutation_dispatched:false,no_history_dispatch_verified:true,intent_preserved:true};
   if(sent&&(!run.sent||run.sent.kernel!==run.kernel||run.sent.symbol!==run.native_symbol||run.sent.resolution!==run.native_resolution||run.sent.from_seconds!==Math.floor(run.from_ms/1000)||run.sent.to_seconds!==Math.floor(run.to_ms/1000)))return {success:false,code:'DEEP_REQUEST_CHANGED',error:'Actual transmitted native source/settings/period differ from the recorded run.',run_id:run.run_id,result_adopted:false};
   const phase=status?.type===3?'server_error':status?.type===2?'ready':sent?'pending':'accepted';
   if(['ready','server_error'].includes(phase)&&(!sent||phase==='ready'&&run.report_cycle<1||run.cycle_proof?.cycle!==run.report_cycle||run.cycle_proof?.kind!==phase))return {success:false,code:'DEEP_REPORT_UNVERIFIED',error:'The latest native report/outcome cycle has no exact decoded response attribution for this run.',run_id:run.run_id,result_adopted:false};
@@ -152,6 +193,7 @@ export function inspectDeepRun(window,document,runId){
 /** Native settlement is distinct from adopting a result for today's source. */
 export function inspectDeepSettlement(window,runId){
   const run=window.__tvCliDeepRun;if(!run||run.run_id!==runId)return {known:false,settled:false};
+  if(run.pre_wire_failure&&!run.history_send_attempted)return {known:true,settled:true,phase:'rejected_known',no_history_dispatch_verified:true,result_adopted:false};
   const manager=run.facade._deepBacktestingManager,status=manager.activeStrategyStatus?.value?.();
   if(!run.history_send_completed||manager._requestId!==run.request_before+1||manager._fromDate!==run.from_ms||manager._toDate!==run.to_ms||!run.sent||run.sent.kernel!==run.kernel)return {known:false,settled:false};
   const kind=status?.type===2?'ready':status?.type===3?'server_error':'pending';
@@ -185,26 +227,19 @@ export async function startDeepRun(window,document,request){
   if(!ownedContext||manager._symbolString?.value?.()!==native_symbol||nativeInterval.value?.()!==native_resolution)return {success:false,code:'DEEP_CONTEXT_UNVERIFIED',error:'Native symbol definition/session/currency or resolution differs from the owned main series.',mutation_dispatched:false};
   old?.dispose?.();
   const run=window.__tvCliDeepRun={run_id:request.run_id,request_id:request.request_id,request_fingerprint:request.fingerprint,strategy_id:report.strategy_id,source_hash:report.source_hash,properties_hash:request.properties_hash,
-    identity,kernel,native_symbol,native_resolution,native_timezone:request.period.timezone==='UTC'?'Etc/UTC':request.period.timezone,from_ms:request.from_ms,to_ms:request.to_ms,requested_period:request.period,request_before:manager._requestId,facade,snapshot:null,report_cycle:0};
+    identity,kernel,native_symbol,native_resolution,Connection:toolkit.Connection,native_timezone:request.period.timezone==='UTC'?'Etc/UTC':request.period.timezone,from_ms:request.from_ms,to_ms:request.to_ms,requested_period:request.period,request_before:manager._requestId,facade,snapshot:null,report_cycle:0};
   const signal=manager.activeStrategyReportData;
   if(typeof signal?.subscribe!=='function'||typeof signal?.unsubscribe!=='function'){delete window.__tvCliDeepRun;return {success:false,code:'DEEP_NATIVE_PATH_UNAVAILABLE',error:'Native report revision monitoring is unavailable.',mutation_dispatched:false};}
   const changed=()=>{run.report_cycle++;run.snapshot=null;};signal.subscribe(changed);
   const originalSend=manager._sendRequest;
   const tracedSend=function(method,args){
-    if(method==='switch_timezone'){args=[args[0],run.native_timezone];run.sent_timezone=run.native_timezone;}
-    if(method==='request_history_data'){
-      const sent={session:args[0],request_number:args[1],symbol:args[2],resolution:args[3],from_seconds:args[5]?.from_to?.from,to_seconds:args[5]?.from_to?.to,kernel:JSON.stringify({study:args[6],inputs:args[7],deps:args[8]})};
-      if(args.length!==9||Object.keys(args[5]||{}).join(',')!=='from_to'||Object.keys(args[5]?.from_to||{}).sort().join(',')!=='from,to'||deepCurrentIdentity(window,document,run.strategy_id)!==run.identity||!nativeKernelMatchesChart(window,run.strategy_id,{studyName:args[6],inputs:args[7],dependencies:args[8]})||sent.kernel!==run.kernel||sent.symbol!==run.native_symbol||sent.resolution!==run.native_resolution||typeof sent.session!=='string'||!sent.session||sent.session!==manager._sessionid||sent.request_number!==run.request_before||args[4]!==0||sent.from_seconds!==Math.floor(run.from_ms/1000)||sent.to_seconds!==Math.floor(run.to_ms/1000)||run.sent_timezone!==run.native_timezone)throw Error('DEEP_REQUEST_CHANGED: Owned baseline and actual wire payload differ; history request was not dispatched.');
-      run.sent=sent;
-      run.history_send_attempted=true;
-    }
-    const result=originalSend.call(this,method,args);
-    if(method==='request_history_data')run.history_send_completed=true;
-    if(method==='history_create_session'){originalSend.call(this,'switch_timezone',[args[0],run.native_timezone]);run.sent_timezone=run.native_timezone;}
+    const result=sendVerifiedDeepFrame(window,document,this,run,method,args,originalSend);
+    if(method==='history_create_session')sendVerifiedDeepFrame(window,document,this,run,'switch_timezone',[run.created_session,run.native_timezone],originalSend);
     return result;
   };
   manager._sendRequest=tracedSend;
-  const attribution=installDeepAttribution(manager,run,toolkit);
+  let attribution;
+  try{attribution=installDeepAttribution(manager,run,toolkit);}catch(error){signal.unsubscribe(changed);if(manager._sendRequest===tracedSend)manager._sendRequest=originalSend;delete window.__tvCliDeepRun;return {success:false,code:'DEEP_NATIVE_PATH_UNAVAILABLE',error:error.message,mutation_dispatched:false,native_history_request_started:false};}
   run.dispose=()=>{signal.unsubscribe(changed);attribution();if(manager._sendRequest===tracedSend)manager._sendRequest=originalSend;};
   // Observed native provider's false argument prevents copying a chart report
   // into the Deep slot. Date-state updates alone do not request a new job.
@@ -229,7 +264,8 @@ export async function deepReportSnapshot(window,document,runId){
   }
   const range=data.settings?.dateRange?.backtest,windowKnown=Number.isFinite(range?.from)&&Number.isFinite(range?.to)&&range.from<=range.to;
   const windowInside=windowKnown&&range.from>=run.from_ms&&range.to<=run.to_ms;
-  const period_proof={valid:outside===null&&windowInside&&!missing,code:outside||windowKnown&&!windowInside?'DEEP_PERIOD_MISMATCH':'DEEP_PERIOD_UNVERIFIED',native_time_unit:'milliseconds',report_window:windowKnown?'native_decoded_report':'unknown',trade_timestamps:missing?'unknown':data.trades.length?'checked':'no_trades',coverage_completeness:'unknown',checked_rows:data.trades.length,outside_trade_number:outside?.tradeNumber??null};
+  const valid=outside===null&&windowInside&&!missing;
+  const period_proof={valid,code:valid?null:outside||windowKnown&&!windowInside?'DEEP_PERIOD_MISMATCH':'DEEP_PERIOD_UNVERIFIED',native_time_unit:'milliseconds',report_window:windowKnown?'native_decoded_report':'unknown',trade_timestamps:missing?'unknown':data.trades.length?'checked':'no_trades',coverage_completeness:'unknown',checked_rows:data.trades.length,outside_trade_number:outside?.tradeNumber??null};
   const bytes=new TextEncoder().encode(JSON.stringify({run_id:run.run_id,identity:run.identity,cycle,data}));
   const digest=await window.crypto.subtle.digest('SHA-256',bytes);
   if(inspectDeepRun(window,document,runId).phase!=='ready'||manager.activeStrategyReportData.value()!==report||cycle!==run.report_cycle)return {success:false,code:'REPORT_CHANGED',error:'Native Deep report changed while snapshotting; restart collection.'};
@@ -238,4 +274,4 @@ export async function deepReportSnapshot(window,document,runId){
   return {success:true,status,snapshot:run.snapshot};
 }
 
-export const DEEP_PAGE_CODE=STRATEGY_PAGE_CODE+'\n'+[canonicalPineSource,findPineController,findPineEditor,verifyDeepSource,nativeDeepToolkit,nativeKernelMatchesChart,ownedDeepContext,installDeepAttribution,findDeepReportProviders,deepCurrentIdentity,inspectDeepRun,inspectDeepSettlement,startDeepRun,deepReportSnapshot].map(fn=>fn.toString()).join('\n');
+export const DEEP_PAGE_CODE=STRATEGY_PAGE_CODE+'\n'+[canonicalPineSource,findPineController,findPineEditor,verifyDeepSource,nativeDeepToolkit,nativeKernelMatchesChart,ownedDeepContext,installDeepAttribution,findDeepReportProviders,deepCurrentIdentity,sendVerifiedDeepFrame,inspectDeepRun,inspectDeepSettlement,startDeepRun,deepReportSnapshot].map(fn=>fn.toString()).join('\n');

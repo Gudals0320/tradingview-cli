@@ -385,7 +385,7 @@ async function operationOwner(f, { resources = false, deferred = false } = {}) {
 }
 
 it('report/wait real entry points reject dead owners before or during production report evaluation without adopting/deleting records', async t => {
-  for (const phase of ['before', 'during']) for (const args of [['workspace', 'wait', '--timeout', '1000'], ['data', 'strategy'], ['data', 'trades'], ['data', 'ledger'], ['data', 'equity']]) {
+  for (const phase of ['before', 'during']) for (const args of [['workspace', 'wait', '--timeout', '1000'], ['data', 'strategy'], ['data', 'trades'], ['data', 'ledger'], ['data', 'equity'],['backtest','status'],['backtest','wait','--timeout','1000'],['backtest','results']]) {
     let owner, killed = false;
     const f = await reportFixture(t, async expression => {
       if (phase === 'during' && owner && !killed && (expression.includes('function readStrategyReport') || expression.includes('function compilationState'))) { killed = true; await owner.kill(); }

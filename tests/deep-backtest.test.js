@@ -2,7 +2,7 @@ import { it } from 'node:test';
 import { setImmediate } from 'node:timers';
 import assert from 'node:assert/strict';
 import { DEEP_PAGE_CODE } from '../src/deep-backtest-page.js';
-import { deepPeriod,runDeep,waitDeep,resetNormal } from '../src/core/deep-backtest.js';
+import { deepPeriod,deepResults,runDeep,waitDeep,resetNormal } from '../src/core/deep-backtest.js';
 import { getProperties } from '../src/core/strategy-properties.js';
 import { deepPage } from './fixtures/deep-page.mjs';
 import { compilationState,invalidateEditedSource,prepareInputChange } from '../src/strategy-state.js';
@@ -73,6 +73,43 @@ it('auth-like asynchronous connection preparation cannot send after any owned ba
     p.manager.requestData=function(from,to){this._fromDate=from;this._toDate=to;this.activeStrategyStatus.set({type:1});gate.then(()=>request.call(this,from,to)).catch(e=>{error=e;});};
     assert.equal((await start(p)).success,true,name);assert.equal(p.dispatches(),0,name);change(p);resume();await new Promise(resolve=>setImmediate(resolve));
     assert.match(error?.message||'',/DEEP_REQUEST_CHANGED/,name);assert.equal(wire,0,name);assert.equal(p.dispatches(),0,name);assert.notEqual(p.window.__tvCliDeepRun.history_send_completed,true,name);
+  }
+});
+it('a completed native connection with a null socket reconnects with the current listener before the next report',async()=>{
+  const p=deepPage();await start(p);await p.complete();const captured=p.manager._bindListeners;
+  p.window.__tvCliDeepRun.dispose();delete p.window.__tvCliDeepRun;p.manager._wsConnection._socket=null;
+  assert.equal((await start(p)).success,true);assert.equal(p.manager._bindListeners,captured);await p.complete(20,1);
+  assert.equal((await call(p,'deepReportSnapshot','exact-run')).snapshot.data.performance.all.netProfit,20);assert.equal(p.dispatches(),2);
+});
+it('a listener registration refusal is known before history dispatch and cleans temporary wrappers',async()=>{
+  const p=deepPage();await start(p);await p.complete();p.window.__tvCliDeepRun.dispose();delete p.window.__tvCliDeepRun;
+  p.manager._wsConnection.on=()=>false;p.manager._wsConnection.__tvCliDeepResponseRouter=null;const original=p.manager._sendRequest;
+  const result=await start(p);assert.equal(result.success,false);assert.equal(result.mutation_dispatched,false);assert.equal(result.native_history_request_started,false);assert.equal(p.dispatches(),1);assert.equal(p.manager._sendRequest,original);assert.equal(p.window.__tvCliDeepRun,undefined);
+});
+it('session hijack and manager-return-without-transport are known zero history frames rather than successful dispatch',async()=>{
+  for(const kind of ['session','no frame','lost connection']){const p=deepPage(),original=p.manager._sendRequest;let history=0;
+    p.manager._sendRequest=function(method,args){if(method==='request_history_data'){if(kind==='no frame')return;history++;}const result=original.call(this,method,args);if(method==='history_create_session'){if(kind==='session')this._sessionid='foreign';if(kind==='lost connection')this._wsConnection=null;}return result;};
+    await assert.rejects(()=>start(p),/DEEP_REQUEST_CHANGED/,kind);const status=await call(p,'inspectDeepRun','exact-run');assert.equal(status.server_request_dispatched,false,kind);assert.equal(status.no_history_dispatch_verified,true,kind);assert.equal(status.phase,'rejected_known',kind);assert.equal(history,0,kind);
+    const settled=await call(p,'inspectDeepSettlement','exact-run');assert.equal(settled.settled,true,kind);assert.equal(settled.result_adopted,false,kind);
+  }
+});
+it('transport false/throw after invocation remains unknown and is never marked completed or safe to replay',async()=>{
+  for(const kind of ['false','throw']){const p=deepPage(),original=p.manager._sendRequest;
+    p.manager._sendRequest=function(method,args){if(method==='history_create_session'){const result=original.call(this,method,args);this._wsConnection.send=raw=>{if(JSON.parse(raw).m==='request_history_data'){if(kind==='throw')throw Error('lost after send');return false;}return true;};return result;}return original.call(this,method,args);};
+    await assert.rejects(()=>start(p),kind==='throw'?/lost after send/:/DEEP_TRANSPORT_UNCONFIRMED/);const status=await call(p,'inspectDeepRun','exact-run');assert.equal(status.phase,'unknown',kind);assert.equal(status.server_request_dispatched,false,kind);assert.equal(status.native_send_attempted,true,kind);assert.equal((await call(p,'inspectDeepSettlement','exact-run')).settled,false,kind);
+  }
+});
+it('Deep native millisecond timestamps before 1973 are never heuristically interpreted as seconds',async()=>{
+  const p=deepPage(),proof=await call(p,'verifyDeepSource','owned-study');const from=Date.parse('1972-01-01T00:00:00Z'),to=Date.parse('1972-01-02T00:00:00Z');
+  await call(p,'startDeepRun',{run_id:'early',request_id:'early',fingerprint:'early',strategy_id:'owned-study',source_proof:proof,from_ms:from,to_ms:to,period:{from:new Date(from).toISOString(),to:new Date(to).toISOString(),timezone:'UTC'}});await p.complete();
+  const result=await deepResults({run_id:'early',_deps:{evaluateAsync:p.evaluate}});assert.equal(result.success,true);assert.equal(result.computed_window.from,'1972-01-01T00:00:00.000Z');assert.equal(result.trade_window.from,'1972-01-01T00:00:01.000Z');assert.equal(result.period_proof.native_time_unit,'milliseconds');
+});
+it('exact terminal disconnected zero-send preparation is reconciled without resending while pending auth stays unknown',async()=>{
+  for(const pending of [false,true]){const p=deepPage(),store=memoryStore(),options={from:'2024-01-01T00:00:00Z',to:'2024-01-02T00:00:00Z',request_id:'legacy-preparation',_deps:{properties:()=>getProperties({_deps:{evaluate:p.evaluate}}),evaluateAsync:p.evaluate,store}};
+    await runDeep(options);await p.complete();const run=p.window.__tvCliDeepRun;run.request_before=p.manager._requestId;run.report_cycle=0;delete run.sent;delete run.history_send_attempted;delete run.history_send_completed;
+    p.manager._wsConnection._socket=null;if(pending)p.manager.activeStrategyStatus.set({type:1});store.write({...store.read(),phase:'unknown'});
+    const result=await runDeep(options);assert.equal(p.dispatches(),1);assert.equal(result.no_history_dispatch_verified,pending?undefined:true);
+    assert.equal(store.read().phase,pending?'unknown':'rejected_known');assert.equal(store.read().request_id,'legacy-preparation');
   }
 });
 it('zero trades retain native window evidence while missing/outside windows and trade timestamps fail period proof',async()=>{

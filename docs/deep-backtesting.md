@@ -52,14 +52,20 @@ not verification.
 | Resolution | Owned main-series `interval()`; exact native interval value | Tick/range mappings unsupported |
 | Timezone/bounds | Explicit validated CLI timezone (UTC maps to Etc/UTC), whole-second absolute from/to; session timezone sent after creation and pinned | No date shift correction or implicit local timezone |
 | Dependencies | Independently mapped empty list | Nonempty/unmapped lists unsupported |
-| Session/request | Native connection session, one captured request counter; actual send completion tracked separately from counter increment | Counter increment alone never proves send |
+| Session/request | Native connection handshake and admitted created-session frame, pinned connection/socket; timezone uses that exact session, with one captured request counter | Counter increment or the manager's void return never proves send |
 | Browser/generation | Exact workspace nonce, provider and saved/applicable source/input/context snapshot | Changes invalidate dispatch/result |
 
 After all asynchronous preparation, the actual `request_history_data` arguments
 and current owned baseline are checked synchronously immediately before the
 original native send. A send exception remains uncertain and is never replayed.
-Send completion proves local native dispatch only; server acceptance requires the
-attributed decoded response. Stable response hooks use the current connection
+Send completion requires the exact serialized frame to reach the original native
+transport on the pinned connected socket and its `send()` admission to return
+true. It proves local transport admission only; server acceptance requires the
+attributed decoded response. A pre-transport refusal has an explicit known-zero
+history marker; transport invocation followed by false/exception remains unknown.
+Exact terminal disconnected preparation with an unchanged counter and no history
+send attempt can also be reconciled without replay; pending authentication cannot.
+Stable response hooks use the current connection
 and socket and ignore disposed callbacks or late replies from an old socket.
 
 Native decoded report timestamps use milliseconds. Report bounds must be finite

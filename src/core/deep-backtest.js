@@ -31,6 +31,7 @@ export async function runDeep({from,to,timezone,request_id,strategy_id,_deps}={}
   if(previous&&previous.fingerprint!==fingerprint)return {success:false,code:'DEEP_REQUEST_CONFLICT',error:'This request ID already describes another source/settings/period.',mutation_dispatched:false};
   if(previous&&previous.phase!=='rejected_known'){
     const actual=await deepStatus({run_id:previous.run_id,_deps});
+    if(actual.run_id===previous.run_id&&actual.no_history_dispatch_verified===true){store.write({...previous,phase:'rejected_known',no_history_dispatch_proof:actual,reconciled_at:new Date().toISOString()});return {...actual,reused:true};}
     if(actual.run_id===previous.run_id&&actual.phase){return {...actual,reused:true};}
     return {success:false,code:'DEEP_RUN_UNKNOWN',error:'Recorded native outcome cannot be inspected in this page/generation; preserve intent, do not resend.',request_id,run_id:previous.run_id,intent_preserved:true,replay_safe:false,mutation_dispatched:false};
   }
@@ -50,6 +51,8 @@ export async function deepStatus({run_id,_deps}={}){
   return (_deps?.evaluateAsync||evaluateAsync)(`(()=>{${DEEP_PAGE_CODE};return inspectDeepRun(window,document,${JSON.stringify(run_id||null)});})()`);
 }
 
+export function deepTime(value){const date=new Date(value);return Number.isFinite(value)&&Number.isFinite(date.getTime())?date.toISOString():null;}
+
 export async function waitDeep({run_id,timeout=30000,_deps}={}){
   if(!Number.isInteger(timeout)||timeout<1||timeout>300000)throw Object.assign(new Error('timeout must be 1..300000 ms.'),{code:'INVALID_DEEP_REQUEST'});
   const now=_deps?.now||Date.now,sleep=_deps?.sleep||(ms=>new Promise(resolve=>setTimeout(resolve,ms))),start=now();let last;
@@ -62,12 +65,13 @@ export async function deepResults({run_id,offset=0,limit=100,report_revision,_de
   return (_deps?.evaluateAsync||evaluateAsync)(`(async()=>{${DEEP_PAGE_CODE};const read=await deepReportSnapshot(window,document,${JSON.stringify(run_id||null)});if(!read.success)return read;
     const snap=read.snapshot,data=snap.data;
     if(${JSON.stringify(report_revision||null)}&&${JSON.stringify(report_revision||null)}!==snap.revision)return {success:false,code:'REPORT_CHANGED',error:'Deep snapshot revision changed; restart at offset 0.',report_revision:snap.revision};
-    const range=data.settings?.dateRange?.backtest||null,actual=range&&Number.isFinite(range.from)&&Number.isFinite(range.to)?{from:strategyTime(range.from),to:strategyTime(range.to)}:null;
+    ${deepTime.toString()}
+    const range=data.settings?.dateRange?.backtest||null,actual=range&&Number.isFinite(range.from)&&Number.isFinite(range.to)?{from:deepTime(range.from),to:deepTime(range.to)}:null;
     if(!snap.period_proof.valid)return {success:false,code:snap.period_proof.code,error:'Native report window/trade timestamps do not verify the requested absolute period; no metrics/ledger are adopted.',requested_period:read.status.requested_period,computed_native_window:actual,period_proof:snap.period_proof,report_revision:snap.revision,result_adopted:false};
     const rows=data.trades.slice(${offset},${offset+limit});
     return {success:true,...read.status,mode:'deep',report_revision:snap.revision,currency:data.currency||null,performance:data.performance,
       requested_period:read.status.requested_period,computed_window:actual,period_proof:snap.period_proof,coverage:actual?'native_report_window':'unknown',coverage_completeness:'unknown',loaded_window:null,
-      trade_window:data.trades.length?{from:strategyTime(data.trades[0].entry?.time),to:strategyTime(data.trades.at(-1).exit?.time)}:null,
+      trade_window:data.trades.length?{from:deepTime(data.trades[0].entry?.time),to:deepTime(data.trades.at(-1).exit?.time)}:null,
       ledger:{total:data.trades.length,offset:${offset},limit:${limit},rows,has_more:${offset+limit}<data.trades.length,next_offset:${offset+limit}<data.trades.length?${offset}+rows.length:null,truncated:false,downsampled:false},
       snapshot:{revision:snap.revision,created_at:snap.created_at,hash_cost:'once_per_native_report_cycle',period_validation:'once_per_snapshot',pagination:'immutable_full_snapshot_sliced_in_page'}};
   })()`);
