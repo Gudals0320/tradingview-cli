@@ -4,6 +4,7 @@ import { effectiveStrategyProperties,PROPERTIES_PAGE_CODE } from './strategy-pro
 export function formatDiagnostic(message, context = {}) {
   return String(message || '').replace(/\{([^}]+)\}/g, (placeholder, key) => context[key] == null ? placeholder : String(context[key]));
 }
+export function strategyTradeIsOpen(trade){return !trade.x||trade.x.c==='';}
 
 export function pageStrategies(window) {
   const chart = window.TradingViewApi?._activeChartWidgetWV?.value();
@@ -357,14 +358,14 @@ export function readStrategyReport(window, options = {}) {
     missing_metrics: Object.keys(metrics).filter(key => !Number.isFinite(metrics[key])),
     context, backtest_window: { from: iso(range.from), to: iso(range.to) },
     loaded_window: { from: iso(context?.first_bar_time), to: iso(context?.last_bar_time) },
-    trade_window: { from: iso(trades[0]?.e?.tm), to: iso(trades.at(-1)?.x?.tm ?? trades.at(-1)?.e?.tm) },
+    trade_window: { from: iso(trades[0]?.e?.tm), to: iso(strategyTradeIsOpen(trades.at(-1)||{})?trades.at(-1)?.e?.tm:trades.at(-1)?.x?.tm) },
     units: { money: report.currency || null, percent_fields: 'fraction (0.01 = 1%)',
       time_fields: 'ISO-8601 UTC', order_sequence: 'ordinal, not timestamp or bar index' },
   };
 }
 
 export const STRATEGY_PAGE_CODE = PROPERTIES_PAGE_CODE+'\n'+[readChartContext, formatDiagnostic, pageStrategies, reportFingerprint, reportIsComplete, compiledIdentity,
-  calculationKey, rememberVerifiedCompilation, forgetVerifiedCompilation, failCompilation, invalidateEditedSource, strategyTime, observeCalculation, prepareInputChange, beginCompilation, compilationState, readStrategyReport].map(fn => fn.toString()).join('\n');
+  calculationKey, rememberVerifiedCompilation, forgetVerifiedCompilation, failCompilation, invalidateEditedSource, strategyTime,strategyTradeIsOpen, observeCalculation, prepareInputChange, beginCompilation, compilationState, readStrategyReport].map(fn => fn.toString()).join('\n');
 
 export function reportExpression(options = {}) {
   return `(() => { ${STRATEGY_PAGE_CODE}; return readStrategyReport(window, ${JSON.stringify(options)}); })()`;

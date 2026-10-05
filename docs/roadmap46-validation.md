@@ -263,3 +263,78 @@ events at one timestamp are unverified instead of netting their counts. Real CLI
 negative fixtures publish neither points nor CSV. A subsequent working-tree live
 observation retained 343 native points and 34 applicable flat-close checkpoints,
 with maximum error 3.637978807091713e-12; immutable commit validation is separate.
+
+## Subsequent A2 acceptance (2026-10-05 KST)
+
+The human confirmed accidental deletion of the original QA Pine document. This
+was an external deletion, not a CLI defect. A new separately named QA document
+was explicitly created, persistence-verified, mounted, attached and compiled;
+old document IDs, alert creation proofs and unknown Deep records were preserved.
+The new document initially used the same public fixture source, then a separately
+saved source revision and Cycle input/timeframe were verified.
+
+Environment: TradingView Desktop 3.4.1, Electron 41.7.1, Chrome 146.0.7680.216,
+V8 14.6.202.34, Node 24.19.0, Windows 10 build 26200, Korean UI/Asia-Seoul.
+Native observations and failed trials remain in ignored private results. Code
+commits and dirty status are retained separately; fixture outcomes are not live
+outcomes. No webhook, receiver, broker order, release or global install change
+was performed.
+
+At a83a13e, explicit active-create then pause succeeded with verified inactive
+state and a 1,933 ms client confirmation window. It is non-atomic and could fire
+before pause. At c6ef7f8, native settings modification changed the exact owned
+alert's name while preserving its original strategy. The first immediate read
+verified settings but still observed inactive; it correctly returned failure.
+Same-operation reconciliation later verified active without another send.
+Earlier update guard refusals dispatched zero mutations and are preserved.
+
+Gap replacement verified pause-old/create-new with a 2,366 ms confirmation
+window; overlap replacement verified create-new/pause-old with a 1,864 ms window.
+Old alerts remained preserved, paused, and were not automatically deleted or
+reactivated. A subsequent saved source, Cycle input and 1-to-2-minute timeframe
+change left the old server wire unchanged and reported document/source/inputs/
+context stale. The new replacement verified the new saved source. Three native
+realtime events for that exact new alert had the expected QA Pine-event message
+hash. Earlier original fills/alerts/both alerts also had actual internal fires;
+finite log pages and native before cursor boundaries were verified.
+
+All 16 typed Properties were applied/read back on A2 in one verified native input
+calculation. This verifies their effective input values, not bar-magnifier lower
+timeframe completeness or an independent FX conversion model.
+
+An additional stable report with zero commission/slippage, realtime recalculation
+off and the public breakeven Case yielded this actual TV screen comparison:
+
+| Field | CLI native value | TV display | Interpretation |
+| --- | --- | --- | --- |
+| Net profit | 123.97999999999993 USD | +123.98 USD | Closed monetary net; open PnL was zero |
+| Net percent | 0.006198999999999997 | +0.62% | Fraction times 100 |
+| Maximum drawdown | 203.5600000000013 USD | 203.56 USD | Positive loss magnitude |
+| Drawdown percent | 0.010176381955269178 | 1.02% | Fraction times 100 |
+| Closed trades / winners / losers | 330 / 191 / 20 | 330 / 191 / 20 | Remaining 119 were displayed as breakeven |
+| Win fraction | 0.5787878787878787 | 57.88% | Fraction times 100 |
+| Gross profit / loss | 167.91999999999993 / 43.94 USD | 167.92 / 43.94 USD | Loss magnitude is positive |
+| Profit factor | 3.8215748748293112 | 3.822 | Display precision 0.001 |
+| Largest win / loss | 9.06 / 9.040000000000001 USD | 9.06 / 9.04 USD | Monetary magnitudes |
+| Average trade | 0.3756969697 USD | 0.38 USD | Display precision 0.01 |
+
+These display checks use half the last shown decimal place, plus floating-point
+roundoff, only for UI rounding comparisons. They do not widen equity's independent
+arithmetic tolerance. The earlier cost-bearing screen displayed commission as a
+percentage of gross profit; that label is not the CLI's currency commission field.
+UI total PnL can include open valuation and repaint asynchronously, so an unstable
+realtime display was not used as a closed-net proof.
+
+The A2 zero Case produced net/trades/ledger rows zero and undefined profit factor
+null. Its open Case revealed native x.c empty with lx/time/price mark fields. The
+existing ledger incorrectly labeled that row closed. The correction distinguishes
+open valuation from exit: open=true, exit_time/exit_bar=null, mark_time/mark_bar
+explicit, raw x preserved. trade_window ends at entry for an open tail, not at its
+mark. Production page and actual-entry fixtures cover this observed native shape.
+
+`scripts/smoke-roadmap-strategy.mjs` adds bounded read-only report/equity/alert
+scenarios. Pass the exact dedicated workspace/document and a new private output
+filename; report pages pin revision, refuse changes and disclose truncation.
+The harness preserves SHA/dirty/time/Node/OS and all raw calls privately. It never
+creates, updates or deletes server resources. Maximum account coverage, FX
+arithmetic and lower-timeframe bar coverage remain explicitly unknown.

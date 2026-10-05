@@ -146,6 +146,12 @@ describe('Strategy report identity and metadata', () => {
     assert.equal((await getTradeLedger({ _deps })).code, 'LEDGER_UNAVAILABLE');
   });
 
+  it('native empty exit comment denotes open valuation even with lx/time/price fields',async()=>{
+    const f=fixture();beginCompilation(f.window,'open-run','hash',true);f.compile();f.update();const report=f.source.reportData().value();
+    report.trades=[{e:{tm:1704067200000,b:1,tp:'le'},x:{c:'',tm:1704153600000,b:2,tp:'lx',p:100},q:1}];
+    const result=await getTradeLedger({_deps:{evaluate:expression=>runInNewContext(expression,{window:f.window})}}),row=result.trades[0];assert.equal(row.open,true);assert.equal(row.exit_time,null);assert.equal(row.exit_bar,null);assert.equal(row.mark_time,'2024-01-02T00:00:00.000Z');assert.equal(row.mark_bar,2);assert.equal(row.raw.x.tp,'lx');assert.equal(row.raw.x.c,'');assert.equal(result.trade_window.to,row.entry_time);
+    report.trades[0].x.c='closed';const closed=await getTradeLedger({_deps:{evaluate:expression=>runInNewContext(expression,{window:f.window})}});assert.equal(closed.trades[0].open,false);assert.equal(closed.trades[0].exit_time,row.mark_time);assert.equal(closed.trades[0].mark_time,null);
+  });
   it('order caps, unavailable orders, equity and missing metrics are explicit', async () => {
     const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
     const report = f.source.reportData().value();

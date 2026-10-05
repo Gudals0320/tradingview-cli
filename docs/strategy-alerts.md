@@ -177,3 +177,7 @@ creation or blind rollback. GUI-edited old settings are refused. A replacement
 must be observed active to complete; an expired/inactive replacement is incomplete.
 Messages remain private and are projected as hashes. External delivery stays out
 of scope for updates and replacement.
+Native activation may appear after the first fresh settings read. An update is
+unsuccessful until both exact settings and active state are observed. Repeat its
+same operation ID to read and reconcile; the original response/read observation
+is retained and no modification is resent.

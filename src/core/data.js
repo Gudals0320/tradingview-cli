@@ -231,10 +231,12 @@ export async function getTradeLedger({ offset = 0, limit = 100, strategy_id, rep
     const ledger = item.report.trades;
     if (!Array.isArray(ledger)) return { success: false, code:'LEDGER_UNAVAILABLE', error: 'Trade ledger unavailable in this build.' };
     const time = strategyTime;
-    const trades = ledger.slice(${offset}, ${offset + limit}).map((trade, index) => ({
-      trade_seq: index + ${offset}, entry_time: time(trade.e?.tm), exit_time: time(trade.x?.tm),
-      open: !trade.x, timestamp_errors: ['e','x'].filter(key => trade[key]?.tm != null && time(trade[key].tm) == null),
-      entry_bar: trade.e?.b ?? null, exit_bar: trade.x?.b ?? null, raw: trade }));
+    const trades = ledger.slice(${offset}, ${offset + limit}).map((trade, index) => {
+      const open = strategyTradeIsOpen(trade);
+      return {trade_seq: index + ${offset}, entry_time: time(trade.e?.tm), exit_time: open ? null : time(trade.x?.tm),
+      open, mark_time: open ? time(trade.x?.tm) : null, mark_bar: open ? trade.x?.b ?? null : null,
+      timestamp_errors: ['e','x'].filter(key => trade[key]?.tm != null && time(trade[key].tm) == null),
+      entry_bar: trade.e?.b ?? null, exit_bar: open ? null : trade.x?.b ?? null, raw: trade };});
     return { success: true, strategy_id: summary.strategy_id, currency: summary.currency, total_trades: ledger.length,
       compilation_token:summary.compilation_token,source_hash:summary.source_hash,strategy_inputs:summary.strategy_inputs,
       context:summary.context,effective_properties:summary.effective_properties,backtest_window:summary.backtest_window,loaded_window:summary.loaded_window,trade_window:summary.trade_window,
