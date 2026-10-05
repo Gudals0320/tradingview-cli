@@ -1,6 +1,6 @@
 import {it} from 'node:test';
 import assert from 'node:assert/strict';
-import {createStrategyServerAlert,getStrategyServerAlert,operateStrategyServerAlert} from '../src/core/strategy-alerts.js';
+import {createStrategyServerAlert,getStrategyServerAlert,operateStrategyServerAlert,getStrategyAlertFires} from '../src/core/strategy-alerts.js';
 import {strategyAlertPage} from './fixtures/strategy-alert-page.mjs';
 
 const memoryStore=()=>{let row=null;return {read:()=>row,write:value=>{row=structuredClone(value);},list:()=>row?[{record:row}]:[]};};
@@ -100,4 +100,11 @@ it('fresh server reads distinguish verified stale Properties/inputs from an unve
   const first=await getStrategyServerAlert({request_id:input.request_id,_deps:input._deps});assert.equal(first.current_snapshot.verified,true);assert.equal(first.snapshot_stale,false);
   p.externalFee(0.5);const unverified=await getStrategyServerAlert({request_id:input.request_id,_deps:input._deps});assert.equal(unverified.current_snapshot.verified,false);assert.equal(unverified.snapshot_stale,null);
   p.bind({id:'props-workspace',token:'props-token',layout:'fixture-layout',pine:'owned-document'});p.compile('new-properties-baseline');p.refreshReport();p.completeInputs();const stale=await getStrategyServerAlert({request_id:input.request_id,_deps:input._deps});assert.equal(stale.current_snapshot.verified,true);assert.equal(stale.snapshot_stale,true);assert.equal(stale.current_snapshot.changes.inputs,true);assert.equal(stale.current_snapshot.changes.properties,true);assert.equal(stale.snapshot_automatically_updated,false);assert.equal(JSON.stringify(p.server.get(created.alert_id)),raw);assert.equal(p.counts().posts,1);
+});
+it('owned internal fire pages preserve native IDs/time bounds and hash messages without any mutation or external status',async()=>{
+  const p=strategyAlertPage(),store=memoryStore(),input=options(p,store),created=await createStrategyServerAlert(input),empty=await getStrategyAlertFires({request_id:input.request_id,_deps:input._deps});assert.equal(empty.success,true);assert.equal(empty.count,0);assert.equal(empty.end_of_observed_log,true);
+  p.fires.push(...[3,2,1].map(id=>({fire_id:id,alert_id:created.alert_id,fire_time:Date.UTC(2026,9,5,0,id),message:'private fire message',webhook:{error:'private delivery details'}})));
+  const first=await getStrategyAlertFires({request_id:input.request_id,limit:2,_deps:input._deps});assert.equal(first.count,2);assert.equal(first.page_full,true);assert.equal(first.next_before,2);assert.equal(first.coverage_completeness,'unknown');assert.equal(first.data[0].message_hash.length,64);assert.equal(JSON.stringify(first).includes('private fire message'),false);assert.equal(JSON.stringify(first).includes('private delivery'),false);
+  const next=await getStrategyAlertFires({request_id:input.request_id,limit:2,before:first.next_before,_deps:input._deps});assert.equal(next.count,1);assert.equal(next.end_of_observed_log,true);assert.equal(next.data[0].fire_id,'1');assert.equal(p.counts().actions,0);assert.equal(p.counts().posts,1);
+  p.rest.listFires=async()=>[{fire_id:4,alert_id:7,fire_time:Date.now(),message:'other user message'}];assert.equal((await getStrategyAlertFires({request_id:input.request_id,_deps:input._deps})).code,'STRATEGY_ALERT_LOG_UNVERIFIED');
 });

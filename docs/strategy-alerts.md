@@ -98,5 +98,22 @@ no native SDK retry fallback is used for the owned mutation.
 Successful deletion preserves the creation record and marks verified deletion.
 `strategy-get` still makes a fresh absence check; the old creation ID cannot create
 again. A successful control means the observed server state, not absence of queued
-events or broker execution. Update/replacement and internal fire logs remain separate
-implementation/acceptance work.
+events or broker execution. Update/replacement remain separate implementation work.
+
+## Internal fire logs
+
+```powershell
+tv --workspace research-a alert strategy-fires --request-id strategy-week-1 --limit 50
+tv --workspace research-a alert strategy-fires --request-id strategy-week-1 --limit 50 --before 123456
+```
+
+Only verified local creation IDs, including retained deleted records, can select
+logs. The supported native listFires contract filters exact alert_ids and uses a
+numeric fire-ID before cursor. It is not a time cursor. Pages expose the observed
+time window, latest observation time and message hashes; message bodies and all
+webhook/delivery fields are omitted. Empty success differs from unsupported API,
+request errors or unverified row/account/time/ID schema. A full page leaves total
+coverage unknown and returns next_before. A short page ends this server observation.
+No log deletion or event replay is performed. Native log Date(value) semantics
+interpret numbers as milliseconds and explicit-offset ISO strings as timestamps.
+These fixtures do not substitute for a dedicated live server event receipt.

@@ -16,7 +16,7 @@ export function validateStrategyAlert(options,{require_future=false}={}){
   if(typeof options.active!=='boolean')error('Active must be explicitly represented by the adapter.');
 }
 const digest=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const pageCall=(inspect,name,request,mutation=false)=>inspect(`(async()=>{${STRATEGY_ALERT_PAGE_CODE};return ${name}(window,${['readStrategyAlert','observeStrategyAlertAction','mutateStrategyAlert'].includes(name)?'':'document,'}${JSON.stringify(request)});})()`,mutation?{mutation:true}:undefined);
+const pageCall=(inspect,name,request,mutation=false)=>inspect(`(async()=>{${STRATEGY_ALERT_PAGE_CODE};return ${name}(window,${['readStrategyAlert','observeStrategyAlertAction','mutateStrategyAlert','readStrategyAlertFires'].includes(name)?'':'document,'}${JSON.stringify(request)});})()`,mutation?{mutation:true}:undefined);
 function storeFor(request_id,_deps){const workspace=currentWorkspaceSession()?.workspace,store=_deps?.store||(workspace&&nativeRequestStore(workspace,'strategy-alert',request_id));if(!store)throw Object.assign(Error('A persistent named workspace alert ledger is required.'),{code:'WORKSPACE_REQUIRED'});return store;}
 function project(record,result){const {_private_diagnostic,...output}=result;return {...output,request_id:record.request_id,run_id:record.run_id,creation_provenance:{scope:'local_creation_record',document_id:record.source_proof.document_id,document_version:record.source_proof.document_version,source_hash:record.source_proof.source_hash,properties_fingerprint:createHash('sha256').update(record.source_proof.properties_fingerprint).digest('hex'),inputs_hash:record.source_proof.inputs_fingerprint,server_source_hash_verified:false},snapshot_automatically_updated:false};}
 
@@ -62,4 +62,10 @@ export async function operateStrategyServerAlert({request_id,operation_id,action
   const intent={schema:1,operation_id,fingerprint,request_id,alert_id:record.alert_id,action,phase:'dispatching',started_at:new Date().toISOString()};store.write(intent);
   try{const result=await pageCall(inspect,record.phase==='deleted'?'observeStrategyAlertAction':'mutateStrategyAlert',request,record.phase!=='deleted');store.write({...intent,phase:result.success?'verified':result.known_no_mutation||result.mutation_dispatched===false?'rejected_known':'unknown',result});if(result.success&&action==='delete')creation.write({...record,phase:'deleted',deletion:{operation_id,verified_at:new Date().toISOString(),original_creation_preserved:true}});return project(record,{...result,operation_id});}
   catch(error){store.write({...intent,phase:'unknown',error_code:error.code||'STRATEGY_ALERT_ACTION_UNKNOWN'});throw error;}
+}
+
+export async function getStrategyAlertFires({request_id,limit=50,before,_deps}={}){
+  if(!Number.isInteger(limit)||limit<1||limit>50||before!==undefined&&(!Number.isSafeInteger(before)||before<0))throw Object.assign(Error('Use limit 1..50 and a safe native fire-ID cursor.'),{code:'INVALID_STRATEGY_ALERT_LOG'});
+  const record=storeFor(request_id,_deps).read();if(!record||!['created','deleted'].includes(record.phase)||!record.alert_id)return {success:false,code:'STRATEGY_ALERT_NOT_OWNED'};
+  return pageCall(_deps?.evaluateAsync||evaluateAsync,'readStrategyAlertFires',{...record,limit,before});
 }

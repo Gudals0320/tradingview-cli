@@ -90,6 +90,7 @@ an unknown native operation.
 | STRATEGY_ALERT_READBACK_UNVERIFIED / STRATEGY_ALERT_ACCOUNT_CHANGED | Exact settings/account do not match the pinned request. Do not adopt or modify that alert. |
 | STRATEGY_ALERT_ACTION_UNKNOWN / STRATEGY_ALERT_ACTION_UNCONFIRMED | Preserve the exact operation ID. Repeat only its observation/reconciliation; no mutation replay. Success requires the desired end state, not merely a successful read. |
 | STRATEGY_ALERT_OPERATION_CONFLICT / STRATEGY_ALERT_DELETED | An operation ID cannot change targets/actions; a deleted creation cannot be recreated with its old request ID. |
+| STRATEGY_ALERT_LOG_UNSUPPORTED / STRATEGY_ALERT_LOG_FAILED / STRATEGY_ALERT_LOG_UNVERIFIED | Logs are unsupported, failed, or have unverified account/ID/time schema. These are distinct from a successful empty page. Messages and external delivery fields remain omitted. |
 | DEEP_RUN_ARCHIVED | The original request evidence remains preserved without adoption; use a new request ID after current native/GUI work is idle. |
 | DEEP_REQUEST_CONFLICT | Stable request ID describes different source/full inputs/context/settings/period; use an explicit new request after old work settles. |
 | DEEP_RESULT_STALE / DEEP_REQUEST_CHANGED / DEEP_RESULT_GENERATION_CHANGED | Current source or native run/provider identity changed; no stale result adoption. |

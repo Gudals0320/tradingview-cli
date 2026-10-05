@@ -119,6 +119,7 @@ tv --workspace research-a alert strategy-create --request-id strategy-week-1 --m
 tv --workspace research-a alert strategy-get --request-id strategy-week-1
 tv --workspace research-a alert strategy-pause --request-id strategy-week-1 --operation-id stop-week-1
 tv --workspace research-a alert strategy-resume --request-id strategy-week-1 --operation-id restart-week-1
+tv --workspace research-a alert strategy-fires --request-id strategy-week-1 --limit 50
 ```
 
 Pine 문서는 기본 생성 조건이 아닙니다. chart-only workspace에서 명시적으로 새 저장

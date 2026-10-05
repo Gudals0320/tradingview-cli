@@ -161,4 +161,20 @@ export async function mutateStrategyAlert(window,request){
   const after=await observeStrategyAlertAction(window,request);return {...after,success:after.success&&after.desired_state_verified===true,code:after.desired_state_verified?undefined:after.code||'STRATEGY_ALERT_ACTION_UNCONFIRMED',performed:true,mutation_dispatched:true};
 }
 
-export const STRATEGY_ALERT_PAGE_CODE=DEEP_PAGE_CODE+'\n'+[strategyAlertToolkit,strategyAlertDto,ownedStrategyAlertTarget,prepareStrategyAlert,strategyAlertHash,strategyAlertFieldsMatch,readStrategyAlert,createStrategyAlert,observeStrategyAlertAction,compareStrategyAlertSnapshot,mutateStrategyAlert].map(fn=>fn.toString()).join('\n');
+export async function readStrategyAlertFires(window,request){
+  const toolkit=strategyAlertToolkit(window);if(!toolkit||typeof toolkit.getAlertsRestApi().listFires!=='function')return {success:false,code:'STRATEGY_ALERT_LOG_UNSUPPORTED'};
+  const userId=toolkit.getAlertSession().user.value()?.id;if(userId===undefined||await strategyAlertHash(window,String(userId))!==request.account_hash)return {success:false,code:'STRATEGY_ALERT_ACCOUNT_CHANGED'};
+  let rows;try{rows=await toolkit.getAlertsRestApi().listFires({alert_ids:[request.alert_id],limit:request.limit,...(request.before!==undefined?{before:request.before}:{})});}catch(error){return {success:false,code:'STRATEGY_ALERT_LOG_FAILED',native_error_code:typeof error.code==='string'||typeof error.code==='number'?error.code:null};}
+  if(!Array.isArray(rows)||rows.length>request.limit)return {success:false,code:'STRATEGY_ALERT_LOG_UNVERIFIED'};
+  const data=[],seen=new Set();for(const row of rows){
+    const id=Number(row.fire_id),time=typeof row.fire_time==='number'?row.fire_time:typeof row.fire_time==='string'&&/^\d{4}-\d\d-\d\dT.*(?:Z|[+-]\d\d:\d\d)$/.test(row.fire_time)?Date.parse(row.fire_time):NaN;
+    if(String(row.alert_id)!==String(request.alert_id)||!['number','string'].includes(typeof row.fire_id)||typeof row.fire_id==='string'&&!/^\d+$/.test(row.fire_id)||!Number.isSafeInteger(id)||id<0||seen.has(id)||!Number.isSafeInteger(time)||!Number.isFinite(new Date(time).getTime())||typeof row.message!=='string')return {success:false,code:'STRATEGY_ALERT_LOG_UNVERIFIED'};
+    seen.add(id);
+    data.push({fire_id:String(row.fire_id),alert_id:row.alert_id,event_time:new Date(time).toISOString(),event_time_ms:time,message_hash:await strategyAlertHash(window,row.message),message_body:'omitted',record_kind:'tv_internal_alert_fire',broker_execution_verified:false});
+  }
+  if(toolkit.getAlertSession().user.value()?.id!==userId)return {success:false,code:'STRATEGY_ALERT_ACCOUNT_CHANGED'};
+  const full=rows.length===request.limit,times=data.map(row=>row.event_time_ms);
+  return {success:true,alert_id:request.alert_id,data,count:data.length,limit:request.limit,before:request.before??null,next_before:full?Number(rows.at(-1).fire_id):null,page_full:full,end_of_observed_log:!full,coverage_completeness:full?'unknown':'server_returned_short_page',observed_window:times.length?{from:new Date(Math.min(...times)).toISOString(),to:new Date(Math.max(...times)).toISOString()}:null,observed_at:new Date().toISOString(),truncated:false,source:'native_rest_list_fires',external_delivery:'out_of_scope',timestamp_contract:'native alert-log Date(value): numeric milliseconds or explicit-offset ISO strings'};
+}
+
+export const STRATEGY_ALERT_PAGE_CODE=DEEP_PAGE_CODE+'\n'+[strategyAlertToolkit,strategyAlertDto,ownedStrategyAlertTarget,prepareStrategyAlert,strategyAlertHash,strategyAlertFieldsMatch,readStrategyAlert,createStrategyAlert,observeStrategyAlertAction,compareStrategyAlertSnapshot,mutateStrategyAlert,readStrategyAlertFires].map(fn=>fn.toString()).join('\n');

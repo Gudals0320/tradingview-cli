@@ -7,6 +7,7 @@ import {validateStrategyAlert} from '../core/strategy-alerts.js';
 // A command without an entry accepts no positional arguments.
 export const POSITIONALS = new Map([
   ['alert strategy-create',[0,0]],['alert strategy-get',[0,0]],
+  ['alert strategy-fires',[0,0]],
   ['alert strategy-pause',[0,0]],['alert strategy-resume',[0,0]],['alert strategy-delete',[0,0]],
   ['workspace backtest-archive',[1,1]],
   ['workspace pine-prepare',[1,1]],
@@ -30,6 +31,7 @@ export const POSITIONALS = new Map([
 ]);
 
 export function validateArguments(command, values, positionals) {
+  if(command==='alert strategy-fires'&&(!/^[-a-zA-Z0-9_]{1,100}$/.test(values['request-id']||'')||values.limit!==undefined&&(Number(values.limit)>50||Number(values.limit)<1)||values.before!==undefined&&(!Number.isSafeInteger(Number(values.before))||Number(values.before)<0)))throw Object.assign(Error('Pass exact request ID, limit 1..50 and a native fire-ID cursor.'),{code:'INVALID_STRATEGY_ALERT_LOG'});
   if(['alert strategy-pause','alert strategy-resume','alert strategy-delete'].includes(command)&&!['request-id','operation-id'].every(key=>/^[-a-zA-Z0-9_]{1,100}$/.test(values[key]||'')))throw Object.assign(Error('Pass exact creation and stable operation IDs.'),{code:'INVALID_STRATEGY_ALERT_ACTION'});
   if(command==='alert strategy-create')validateStrategyAlert({request_id:values['request-id'],mode:values.mode,name:values.name,message:values.message,expiration:values.expiration,active:!values.paused});
   if(command==='alert strategy-get'&&!/^[-a-zA-Z0-9_]{1,100}$/.test(values['request-id']||''))throw Object.assign(Error('Pass the exact owned creation request ID.'),{code:'INVALID_STRATEGY_ALERT'});

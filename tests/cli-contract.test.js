@@ -61,6 +61,13 @@ it('real strategy alert reads flag a verified changed input/Properties baseline 
   jsonResult(await f.run(['--workspace','contract','strategy','set-properties','--values','{"commission_value":0.5}']));
   const result=jsonResult(await f.run(['--workspace','contract','alert','strategy-get','--request-id','snapshot-alert']));assert.equal(result.snapshot_stale,true);assert.equal(result.current_snapshot.verified,true);assert.equal(result.current_snapshot.changes.inputs,true);assert.equal(result.current_snapshot.changes.properties,true);assert.equal(result.snapshot_automatically_updated,false);assert.equal(JSON.stringify(page.server.get(created.alert_id)),raw);assert.equal(page.counts().posts,1);
 });
+it('real owned fire log entry handles empty/native pages and never exposes message or external delivery details',async t=>{
+  const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('fires-entry-v2');page.refreshReport();page.completeInputs();const created=jsonResult(await f.run(['--workspace','contract','alert','strategy-create','--request-id','fires-alert','--mode','both','--name','QA','--message','private message','--expiration','2099-01-01T00:00:00Z']));
+  const args=['--workspace','contract','alert','strategy-fires','--request-id','fires-alert','--limit','2'];assert.equal(jsonResult(await f.run(args)).count,0);
+  page.fires.push(...[3,2,1].map(id=>({fire_id:id,alert_id:created.alert_id,fire_time:new Date(Date.UTC(2026,9,5,0,id)).toISOString(),message:'private fire body',webhook:{error:'private delivery'}})));
+  const output=await f.run(args),first=jsonResult(output);assert.equal(first.next_before,2);assert.equal(first.count,2);assert.equal(output.stdout.includes('private fire body'),false);assert.equal(output.stdout.includes('private delivery'),false);const next=jsonResult(await f.run([...args,'--before',String(first.next_before)]));assert.equal(next.count,1);assert.equal(next.end_of_observed_log,true);assert.equal(page.counts().posts,1);assert.equal(page.counts().actions,0);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+});
 it('real owned strategy alert lifecycle verifies pause/resume/delete and never retries lost action responses',async t=>{
   const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
   const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('lifecycle-alert-entry-v2');page.refreshReport();page.completeInputs();

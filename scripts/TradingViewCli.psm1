@@ -10,6 +10,7 @@
 # tv --workspace research-a alert strategy-get --request-id strategy-week-1
 # tv --workspace research-a alert strategy-pause --request-id strategy-week-1 --operation-id stop-week-1
 # tv --workspace research-a alert strategy-resume --request-id strategy-week-1 --operation-id restart-week-1
+# tv --workspace research-a alert strategy-fires --request-id strategy-week-1 --limit 50
 $script:TvModulePath = $PSCommandPath
 function Invoke-TvApplication {
     param([string[]]$Arguments, [object[]]$InputValues = @())
