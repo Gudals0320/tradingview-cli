@@ -80,9 +80,9 @@ an unknown native operation.
 | DEEP_TRANSPORT_UNCONFIRMED | Native transport was invoked but frame admission/completion is unknown; preserve intent, never assume the manager's void return proves dispatch. |
 | DEEP_NATIVE_JOB_PENDING / DEEP_RUN_PENDING / WORKSPACE_DEEP_JOB_PENDING | Inspect/wait for exact native work, including GUI jobs; no implicit disconnect, cancellation or overlapping mutation. |
 | DEEP_RUN_UNKNOWN / DEEP_RUN_UNSETTLED | Preserve persistent intent after response/page/owner loss; do not resend or discard uncertain work. |
-| DEEP_RUN_SUPERSEDED | Later GUI/native work owns the visible state; no reset/result adoption. Waiting does not repair this. Finish GUI work or explicitly retire only the preserved private record with workspace backtest-archive and exact IDs. |
+| DEEP_RUN_SUPERSEDED | Later GUI/native work owns the visible state; no reset/result adoption. Archive requires archive_eligible:true and an exact prior terminal/no-history outcome. With archive_eligible:false, the earlier unknown/pending intent remains fenced and unchanged. |
 | DEEP_ARCHIVE_CONFIRMATION_REQUIRED / DEEP_ARCHIVE_ID_MISMATCH | Explicit exact request/run IDs and --acknowledge-no-adoption are required; wrong/missing values leave the record unchanged. |
-| DEEP_ARCHIVE_OUTCOME_UNKNOWN | Genuine pending/unknown outcome cannot be archived. Obtain exact superseded/settled evidence first; original record bytes and GUI/native work remain untouched. |
+| DEEP_ARCHIVE_OUTCOME_UNKNOWN | Genuine pending/unknown outcome cannot be archived. Replacement alone is insufficient; an exact prior terminal/no-history outcome is required. Original record bytes and GUI/native work remain untouched. |
 | DEEP_RUN_ARCHIVED | The original request evidence remains preserved without adoption; use a new request ID after current native/GUI work is idle. |
 | DEEP_REQUEST_CONFLICT | Stable request ID describes different source/full inputs/context/settings/period; use an explicit new request after old work settles. |
 | DEEP_RESULT_STALE / DEEP_REQUEST_CHANGED / DEEP_RESULT_GENERATION_CHANGED | Current source or native run/provider identity changed; no stale result adoption. |

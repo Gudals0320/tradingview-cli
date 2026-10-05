@@ -104,6 +104,19 @@ it('real normal reset permits exact completed history and refuses a later foreig
     assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
   }
 });
+it('real CLI keeps unknown and pending Deep record bytes after GUI replacement and refuses archive',async t=>{
+  for(const kind of ['unknown','pending']){
+    const page=deepPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+    const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('unknown-replacement-v2');
+    if(kind==='unknown'){const send=page.manager._sendRequest;page.manager._sendRequest=function(method,args){if(method==='history_create_session'){const result=send.call(this,method,args);this._wsConnection.send=raw=>JSON.parse(raw).m!=='request_history_data';return result;}return send.call(this,method,args);};}
+    const run=await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00Z','--to','2024-01-02T00:00:00Z','--request-id','unresolved']);
+    if(kind==='unknown')jsonError(run,/DEEP_TRANSPORT_UNCONFIRMED/);else jsonResult(run);
+    const path=join(workspaceArtifactDirectory(ws,f.options),'deep-request-'+createHash('sha256').update('unresolved').digest('hex')+'.json'),before=readFileSync(path,'hex'),record=JSON.parse(readFileSync(path,'utf8'));
+    page.manager._requestId++;page.manager._fromDate+=86400000;
+    const status=jsonResult(await f.run(['--workspace','contract','backtest','status','--run-id',record.run_id]),1);assert.equal(status.code,'DEEP_RUN_SUPERSEDED');assert.equal(status.archive_eligible,false);assert.equal(status.supersession_recorded,false);assert.equal(readFileSync(path,'hex'),before);
+    jsonError(await f.run(['workspace','backtest-archive','contract','--request-id','unresolved','--run-id',record.run_id,'--acknowledge-no-adoption']),/pending\/unknown/,'DEEP_ARCHIVE_OUTCOME_UNKNOWN');assert.equal(readFileSync(path,'hex'),before);
+  }
+});
 it('superseded runs have an explicit offline record archive, preserving evidence without touching GUI work or trapping new requests',async t=>{
   const page=deepPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
   const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('superseded-archive-v2');

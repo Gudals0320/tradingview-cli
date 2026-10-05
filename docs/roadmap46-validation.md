@@ -248,3 +248,11 @@ B/C genuine unknown Deep intents were neither upgraded nor archived. Live raw
 IDs, source, account data and ownership tokens are excluded from this public
 receipt. Remaining roadmap live cases, server-alert implementation and combined
 acceptance are still incomplete; these candidate receipts do not close #46.
+# Review correction: replacement is not settlement
+
+An observed GUI/native replacement does not establish the previous Deep outcome.
+Archive eligibility requires an immutable, exactly attributed terminal response or
+a known zero-history-dispatch outcome captured before replacement. Unknown and
+pending records without that proof retain their phase and private bytes; status
+reports replacement without persisting a superseded phase. Unit and real CLI
+fixtures cover transport uncertainty and pending work followed by GUI replacement.

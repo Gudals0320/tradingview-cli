@@ -61,7 +61,8 @@ A later GUI/native request or provider can supersede a CLI run. Status and norma
 reset return DEEP_RUN_SUPERSEDED with zero Desktop mutation and no result adoption;
 waiting cannot restore the old request. Finish/clear current GUI work in the GUI.
 After final workspace owner/generation admission and cleanup, a supersession
-observation may update only the separate private request metadata. It does not
+observation may update only the separate private request metadata when an exact
+terminal/no-history outcome was captured before replacement. It does not
 alter recovery journals or admission state. If that metadata write fails, the
 original read result/code is preserved with supersession_recorded:false; archive
 still requires an already persisted eligible outcome. The catalog documents this
@@ -73,9 +74,10 @@ tv workspace backtest-archive research-a --request-id historical-week-1 --run-id
 ```
 
 Archive is allowed only for `settled`, `rejected_known`, or an admitted recorded
-`superseded` observation. Genuine pending/unknown outcomes are refused with
-DEEP_ARCHIVE_OUTCOME_UNKNOWN and unchanged record bytes; exact superseded/settled
-evidence is required first. Preserved B/C unknown QA records are not eligible for
+`superseded` observation backed by that immutable prior outcome. Replacement alone
+cannot settle an unknown/pending run: archive_eligible:false is returned and its
+original phase and private bytes remain unchanged. Archive is refused with
+DEEP_ARCHIVE_OUTCOME_UNKNOWN. Preserved B/C unknown QA records are not eligible for
 automatic archive. Native work is not cancelled and the GUI report is untouched.
 Archive preserves the original source proof, outcome/incomplete evidence and IDs
 with an archived_unadopted phase. It does not connect to Desktop, cancel/clear a

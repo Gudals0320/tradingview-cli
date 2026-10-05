@@ -11,10 +11,26 @@ import { compilationState,invalidateEditedSource,prepareInputChange } from '../s
 const call=(p,name,...args)=>p.evaluate(`(async()=>{${DEEP_PAGE_CODE};return ${name}(window,${name==='inspectDeepSettlement'?'':'document,'}${args.map(a=>JSON.stringify(a)).join(',')});})()`);
 async function start(p){const proof=await call(p,'verifyDeepSource','owned-study');assert.equal(proof.verified,true);const request={run_id:'exact-run',request_id:'exact-request',fingerprint:'fp',strategy_id:'owned-study',source_proof:proof,from_ms:1704067200000,to_ms:1704153600000,period:{from:'2024-01-01T00:00:00Z',to:'2024-01-02T00:00:00Z',timezone:'UTC'},properties_hash:'props-hash'};return call(p,'startDeepRun',request);}
 const memoryStore=()=>{let row=null;return {read:()=>row,write:value=>{row=structuredClone(value);},list:()=>row?[{file:'private',record:row}]:[],update:(_,value)=>{row=structuredClone(value);}};};
-it('private supersession write failure preserves the admitted read result and keeps the unknown record ineligible',()=>{
-  const record={request_id:'r',run_id:'id',phase:'unknown'},result={success:false,code:'DEEP_RUN_SUPERSEDED',request_id:'r',run_id:'id',result_adopted:false,mutation_dispatched:false,supersession_proof:{kind:'observed_native_replacement'},provenance:{workspace_id:'w'}};
+it('private supersession write failure preserves the admitted read result and keeps the record ineligible',()=>{
+  const record={request_id:'r',run_id:'id',phase:'accepted'},result={success:false,code:'DEEP_RUN_SUPERSEDED',request_id:'r',run_id:'id',result_adopted:false,mutation_dispatched:false,previous_outcome:{kind:'attributed_terminal',phase:'ready',run_id:'id',request_id:'r',history_send_completed:true,cycle_proof:{kind:'ready',session:'s',request_number:0,cycle:1}},supersession_proof:{kind:'observed_native_replacement'},provenance:{workspace_id:'w'}};
   const observed=noteDeepSupersession('name',result,{load:()=>({id:'w'}),resolve:()=> 'file',store:{read:()=>record,write:()=>{throw Object.assign(Error('blocked'),{code:'EACCES'});}}});
-  assert.equal(observed.code,result.code);assert.equal(observed.success,false);assert.equal(observed.supersession_recorded,false);assert.equal(observed.metadata_warning.code,'EACCES');assert.deepEqual(record,{request_id:'r',run_id:'id',phase:'unknown'});
+  assert.equal(observed.code,result.code);assert.equal(observed.success,false);assert.equal(observed.supersession_recorded,false);assert.equal(observed.metadata_warning.code,'EACCES');assert.deepEqual(record,{request_id:'r',run_id:'id',phase:'accepted'});
+});
+it('GUI replacement cannot turn an unknown transport or pending run into an archive-eligible outcome',async()=>{
+  for(const kind of ['unknown','pending']){
+    const p=deepPage();
+    if(kind==='unknown'){const send=p.manager._sendRequest;p.manager._sendRequest=function(method,args){if(method==='history_create_session'){const result=send.call(this,method,args);this._wsConnection.send=raw=>JSON.parse(raw).m!=='request_history_data';return result;}return send.call(this,method,args);};await assert.rejects(()=>start(p),/DEEP_TRANSPORT_UNCONFIRMED/);}else await start(p);
+    p.manager._requestId++;p.manager._fromDate+=86400000;
+    const result=await call(p,'inspectDeepRun','exact-run');assert.equal(result.code,'DEEP_RUN_SUPERSEDED');assert.equal(result.archive_eligible,false);assert.equal(result.previous_outcome,null);
+    const record={phase:kind,run_id:result.run_id,request_id:result.request_id},before=JSON.stringify(record);let writes=0;
+    const noted=noteDeepSupersession('name',{...result,provenance:{workspace_id:'w'}},{load:()=>({id:'w'}),resolve:()=> 'file',store:{read:()=>record,write:()=>{writes++;}}});
+    assert.equal(noted.supersession_recorded,false);assert.equal(noted.archive_eligible,false);assert.equal(writes,0);assert.equal(JSON.stringify(record),before);
+  }
+});
+it('an exact terminal receipt remains immutable when later GUI activity replaces its report',async()=>{
+  const p=deepPage();await start(p);await p.complete();const receipt=p.window.__tvCliDeepRun.terminal_outcome,bytes=JSON.stringify(receipt);
+  p.manager.requestData(1704240000000,1704326400000);await p.complete(999,1);
+  const result=await call(p,'inspectDeepRun','exact-run');assert.equal(result.archive_eligible,true);assert.equal(JSON.stringify(result.previous_outcome),bytes);assert.equal(p.window.__tvCliDeepRun.terminal_outcome,receipt);assert.equal(Object.isFrozen(receipt),true);
 });
 it('only a recognized zero-history CLI closure can unwind to the exact cached native class sender',()=>{
   class NativeManager{_sendRequest(){return 'native';}}const manager=new NativeManager();

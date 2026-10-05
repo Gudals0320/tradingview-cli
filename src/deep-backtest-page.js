@@ -145,7 +145,7 @@ export function deepCurrentIdentity(window,document,strategyId){
 
 export function sendVerifiedDeepFrame(window,document,manager,run,method,args,originalSend){
   if(!['history_create_session','switch_timezone','request_history_data'].includes(method))return originalSend.call(manager,method,args);
-  const reject=message=>{if(!run.history_send_attempted&&!run.pre_wire_failure){run.pre_wire_failure={code:'DEEP_REQUEST_CHANGED',error:message};run.failure_connection=manager._wsConnection;run.failure_socket=manager._wsConnection?._socket;run.failure_request_counter=manager._requestId;}throw Error('DEEP_REQUEST_CHANGED: '+message);};
+  const reject=message=>{if(!run.history_send_attempted&&!run.pre_wire_failure){run.pre_wire_failure={code:'DEEP_REQUEST_CHANGED',error:message};run.failure_connection=manager._wsConnection;run.failure_socket=manager._wsConnection?._socket;run.failure_request_counter=manager._requestId;run.no_history_outcome=Object.freeze({kind:'no_history_dispatch',phase:'rejected_known',run_id:run.run_id,request_id:run.request_id,no_history_dispatch_verified:true,history_send_attempted:false});}throw Error('DEEP_REQUEST_CHANGED: '+message);};
   if(run.pre_wire_failure)return reject(run.pre_wire_failure.error);
   const connection=manager._wsConnection,socket=connection?._socket;
   if(window.__tvCliDeepRun!==run||!(connection instanceof run.Connection)||!socket||connection.isConnected?.()!==true||typeof connection.send!=='function')return reject('Exact current connected native transport required; no queued history request.');
@@ -181,9 +181,11 @@ export function sendVerifiedDeepFrame(window,document,manager,run,method,args,or
 }
 
 export function deepSuperseded(run,reason){
-  return {success:false,code:'DEEP_RUN_SUPERSEDED',error:reason,run_id:run.run_id,request_id:run.request_id,phase:'superseded',result_adopted:false,mutation_dispatched:false,intent_preserved:true,
+  const previous_outcome=run.terminal_outcome||run.no_history_outcome||null,archive_eligible=!!previous_outcome;
+  return {success:false,code:'DEEP_RUN_SUPERSEDED',error:reason,run_id:run.run_id,request_id:run.request_id,phase:archive_eligible?'superseded':run.history_send_attempted&&!run.history_send_completed?'unknown':run.history_send_completed?'pending':'accepted',observed_native_replacement:true,result_adopted:false,mutation_dispatched:false,intent_preserved:true,
+    archive_eligible,previous_outcome,
     supersession_proof:{kind:'observed_native_replacement',reason,recorded_request_before:run.request_before,current_request_counter:run.facade._deepBacktestingManager._requestId,recorded_bounds:{from_ms:run.from_ms,to_ms:run.to_ms},current_bounds:{from_ms:run.facade._deepBacktestingManager._fromDate,to_ms:run.facade._deepBacktestingManager._toDate}},
-    next_action:'Later GUI/native activity owns the visible state; the CLI will not reset it. Finish or clear that work in the GUI, then explicitly retire only the private record with workspace backtest-archive and exact request/run IDs plus --acknowledge-no-adoption. The record is preserved and the Desktop is unchanged.'};
+    next_action:archive_eligible?'Later GUI/native activity owns the visible state. The earlier exact outcome is known; workspace backtest-archive is available with exact IDs and no-adoption consent.':'Later GUI/native activity owns the visible state, but the earlier outcome remains unknown. Preserve its intent; replacement does not authorize archive or replay.'};
 }
 
 export function inspectDeepRun(window,document,runId){
@@ -288,7 +290,10 @@ export async function startDeepRun(window,document,request){
   manager._sendRequest=tracedSend;
   run.release_finished_sender=()=>{
     const status=manager.activeStrategyStatus?.value?.(),kind=status?.type===2?'ready':status?.type===3?'server_error':null;
-    if(run.history_send_completed&&kind&&run.cycle_proof?.cycle===run.report_cycle&&run.cycle_proof.kind===kind&&manager._sendRequest===tracedSend){manager._sendRequest=originalSend;run.sender_guard_released=true;}
+    if(run.history_send_completed&&kind&&manager._requestId===run.request_before+1&&manager._fromDate===run.from_ms&&manager._toDate===run.to_ms&&run.cycle_proof?.cycle===run.report_cycle&&run.cycle_proof.kind===kind&&run.cycle_proof.session===run.sent?.session&&String(run.cycle_proof.request_number)===String(run.request_before)){
+      if(!run.terminal_outcome)run.terminal_outcome=Object.freeze({kind:'attributed_terminal',phase:kind,run_id:run.run_id,request_id:run.request_id,history_send_completed:true,from_ms:run.from_ms,to_ms:run.to_ms,cycle_proof:Object.freeze({...run.cycle_proof})});
+      if(manager._sendRequest===tracedSend){manager._sendRequest=originalSend;run.sender_guard_released=true;}
+    }
   };
   const statusSignal=manager.activeStrategyStatus;
   statusSignal?.subscribe?.(run.release_finished_sender);

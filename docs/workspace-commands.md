@@ -35,8 +35,9 @@ jobs prevent unrelated mutations/release/reconnect; unknown persistent intents
 cannot be erased by normal reset. [Deep contract](deep-backtesting.md).
 `workspace backtest-archive NAME` is an explicit offline private-record retirement
 with exact request/run IDs and no-adoption acknowledgement. It preserves evidence,
-does not cancel or alter Desktop work, and prevents a superseded/unknown private
-fence from permanently blocking a new explicit request. Actual native pending
+does not cancel or alter Desktop work. A superseded record requires an exact
+terminal/no-history outcome captured before replacement; genuine unknown/pending
+records retain their fence and cannot be archived. Actual native pending
 jobs and workspace operation ownership still protect mutations/release.
 
 `data equity --plot-id ID` remains an owned pure observation. It verifies an
