@@ -106,13 +106,18 @@ tv workspace show research-a
 검증해 수집할 수 있습니다. source 자동 삽입은 하지 않으며, 순손익·수량·통화·수수료
 대조가 불충분하면 미검증으로 거부합니다. [equity 계약](docs/strategy-equity.md).
 status/wait/results는 순수 관측이며 일반 `data strategy`를 딥 결과로 대신 반환하지
-않습니다. [기간·timezone·응답 귀속·불명 작업 계약](docs/deep-backtesting.md)은 현재
-실환경 인수 검증 중입니다. 설치된 정식 2.2.0의 지원 목록과 구분하세요.
+않습니다. [기간·timezone·응답 귀속·불명 작업 계약](docs/deep-backtesting.md)과
+[실제 Desktop 인수 근거·지원 한계](docs/roadmap46-validation.md)를 확인하세요.
+설치된 정식 2.2.0의 지원 목록과 구분하세요.
 
 개발 브랜치의 `alert strategy-create`는 검증된 전략의 체결·alert()·both 서버
 스냅샷을 만들고 정확한 ID로 설정을 재조회합니다. 고정 request ID 재호출은 기존
 결과를 확인하며 중복 생성하지 않습니다. 메시지는 그대로 전달하고 출력에는 hash만
 남깁니다. [전략 알림 계약](docs/strategy-alerts.md)의 fixture와 live 인수는 구분됩니다.
+설정 수정은 기존 스냅샷을 유지하고 알림을 활성화합니다. 명시적 전략 교체는
+`gap` 또는 `overlap` 정책을 사용하며 원자성을 보장하지 않습니다. 일반 보고서와
+원장은 `mode:normal`을 반환합니다. 미청산 원장의 `exit_time`은 null이고 native
+평가 시각은 `mark_time`으로 구분합니다.
 
 ```powershell
 tv --workspace research-a alert strategy-create --request-id strategy-week-1 --mode both --name 'Research QA' --message '{{strategy.order.alert_message}}' --expiration 2027-01-01T00:00:00Z

@@ -28,7 +28,8 @@ try{
     assert.ok(/^plot_\d+$/.test(values['plot-id']||''),'Pass the exact owned direct strategy.equity plot ID.');
     const csv=file.replace(/\.private\.json$/,'.private.csv');assert.equal(existsSync(csv),false);
     const equity=call([...args,'data','equity','--plot-id',values['plot-id'],'--limit','10','--export',csv]);assert.ok(existsSync(csv));
-    summary={preview_rows:equity.data?.length,csv_rows:readFileSync(csv,'utf8').trim().split(/\r?\n/).length-1,semantic_verification:equity.semantic_verification??equity.verification,coverage_completeness:'loaded snapshot only'};
+    assert.equal(equity.semantic_proof?.verified,true,'Curve arithmetic must be independently verified.');
+    summary={preview_rows:equity.data?.length,csv_rows:readFileSync(csv,'utf8').trim().split(/\r?\n/).length-1,semantic_verification:{verified:equity.semantic_proof.verified,closed_checkpoints:equity.semantic_proof.closed_checkpoints,max_observed_error:equity.semantic_proof.max_observed_error,arithmetic_budget:equity.semantic_proof.arithmetic_budget},coverage_completeness:'loaded snapshot only'};
   }else{
     assert.ok(/^[-a-zA-Z0-9_]{1,100}$/.test(values['request-id']||''),'Pass the exact owned QA creation request ID.');
     const alert=call([...args,'alert','strategy-get','--request-id',values['request-id']]),fires=call([...args,'alert','strategy-fires','--request-id',values['request-id'],'--limit','50']);

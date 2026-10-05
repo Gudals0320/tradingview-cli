@@ -237,7 +237,7 @@ export async function getTradeLedger({ offset = 0, limit = 100, strategy_id, rep
       open, mark_time: open ? time(trade.x?.tm) : null, mark_bar: open ? trade.x?.b ?? null : null,
       timestamp_errors: ['e','x'].filter(key => trade[key]?.tm != null && time(trade[key].tm) == null),
       entry_bar: trade.e?.b ?? null, exit_bar: open ? null : trade.x?.b ?? null, raw: trade };});
-    return { success: true, strategy_id: summary.strategy_id, currency: summary.currency, total_trades: ledger.length,
+    return { success: true,mode:summary.mode, strategy_id: summary.strategy_id, currency: summary.currency, total_trades: ledger.length,
       compilation_token:summary.compilation_token,source_hash:summary.source_hash,strategy_inputs:summary.strategy_inputs,
       context:summary.context,effective_properties:summary.effective_properties,backtest_window:summary.backtest_window,loaded_window:summary.loaded_window,trade_window:summary.trade_window,
       record_kind:'trade_ledger',order:'native_ordinal_ascending',

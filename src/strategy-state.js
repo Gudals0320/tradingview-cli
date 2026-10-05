@@ -348,7 +348,7 @@ export function readStrategyReport(window, options = {}) {
   const iso = strategyTime;
   const range = report.settings?.dateRange?.backtest || {};
   const trades = Array.isArray(report.trades) ? report.trades : [];
-  return { success: true, strategy: found.name, strategy_id: found.id, currency: report.currency || null,
+  return { success: true, mode:'normal',strategy: found.name, strategy_id: found.id, currency: report.currency || null,
     effective_properties:effectiveStrategyProperties(window,found.id),
     source: 'internal_api', compilation_token: compile.phase === 'ready' && found.id === compile.strategy_id ? compile.token : null,
     source_hash: compile.phase === 'ready' && found.id === compile.strategy_id ? window.__tvCliCompilation?.source_hash || null : null,

@@ -274,7 +274,7 @@ The new document initially used the same public fixture source, then a separatel
 saved source revision and Cycle input/timeframe were verified.
 
 Environment: TradingView Desktop 3.4.1, Electron 41.7.1, Chrome 146.0.7680.216,
-V8 14.6.202.34, Node 24.19.0, Windows 10 build 26200, Korean UI/Asia-Seoul.
+V8 14.6.202.34, Node 24.19.0, Windows NT 10.0 build 26200, Korean UI/Asia-Seoul.
 Native observations and failed trials remain in ignored private results. Code
 commits and dirty status are retained separately; fixture outcomes are not live
 outcomes. No webhook, receiver, broker order, release or global install change
@@ -338,3 +338,63 @@ filename; report pages pin revision, refuse changes and disclose truncation.
 The harness preserves SHA/dirty/time/Node/OS and all raw calls privately. It never
 creates, updates or deletes server resources. Maximum account coverage, FX
 arithmetic and lower-timeframe bar coverage remain explicitly unknown.
+
+## Final native evidence and resource state
+
+At fc6d861, the actual native open row was re-read successfully with open=true,
+exit_time=null and a separate changing mark_time. Its raw empty exit comment and
+valuation fields remained unchanged. Normal reports and normalized ledgers now
+explicitly identify mode=normal, including when the separate UI displays Deep.
+
+A2 UTC Deep Jan 1-7, 2018 completed with a verified decoded native window and
+309 immutable ledger rows: 308 closed plus one native isOpen row. The UI showed
+that exact Deep date range, total PnL 12.54 USD, drawdown 27.44 USD / 0.14%,
+152/308 winners / 49.35%, gross profit 217.00 USD, gross loss 204.58 USD and
+profit factor 1.061. Native closed net was 12.42 USD plus open PnL 0.12 USD,
+matching UI total. The ordinary source still returned its different 2026 chart
+report (closed net 114.96 USD, 1,460 closed trades), never the Deep metrics.
+The exact native Deep request/counter/cycle/socket proof was ready, period
+validation checked all 309 rows, and explicit normal reset succeeded. Loaded
+coverage remained unknown, not inferred from the absence of outside trades.
+
+Heikin-Ashi with fill_orders_on_standard_ohlc=true and EUR currency was applied
+and report-ready after explicit compile. The first immediate property observation
+after chart-type change was REPORT_PENDING with no property mutation; it was
+preserved. Same-currency defaults/Candles were then restored. A separate EUR-only
+curve attempt returned EQUITY_SEMANTICS_UNVERIFIED with no points because FX fill
+PnL was not independently verified; NONE/USD was restored. An earlier combined
+HA/EUR attempt stopped at incomplete bar mapping, before the FX proof check.
+
+The A2 supported normal curve then returned 1,656 loaded raw points, all 118
+applicable flat-close checkpoints and a full 1,656-row CSV beside a 10-row JSON
+preview. Maximum observed error was 3.637978807091713e-12 account units; the
+independent arithmetic error budget was 2.4462999145317e-8, below the original
+fixed tolerance. No interpolation/downsampling, changed timestamp or broadened
+tolerance was used. These interim smoke receipts declare dirty=true; clean final
+smoke receipts are separate. The earlier immutable 343/344-point checks remain.
+
+All six dedicated QA server alerts were explicitly deleted by exact owned
+creation/operation IDs. Each fresh absence read verified deletion. A final full
+list contained 26 alerts and its exact ID set matched the original 26-alert
+baseline, with no missing or extra ID. All 26 messages, conditions, symbols,
+resolutions and creation/expiration fields also matched the original baseline.
+Dedicated layouts and QA documents remain; the human-deleted old
+document is not recreated under its old ID. A2 saved source version 2 remains
+normal/Candles, Cycle 14, 2 minutes, with the recorded original Properties restored.
+B/C genuine unknown Deep records and all failed/partial private evidence remain.
+
+One independent-review full-suite run on bf04 had an unidentified assertion
+failure. It did not reproduce in ten exact-bf04 archive runs, ten checkout runs,
+or 100 CDP transport stress runs. This is recorded as non-reproduction, not an
+identified root-cause repair. New source changes have their own complete lint/test
+results; repeatedly passing fixtures do not replace the native acceptance above.
+
+| Issue | Implemented/verified acceptance | Conditional or unsupported boundary |
+| --- | --- | --- |
+| #47 | Exact saved document preparation, persistence, attach, compile and report on old A and new A2 | Foreign modified drafts and uncertain old outcomes remain protected |
+| #48 | All 16 effective inputs, verified recalculation, USD/EUR and HA-specific input | Actual lower-timeframe coverage and independent FX arithmetic are unknown |
+| #49 | Three strategy event modes, pinned source/settings, exact readback, native fires and non-atomic paused policy | Native initially-inactive create rejected on this account; explicit two-step policy reports active window |
+| #50 | Owned get/pause/resume/update, gap/overlap replacement, stale snapshots, finite native fires and deletion | Unknown mutations reconcile by exact ID; internal stop cause is not invented from active=false |
+| #51 | Distinct normal/Deep provider, UTC whole-day attributed results, native UI/ledger and boundary/zero cases | Subday/non-UTC unsupported; maximum account size not measured; large fixture costs labeled separately |
+| #52 | Exact direct equity plot, dense loaded CSV, closed/final arithmetic and open PnL | No FX/partial/pyramided/ambiguous same-bar allocation or Deep fallback |
+| #53 | Native UI values/units, closed/open/zero/breakeven, context changes and structured bounded smoke | UI repaint and loaded coverage are explicit; no external delivery or real broker fill claim |
