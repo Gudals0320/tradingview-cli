@@ -1,7 +1,7 @@
 import {equityPage} from './equity-page.mjs';
 
 export function strategyAlertPage(){
-  const p=equityPage(),server=new Map([[7,{alert_id:7,type:'price',name:'user alert',message:'private user message'}]]),user={id:123},fires=[];
+  const p=equityPage(),server=new Map([[7,{alert_id:7,type:'price',name:'user alert',message:'private user message'}]]),user={id:123,username:'fixture-user'},fires=[];
   p.window.URL=URL;
   let serial=100,posts=0,reads=0,securityChecks=0,actions=0,lost=false,lostAction=false,beforeSend=null,afterSend=null,rejection=null;
   const scalarInputs=()=>Object.fromEntries(p.chart.getStudyById('owned-study').getInputValues().map(i=>[i.id,i.value]));
@@ -25,7 +25,8 @@ export function strategyAlertPage(){
   const rest={_fetch:async(...args)=>{let last;for(let i=0;i<3;i++){try{const response=await p.window.fetch(...args);return {response,metrics:{statusCode:response.status,delay:0}};}catch(error){last=error;}}throw last;},async request(path,payload){const {response}=await this._fetch('https://pricealerts.tradingview.com/'+path,{method:payload?'POST':'GET',credentials:'include',...(payload?{body:JSON.stringify({payload})}:{})});return (await response.json()).r;},createAlert(payload){return this.request('create_alert',payload);},getAlerts(payload){return this.request('get_alerts',payload);},listAlerts(){return this.request('list_alerts');}};
   const collection={readyState:()=>({value:()=>({status:'ready'})}),ensureLoadedAlerts:async()=>{},async createAlert(dto,options){if(options.checkSecurityIssues!==true)throw Error('security required');securityChecks++;await beforeSend?.();return convertApiAlert(await rest.createAlert({...convertEditableAlertState(dto),active:true,ignore_warnings:true,symbol_style:undefined}));}};
   rest._options={baseRestUrl:'https://pricealerts.tradingview.com',originUrl:'https://tradingview.com'};collection._restRequestsHandler={_restApi:rest};
-  rest.modifyRestartAlert=payload=>rest.request('modify_restart_alert',payload);
+  rest._options.buildTime='fixture-build';
+  rest.modifyRestartAlert=async payload=>{const target=new URL('https://pricealerts.tradingview.com/modify_restart_alert');target.searchParams.set('log_username',user.username);target.searchParams.set('build_time',rest._options.buildTime);const {response}=await rest._fetch(target.toString(),{method:'POST',credentials:'include',body:JSON.stringify({payload})});return (await response.json()).r;};
   collection._restRequestsHandler._buildModifyRestartParams=(dto,id)=>({...convertEditableAlertState(dto),active:true,ignore_warnings:true,alert_id:id,client_id:'fixture-client-'+id,symbol_style:undefined});
   collection.requestAlert=async id=>server.has(id)?convertApiAlert(server.get(id)):undefined;
   collection.modifyRestartAlert=async(id,dto,options)=>{if(options.checkSecurityIssues!==true)throw Error('security required');securityChecks++;await beforeSend?.();return rest.modifyRestartAlert(collection._restRequestsHandler._buildModifyRestartParams(dto,id));};

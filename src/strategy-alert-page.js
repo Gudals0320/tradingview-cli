@@ -209,6 +209,9 @@ export async function updateStrategyAlert(window,request){
   const userId=toolkit.getAlertSession().user.value()?.id;
   if(userId===undefined||await strategyAlertHash(window,String(userId))!==request.account_hash)return {success:false,code:'STRATEGY_ALERT_ACCOUNT_CHANGED',mutation_dispatched:false};
   const target=new window.URL(rest._options.baseRestUrl+'/modify_restart_alert',rest._options.originUrl),original=rest._fetch,builder=handler._buildModifyRestartParams;
+  target.searchParams.set('log_username',toolkit.getAlertSession().user.value()?.username);
+  const maintenance=rest._trackers?.maintenance?.lastMaintenanceUnsetReason?.();if(maintenance)target.searchParams.set('maintenance_unset_reason',maintenance);
+  target.searchParams.set('build_time',rest._options.buildTime);
   let expected=null,attempted=false,knownRejected=false,diagnostic=null;
   handler._buildModifyRestartParams=function(dto,id){const built=builder.call(this,dto,id),base=JSON.parse(JSON.stringify({...prepared.wire,active:true,ignore_warnings:true,alert_id:request.alert_id,symbol_style:toolkit.deriveSymbolStyle(dto.conditions)})),withoutClient={...built};delete withoutClient.client_id;
     const checks={alert_id:id===request.alert_id,wire:exact(JSON.parse(JSON.stringify(withoutClient)),base),client_id:['string','number'].includes(typeof built.client_id)&&!!String(built.client_id)};
@@ -216,12 +219,13 @@ export async function updateStrategyAlert(window,request){
   rest._fetch=async(url,options)=>{
     let body;try{body=JSON.parse(options.body);}catch{throw Error('STRATEGY_ALERT_UPDATE_CHANGED');}
     const actual=new window.URL(url);
-    if(!expected||!exact(body,expected)||attempted||actual.origin!==target.origin||actual.pathname!==target.pathname||actual.search||options.method!=='POST'||options.credentials!=='include'||options.headers!==undefined||toolkit.getAlertSession().user.value()?.id!==userId)throw Error('STRATEGY_ALERT_UPDATE_CHANGED');
+    const checks={builder:!!expected,body:!!expected&&exact(body,expected),single_attempt:!attempted,origin:actual.origin===target.origin,path:actual.pathname===target.pathname,query:actual.search===target.search,method:options.method==='POST',credentials:options.credentials==='include',headers:options.headers===undefined,account:toolkit.getAlertSession().user.value()?.id===userId};
+    if(Object.values(checks).some(value=>!value)){diagnostic={stage:'native_transport',checks,query_keys:[...actual.searchParams.keys()]};throw Error('STRATEGY_ALERT_UPDATE_CHANGED');}
     attempted=true;const start=Date.now(),response=await toolkit.native_fetch(url,options,{logBodyOnError:false});try{const value=await response.clone().json();knownRejected=value.s==='error'||!!value.err;}catch{/* Unknown response remains unknown. */}
     return {response,metrics:{delay:Date.now()-start,statusCode:response.status}};
   };
   try{await collection.modifyRestartAlert(request.alert_id,prepared.dto,{checkSecurityIssues:true});}
-  catch(error){return {success:false,code:!attempted?'STRATEGY_ALERT_NOT_DISPATCHED':knownRejected?'STRATEGY_ALERT_SERVER_REJECTED':'STRATEGY_ALERT_UPDATE_UNKNOWN',native_error_code:typeof error.code==='string'||typeof error.code==='number'?error.code:null,_private_diagnostic:diagnostic||{stage:'native_call',code:error.code??null,error_class:error.name},mutation_dispatched:attempted,known_no_mutation:!attempted||knownRejected,replay_safe:false};}
+  catch(error){return {success:false,code:!attempted?'STRATEGY_ALERT_NOT_DISPATCHED':knownRejected?'STRATEGY_ALERT_SERVER_REJECTED':'STRATEGY_ALERT_UPDATE_UNKNOWN',native_error_code:typeof error.code==='string'||typeof error.code==='number'?error.code:null,_private_diagnostic:{...(diagnostic||{stage:'native_call',code:error.code??null,error_class:error.name}),message:typeof error.message==='string'?error.message:null},mutation_dispatched:attempted,known_no_mutation:!attempted||knownRejected,replay_safe:false};}
   finally{rest._fetch=original;handler._buildModifyRestartParams=builder;}
   if(!attempted)return {success:false,code:'STRATEGY_ALERT_UPDATE_UNKNOWN',mutation_dispatched:false};
   const after=await readStrategyAlert(window,{...request,wire:request.update_wire,active:true});return {...after,success:after.success&&after.active===true,code:after.success&&after.active===true?undefined:after.code||'STRATEGY_ALERT_UPDATE_UNVERIFIED',mutation_dispatched:true,restarted:true,snapshot_automatically_updated:false};
