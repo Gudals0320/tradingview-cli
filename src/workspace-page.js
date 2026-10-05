@@ -168,7 +168,8 @@ export function guardWorkspacePage(window, document, owner, { observe = false } 
 
 export function startWorkspacePage(window, document, owner, operation, permit) {
   const snapshot = guardWorkspacePage(window, document, owner);
-  if(snapshot.deep_job_pending&&permit.deep_request_id!==window.__tvCliDeepRun?.request_id)throw new Error('WORKSPACE_DEEP_JOB_PENDING: Observe the exact native Deep run before another mutation; timeout is not cancellation.');
+  const knownZero=permit.deep_normal&&window.__tvCliDeepRun?.pre_wire_failure&&!window.__tvCliDeepRun?.history_send_attempted;
+  if(snapshot.deep_job_pending&&!knownZero&&permit.deep_request_id!==window.__tvCliDeepRun?.request_id)throw new Error('WORKSPACE_DEEP_JOB_PENDING: Observe the exact native Deep run before another mutation; timeout is not cancellation.');
   if (snapshot.pending_action) throw new Error('WORKSPACE_NATIVE_BUSY: Native action is pending.');
   const bound = window.__tvCliWorkspace;
   if (bound.operation) throw new Error('WORKSPACE_PAGE_BUSY: Previous page operation must be reconciled.');

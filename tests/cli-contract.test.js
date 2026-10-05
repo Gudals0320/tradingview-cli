@@ -55,6 +55,15 @@ it('real Deep entry rejects independently mismatched symbol, interval and each n
     const denied=jsonResult(await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00Z','--to','2024-01-02T00:00:00Z','--request-id','matrix-'+name]),1);assert.equal(denied.code,code,name);assert.equal(denied.mutation_dispatched,false,name);assert.equal(page.dispatches(),0,name);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null,name);
   }
 });
+it('real normal reset settles a known pre-wire refusal, clears its native loading state and preserves the private record',async t=>{
+  const page=deepPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('deep-normal-zero-v2');
+  const original=page.manager._sendRequest;page.manager._sendRequest=function(method,args){const result=original.call(this,method,args);if(method==='history_create_session')this._sessionid='foreign';return result;};
+  const args=['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00Z','--to','2024-01-02T00:00:00Z','--request-id','zero-normal'];
+  jsonError(await f.run(args),/DEEP_REQUEST_CHANGED/);assert.equal(page.dispatches(),0);assert.equal(page.manager.activeStrategyStatus.value().type,1);
+  const status=jsonResult(await f.run(['--workspace','contract','backtest','status']),1);assert.equal(status.no_history_dispatch_verified,true);
+  const normal=jsonResult(await f.run(['--workspace','contract','backtest','normal']));assert.equal(normal.mode,'normal');assert.equal(page.window.__tvCliDeepRun,undefined);assert.equal(page.manager.activeStrategyStatus.value(),null);assert.equal(page.dispatches(),0);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+});
 
 it('real typed Properties CLI rejects invalid patches and untyped bypass before mutation, then verifies one matching cycle',async t=>{
   const page=propertiesPage();

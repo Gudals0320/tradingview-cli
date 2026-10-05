@@ -21,7 +21,7 @@ export function deepPage(){
     _onMessage:async raw=>{const message=JSON.parse(raw);if(message.m==='request_data'){const decoded=await unpack(message.p[2].ns.d);manager._setData(decoded.data.report);status.set({type:2});}else if(message.m.includes('error')){status.set({type:3,errorDescription:{error:'native rejection'}});manager._setData(null);}},
     requestData(from,to){this._fromDate=from;this._toDate=to;status.set({type:1});if(!this._wsConnection){this._wsConnection=new Connection();this._bindListeners();}else if(!this._wsConnection._socket){this._wsConnection._socket={};this._wsConnection.listeners.clear();this._bindListeners();}this._wsConnection.connected=true;const input=this._activeStrategyInputs.value();this._sendRequest('history_create_session',[this._sessionid]);this._sendRequest('request_history_data',[this._sessionid,this._requestId++,this._symbolString.value(),this._resolution.value().value(),0,{from_to:{from:Math.floor(from/1000),to:Math.floor(to/1000)}},input.studyName,input.inputs,input.dependencies]);dispatches++;},
   };
-  const facade={_deepBacktestingManager:manager,_activeStrategy:{value:()=>({id:'owned-study'})},_isDeepBacktesting:false,setReportDataSource:value=>{facade._isDeepBacktesting=value;},requestDeepBacktestingData:(from,to)=>manager.requestData(from,to)};
+  const facade={_deepBacktestingManager:manager,_activeStrategy:{value:()=>({id:'owned-study'})},_isDeepBacktesting:false,setReportDataSource:value=>{facade._isDeepBacktesting=value;},resetDeepBacktestingReportData:()=>{data.set(null);status.set(null);if(manager._wsConnection){manager._wsConnection.connected=false;manager._wsConnection._socket=null;}},requestDeepBacktestingData:(from,to)=>manager.requestData(from,to)};
   const history={handleSetIsDeepHistoryMode:value=>facade.setReportDataSource(value),setDeepHistoryDateRange(){}};
   const root={__reactFiber$deep:{memoizedProps:{value:facade},return:{memoizedProps:{value:history}}}};
   // The ordinary editor lookup still uses the original fixture DOM; report
@@ -42,5 +42,6 @@ export function deepPage(){
   const error=async()=>{manager._wsConnection.emit('message',JSON.stringify({m:'request_error',p:[manager._sessionid,0,'not_allowed']}));await new Promise(resolve=>setImmediate(resolve));manager._wsConnection.connected=false;};
   return {...page,root,facade,history,manager,dispatches:()=>dispatches,complete,error};
 }
+
 
 

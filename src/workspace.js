@@ -283,6 +283,7 @@ async function permitFor(command, values, positionals) {
   }
   if(command==='strategy set-properties')return {properties:JSON.parse(values.values)};
   if(command==='backtest run')return {deep_request_id:values['request-id']};
+  if(command==='backtest normal')return {deep_normal:true};
   if(command==='indicator add')return {add_study:true};
   if(command==='indicator remove')return {remove_study:positionals[0]};
   if(command==='pane focus')return {pane_index:Number(positionals[0])};
