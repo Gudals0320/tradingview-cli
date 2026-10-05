@@ -18,8 +18,16 @@ tv --workspace research-a backtest normal
 
 Periods require real ISO-8601 timestamps with explicit UTC offset and whole-second
 precision. Empty floored periods and impossible dates refuse before dispatch.
-The timezone option pins the native calculation session; it is not merely a
-display label. Requested absolute bounds, actual transmitted timezone/bounds,
+Native calculation supports `UTC`/`Etc/UTC` only, both pinning `Etc/UTC`.
+An explicit different native calculation timezone fails DEEP_TIMEZONE_UNSUPPORTED
+before Desktop access or dispatch. A strongly attributed Seoul trial shifted the
+computed dates by one day and is retained as failed evidence. No date correction
+or chart-result fallback is applied. Explicit ISO input offsets still normalize
+to UTC instants: DST offsets in from/to may therefore describe a 23/25-hour
+interval, independently of native calculation timezone. Naive datetimes, invalid
+dates, empty/subsecond intervals and unsupported calculation zones refuse at
+input validation. The original chart/display timezone stays unchanged.
+Requested/normalized absolute bounds, actual transmitted timezone/bounds,
 native report window and trade window are separate. Results containing trades
 outside the requested bounds are DEEP_PERIOD_MISMATCH and never adopted. A native
 report date range is the available coverage evidence; full bar coverage and

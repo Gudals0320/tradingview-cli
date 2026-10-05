@@ -20,7 +20,8 @@ it('only a recognized zero-history CLI closure can unwind to the exact cached na
 
 it('Deep periods require explicit offsets, real calendar dates and nonempty whole-second native bounds',()=>{
   for(const args of [{from:'2024-01-01',to:'2024-01-02'},{from:'2024-02-30T00:00:00Z',to:'2024-03-02T00:00:00Z'},{from:'2024-01-01T00:00:00.100Z',to:'2024-01-01T00:00:00.900Z'},{from:'2024-01-02T00:00:00Z',to:'2024-01-01T00:00:00Z'}])assert.throws(()=>deepPeriod(args),e=>e.code==='INVALID_DEEP_PERIOD'&&e.details.mutation_dispatched===false);
-  const result=deepPeriod({from:'2024-03-10T00:00:00-05:00',to:'2024-03-11T00:00:00-04:00',timezone:'America/New_York'});assert.equal(result.to_ms-result.from_ms,23*3600000);
+  const result=deepPeriod({from:'2024-03-10T00:00:00-05:00',to:'2024-03-11T00:00:00-04:00',timezone:'UTC'});assert.equal(result.to_ms-result.from_ms,23*3600000);assert.equal(result.period.from,'2024-03-10T05:00:00.000Z');assert.equal(result.period.calculation_timezone,'Etc/UTC');
+  assert.throws(()=>deepPeriod({from:'2024-01-01T00:00:00Z',to:'2024-01-02T00:00:00Z',timezone:'Asia/Seoul'}),e=>e.code==='DEEP_TIMEZONE_UNSUPPORTED'&&e.details.mutation_dispatched===false);
 });
 it('Deep response identity is bound to each decoded report cycle and never adopts a later foreign report',async()=>{
   const p=deepPage();assert.equal((await start(p)).phase,'pending');assert.equal(p.dispatches(),1);await p.complete(10);
@@ -119,6 +120,14 @@ it('exact terminal disconnected zero-send preparation is reconciled without rese
     assert.equal(store.read().phase,pending?'unknown':'rejected_known');assert.equal(store.read().request_id,'legacy-preparation');
   }
 });
+it('repeated known-zero IDs preserve the same persisted, page and public run ID without creating a new intent',async()=>{
+  const p=deepPage(),store=memoryStore(),original=p.manager._sendRequest;
+  p.manager._sendRequest=function(method,args){const result=original.call(this,method,args);if(method==='history_create_session')this._sessionid='foreign';return result;};
+  const options={from:'2024-01-01T00:00:00Z',to:'2024-01-02T00:00:00Z',request_id:'same-zero',_deps:{properties:()=>getProperties({_deps:{evaluate:p.evaluate}}),evaluateAsync:p.evaluate,store}};
+  await assert.rejects(()=>runDeep(options),/DEEP_REQUEST_CHANGED/);const id=store.read().run_id;
+  for(let i=0;i<4;i++){const result=await runDeep(options);assert.equal(result.run_id,id);assert.equal(store.read().run_id,id);assert.equal(p.window.__tvCliDeepRun.run_id,id);assert.equal(result.reused,true);assert.equal(p.dispatches(),0);}
+  assert.equal((await call(p,'inspectDeepRun',id)).no_history_dispatch_verified,true);
+});
 it('zero trades retain native window evidence while missing/outside windows and trade timestamps fail period proof',async()=>{
   const cases=[['zero',r=>{r.trades=[];r.performance.all.totalTrades=0;},true],['missing window',r=>{delete r.settings;},false],['outside window',r=>{r.settings.dateRange.backtest.from-=86400000;},false],['missing entry',r=>{delete r.trades[0].entry.time;},false]];
   for(const [name,change,valid] of cases){const p=deepPage();await start(p);await p.complete(10,0,p.manager._sessionid,change);
@@ -146,3 +155,4 @@ it('unknown persistent dispatch is observed, never resent, and wait timeout is n
   const repeated=await runDeep(options);assert.equal(repeated.reused,true);assert.equal(p.dispatches(),1);
   let clock=0;const timeout=await waitDeep({run_id:repeated.run_id,timeout:200,_deps:{evaluateAsync:p.evaluate,now:()=>clock,sleep:async ms=>{clock+=ms;}}});assert.equal(timeout.code,'DEEP_WAIT_TIMEOUT');assert.equal(timeout.cancelled,false);assert.equal(p.dispatches(),1);
 });
+

@@ -12,7 +12,8 @@ export function deepPeriod({from,to,timezone='UTC'}){
   if(start%1000||end%1000||Math.floor(start/1000)>=Math.floor(end/1000))error('Native Deep bounds use whole seconds; sub-second or empty native periods are refused.');
   for(const timestamp of [from,to]){const [year,month,day]=timestamp.slice(0,10).split('-').map(Number);if(day<1||day>new Date(Date.UTC(year,month,0)).getUTCDate())error('Invalid calendar date; normalized impossible dates are refused.');}
   try{new Intl.DateTimeFormat('en',{timeZone:timezone});}catch{error('Unknown calculation timezone.');}
-  return {from_ms:start,to_ms:end,period:{from:new Date(start).toISOString(),to:new Date(end).toISOString(),timezone,bounds:'native from_to seconds; actual coverage is separate',native_from_seconds:Math.floor(start/1000),native_to_seconds:Math.floor(end/1000)}};
+  if(!['UTC','Etc/UTC'].includes(timezone))throw Object.assign(new Error('Only native UTC calculation is verified; non-UTC native sessions can shift the requested period.'),{code:'DEEP_TIMEZONE_UNSUPPORTED',details:{mutation_dispatched:false,requested_timezone:timezone,supported_calculation_timezone:'Etc/UTC'}});
+  return {from_ms:start,to_ms:end,period:{original_from:from,original_to:to,from:new Date(start).toISOString(),to:new Date(end).toISOString(),timezone,calculation_timezone:'Etc/UTC',bounds:'native from_to seconds; actual coverage is separate',native_from_seconds:Math.floor(start/1000),native_to_seconds:Math.floor(end/1000)}};
 }
 
 export async function runDeep({from,to,timezone,request_id,strategy_id,_deps}={}){
@@ -29,6 +30,7 @@ export async function runDeep({from,to,timezone,request_id,strategy_id,_deps}={}
   if(!store)throw Object.assign(new Error('Deep dispatch requires a persistent named workspace intent.'),{code:'WORKSPACE_REQUIRED'});
   const previous=store.read();
   if(previous&&previous.fingerprint!==fingerprint)return {success:false,code:'DEEP_REQUEST_CONFLICT',error:'This request ID already describes another source/settings/period.',mutation_dispatched:false};
+  if(previous?.phase==='rejected_known')return {...(previous.no_history_dispatch_proof||previous.result||{success:false,code:'DEEP_NOT_DISPATCHED',error:'This request was rejected before history dispatch.'}),run_id:previous.run_id,request_id:previous.request_id,reused:true,mutation_dispatched:false};
   if(previous&&previous.phase!=='rejected_known'){
     const actual=await deepStatus({run_id:previous.run_id,_deps});
     if(actual.run_id===previous.run_id&&actual.no_history_dispatch_verified===true){store.write({...previous,phase:'rejected_known',no_history_dispatch_proof:actual,reconciled_at:new Date().toISOString()});return {...actual,reused:true};}

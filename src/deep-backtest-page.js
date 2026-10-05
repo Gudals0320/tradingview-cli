@@ -192,7 +192,7 @@ export function inspectDeepRun(window,document,runId){
   const phase=status?.type===3?'server_error':status?.type===2?'ready':sent?'pending':'accepted';
   if(['ready','server_error'].includes(phase)&&(!sent||phase==='ready'&&run.report_cycle<1||run.cycle_proof?.cycle!==run.report_cycle||run.cycle_proof?.kind!==phase))return {success:false,code:'DEEP_REPORT_UNVERIFIED',error:'The latest native report/outcome cycle has no exact decoded response attribution for this run.',run_id:run.run_id,result_adopted:false};
   return {success:phase!=='server_error',mode:'deep',run_id:run.run_id,request_id:run.request_id,phase,accepted_scope:'native_client',server_request_dispatched:sent,native_request_number:sent?run.request_before:null,
-    server_acceptance:phase==='ready'?'native_response_verified':'unconfirmed',requested_period:run.requested_period,native_timezone:run.native_timezone,native_bounds:{from_seconds:Math.floor(run.from_ms/1000),to_seconds:Math.floor(run.to_ms/1000)},source_hash:run.source_hash,effective_properties_fingerprint:run.properties_hash,
+    server_acceptance:phase==='ready'?'native_response_verified':'unconfirmed',requested_period:run.requested_period,calculation_timezone:run.native_timezone,chart_timezone:run.chart_timezone??null,native_timezone:run.native_timezone,native_bounds:{from_seconds:Math.floor(run.from_ms/1000),to_seconds:Math.floor(run.to_ms/1000)},source_hash:run.source_hash,effective_properties_fingerprint:run.properties_hash,
     ...(phase==='server_error'?{code:'DEEP_SERVER_ERROR',error:status.errorDescription?.error||'Native Deep server calculation failed.'}:{})};
 }
 
@@ -234,7 +234,7 @@ export async function startDeepRun(window,document,request){
   const oldNoHistory=old&&inspectDeepRun(window,document,old.run_id).no_history_dispatch_verified===true;
   old?.dispose?.();
   const run=window.__tvCliDeepRun={run_id:request.run_id,request_id:request.request_id,request_fingerprint:request.fingerprint,strategy_id:report.strategy_id,source_hash:report.source_hash,properties_hash:request.properties_hash,
-    identity,kernel,native_symbol,native_resolution,Connection:toolkit.Connection,native_timezone:request.period.timezone==='UTC'?'Etc/UTC':request.period.timezone,from_ms:request.from_ms,to_ms:request.to_ms,requested_period:request.period,request_before:manager._requestId,facade,snapshot:null,report_cycle:0};
+    identity,kernel,native_symbol,native_resolution,Connection:toolkit.Connection,chart_timezone:request.source_proof.semantic_context.timezone,native_timezone:'Etc/UTC',from_ms:request.from_ms,to_ms:request.to_ms,requested_period:request.period,request_before:manager._requestId,facade,snapshot:null,report_cycle:0};
   const signal=manager.activeStrategyReportData;
   if(typeof signal?.subscribe!=='function'||typeof signal?.unsubscribe!=='function'){delete window.__tvCliDeepRun;return {success:false,code:'DEEP_NATIVE_PATH_UNAVAILABLE',error:'Native report revision monitoring is unavailable.',mutation_dispatched:false};}
   const changed=()=>{run.report_cycle++;run.snapshot=null;};signal.subscribe(changed);

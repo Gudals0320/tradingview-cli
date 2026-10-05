@@ -38,6 +38,9 @@ it('real Deep CLI pins native source and response identity, pages one revision a
 it('real Deep entry rejects stale manager kernel and tiny periods with zero native dispatch',async t=>{
   const page=deepPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
   const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('deep-entry-compiled-v2');
+  const before=snapshot(f.root),requests=f.requests.length;
+  const timezone=jsonError(await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00Z','--to','2024-01-02T00:00:00Z','--timezone','Asia/Seoul','--request-id','unsupported-zone']),/Only native UTC/,'DEEP_TIMEZONE_UNSUPPORTED');
+  assert.equal(timezone.details.mutation_dispatched,false);assert.equal(f.requests.length,requests);assert.deepEqual(snapshot(f.root),before);assert.equal(page.dispatches(),0);
   jsonError(await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00.100Z','--to','2024-01-01T00:00:00.900Z','--request-id','tiny']),/whole seconds/,'INVALID_DEEP_PERIOD');
   page.manager._activeStrategyInputs.value=()=>({studyName:'wrong',inputs:{text:'wrong',pineId:'foreign',pineVersion:9},dependencies:[]});
   const denied=jsonResult(await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00Z','--to','2024-01-02T00:00:00Z','--request-id','stale']),1);assert.equal(denied.code,'DEEP_KERNEL_UNVERIFIED');assert.equal(denied.mutation_dispatched,false);assert.equal(page.dispatches(),0);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
