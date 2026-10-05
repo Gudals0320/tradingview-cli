@@ -5,9 +5,9 @@ export function equityPage(expression='strategy.equity'){
   const p=propertiesPage(),chart=p.chart,base=1704067200000,times=[base,base+3600000,base+7200000],values=[1010,1030,1035];
   p.window.crypto=webcrypto;p.externalFee(0);
   let report={currency:'USD',settings:{dateRange:{backtest:{from:base-3600000,to:base+7200000}}},performance:{all:{netProfit:30,totalTrades:2,numberOfWiningTrades:2,numberOfLosingTrades:0},openPL:5},trades:[
-    {e:{tm:base-3600000,p:100,tp:'le'},x:{tm:base,p:110,c:'exit'},q:1,v:100,cm:0,cp:{v:10}},
-    {e:{tm:base+1800000,p:100,tp:'le'},x:{tm:base+3600000,p:120,c:'exit'},q:1,v:100,cm:0,cp:{v:30}},
-    {e:{tm:base+5400000,p:100,tp:'le'},x:{tm:base+7200000,c:''},q:1},
+    {e:{tm:base-3600000,p:100,tp:'le'},x:{tm:base,p:110,c:'exit',tp:'lx'},q:1,v:100,cm:0,cp:{v:10}},
+    {e:{tm:base+1800000,p:100,tp:'le'},x:{tm:base+3600000,p:120,c:'exit',tp:'lx'},q:1,v:100,cm:0,cp:{v:30}},
+    {e:{tm:base+5400000,p:100,tp:'le'},x:{tm:base+7200000,p:105,c:'',tp:'lx'},q:1,v:100,cm:0},
   ]};
   p.source.reportData=()=>({value:()=>report});
   const meta=p.source.metaInfo;p.source.metaInfo=()=>({...meta(),plots:[{id:'plot_0',type:'line'}],inputs:[...meta().inputs,{id:'prop_cap',groupId:'strategy_props',internalID:'initial_capital',type:'float'}]});

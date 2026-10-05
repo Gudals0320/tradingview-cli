@@ -38,6 +38,11 @@ open positions or reentry on a liquidation bar, ambiguous partial exits/reused
 entries, overlap/pyramiding, currency conversion, unknown point value, missing
 timestamps or incomplete numeric fields are UNVERIFIED. Zero-trade curves and
 insufficient checkpoints remain unverified; an available array is not sufficient.
+Each exit/mark timestamp must follow its own entry, and native exit kinds must
+match the entry direction. A present string exit comment distinguishes closed
+records from empty-comment open marks; missing comments remain unknown. Closed
+record count must equal native totalTrades. Multiple entry/exit events at one
+timestamp are refused because netting their counts hides intrabar ordering.
 
 The fixed tolerance is `max(1e-7 account-currency units, abs(expected)*1e-10)`.
 Before acceptance, the reference arithmetic bound

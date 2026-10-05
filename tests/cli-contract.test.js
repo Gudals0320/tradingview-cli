@@ -26,6 +26,18 @@ import {createHash} from 'node:crypto';
 
 const CLI = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
 
+it('real equity entry refuses malformed time/schema/count and ambiguous same-bar allocation without points or CSV',async t=>{
+  const changes=[
+    p=>{p.report().trades[0].x.tm=p.times[1];p.report().trades[0].x.p=120;p.report().trades[1].x.tm=p.times[0];p.report().trades[1].x.p=110;},
+    p=>{delete p.report().trades[1].x.c;p.report().performance.all.totalTrades=1;p.report().performance.all.netProfit=10;p.report().performance.openPL=25;},
+    p=>{const r=p.report();r.trades[1].e.tm=p.times[0];r.trades[1].x.tm=p.times[0];r.trades[2].e.tm=p.times[0]+1800000;r.trades[2].x={tm:p.times[1],p:105,c:'exit',tp:'lx'};r.performance.all.totalTrades=3;r.performance.all.netProfit=35;r.performance.openPL=0;p.values[0]=1030;p.values[1]=1035;},
+    p=>{p.report().performance.all.totalTrades=1;},
+  ];
+  for(const change of changes){const page=equityPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+    const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('equity-schema-entry-v2');change(page);page.refreshReport();page.completeInputs();
+    const csv=join(f.root,'unverified.csv'),result=jsonResult(await f.run(['--workspace','contract','data','equity','--plot-id','plot_0','--export',csv]),1);assert.equal(result.code,'EQUITY_SEMANTICS_UNVERIFIED');assert.equal(result.data,undefined);assert.equal(existsSync(csv),false);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+  }
+});
 it('real equity entry returns verified finite native plot pages and refuses fake plots, changed revisions and Deep fallback',async t=>{
   const page=equityPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
   const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('equity-entry-v2');page.refreshReport();page.completeInputs();

@@ -22,11 +22,19 @@ export function equitySemanticProof(report,rows,initialCapital,pointValue,feePol
   const denied=reason=>({verified:false,reason,closed_checkpoints:0});
   if(!Number.isFinite(initialCapital)||!Number.isFinite(pointValue)||pointValue<=0||!Number.isFinite(all?.netProfit)||!Number.isFinite(openPL)||!Array.isArray(report.trades)||!rows.length)return denied('Native capital/point value/net/open PnL/ledger evidence is incomplete');
   if(!['percent','cash_per_order','cash_per_contract'].includes(feePolicy?.commission_type)||!Number.isFinite(feePolicy.commission_value))return denied('Native commission policy is incomplete');
-  const points=new Map(rows.map(row=>[row.time_ms,row.equity])),closed=report.trades.filter(t=>t.x&&t.x.c!==''),tolerance=value=>Math.max(1e-7,Math.abs(value)*1e-10),events=new Map(),entries=new Set();
+  const points=new Map(rows.map(row=>[row.time_ms,row.equity])),closed=[],tolerance=value=>Math.max(1e-7,Math.abs(value)*1e-10),events=new Map(),entries=new Set();
   if(points.size!==rows.length)return denied('Duplicate native bar timestamps need an independently verified bar mapping');
-  const addEvent=(time,delta)=>events.set(time,(events.get(time)||0)+delta);
-  for(const trade of report.trades){if(!Number.isFinite(trade.e?.tm))return denied('Native ledger entry timestamp is incomplete');const entry=JSON.stringify([trade.e.tm,trade.e.c,trade.e.tp]);if(entries.has(entry))return denied('Partial exits/reused entry quantity are not independently verified');entries.add(entry);addEvent(trade.e.tm,1);if(trade.x&&trade.x.c!==''){if(!Number.isFinite(trade.x.tm))return denied('Native ledger exit timestamp is incomplete');addEvent(trade.x.tm,-1);}}
-  const active=new Map();let positions=0;for(const [time,delta]of [...events].sort((a,b)=>a[0]-b[0])){positions+=delta;if(positions>1||positions<0)return denied('Overlapping/pyramided ledger quantity allocation is not independently verified');active.set(time,positions);}
+  const addEvent=(time,delta)=>{const actions=events.get(time)||[];actions.push(delta);events.set(time,actions);};
+  for(const trade of report.trades){
+    if(!['le','se'].includes(trade.e?.tp)||!Number.isFinite(trade.e.tm)||!Number.isFinite(trade.e.p)||!Number.isFinite(trade.q)||trade.q<=0||!Number.isFinite(trade.v)||!Number.isFinite(trade.cm))return denied('Native ledger entry direction/time/price/quantity/value/commission is incomplete');
+    if(!trade.x||!Object.hasOwn(trade.x,'c')||typeof trade.x.c!=='string'||trade.x.tp!==(trade.e.tp==='le'?'lx':'sx')||!Number.isFinite(trade.x.tm)||!Number.isFinite(trade.x.p))return denied('Native closed/open exit schema is unknown');
+    if(trade.x.tm<trade.e.tm)return denied('Native exit/mark timestamp precedes its own entry');
+    const isOpen=trade.x.c==='';if(Object.hasOwn(trade,'isOpen')&&trade.isOpen!==isOpen)return denied('Native open marker conflicts with exit schema');
+    const entry=JSON.stringify([trade.e.tm,trade.e.c,trade.e.tp]);if(entries.has(entry))return denied('Partial exits/reused entry quantity are not independently verified');entries.add(entry);addEvent(trade.e.tm,1);
+    if(!isOpen){closed.push(trade);addEvent(trade.x.tm,-1);}
+  }
+  if(!Number.isSafeInteger(all.totalTrades)||all.totalTrades<0||closed.length!==all.totalTrades)return denied('Native closed ledger count differs from totalTrades');
+  const active=new Map();let positions=0;for(const [time,actions]of [...events].sort((a,b)=>a[0]-b[0])){if(actions.length!==1)return denied('Same-bar entry/exit ordering and reentry are not independently verified');positions+=actions[0];if(positions>1||positions<0)return denied('Overlapping/pyramided ledger quantity allocation is not independently verified');active.set(time,positions);}
   const checkpoints=[];let cumulative=0,absoluteFlow=0,maxBudget=0,maxError=0;
   const ordered=closed.slice().sort((a,b)=>a.x.tm-b.x.tm);
   for(let index=0;index<ordered.length;index++){

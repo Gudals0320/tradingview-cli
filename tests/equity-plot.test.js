@@ -42,7 +42,7 @@ it('plot/report changes during asynchronous snapshot verification cannot publish
 });
 it('equity semantic proof requires distinct native closed flat checkpoints and final capital plus net/open PnL',()=>{
   const rows=[{time_ms:1000,equity:1010},{time_ms:2000,equity:1030},{time_ms:4000,equity:1035}];
-  const report={performance:{all:{netProfit:30},openPL:5},trades:[{e:{tm:0,p:100,tp:'le'},x:{tm:1000,c:'exit',p:110},q:1,v:100,cm:0,cp:{v:10}},{e:{tm:1500,p:100,tp:'le'},x:{tm:2000,c:'exit',p:120},q:1,v:100,cm:0,cp:{v:30}},{e:{tm:3000},x:{tm:4000,c:''}}]};
+  const report={performance:{all:{netProfit:30,totalTrades:2},openPL:5},trades:[{e:{tm:0,p:100,tp:'le'},x:{tm:1000,c:'exit',p:110,tp:'lx'},q:1,v:100,cm:0,cp:{v:10}},{e:{tm:1500,p:100,tp:'le'},x:{tm:2000,c:'exit',p:120,tp:'lx'},q:1,v:100,cm:0,cp:{v:30}},{e:{tm:3000,p:100,tp:'le'},x:{tm:4000,p:105,c:'',tp:'lx'},q:1,v:100,cm:0}]};
   assert.equal(equitySemanticProof(report,rows,1000,1,{commission_type:'cash_per_order',commission_value:0}).verified,true);
   assert.equal(equitySemanticProof(report,rows.map(r=>({...r,equity:r.equity*2})),1000,1,{commission_type:'cash_per_order',commission_value:0}).verified,false);
   assert.equal(equitySemanticProof(report,rows.map(r=>({...r,equity:r.equity-1000})),1000,1,{commission_type:'cash_per_order',commission_value:0}).verified,false);
@@ -51,7 +51,22 @@ it('equity semantic proof requires distinct native closed flat checkpoints and f
   for(const change of [r=>{r.trades[1].e.tm=500;},r=>{r.trades.push({...r.trades[0],x:{...r.trades[0].x,tm:500}});},r=>{r.trades[0].cm=1;},r=>{r.trades[0].v=999;},r=>{r.trades[1].x.tm=2500;},r=>{r.trades.push({e:{tm:2000,p:100,tp:'le'},x:{tm:4000,c:''},q:1});}]){
     const altered=structuredClone(report);change(altered);assert.equal(equitySemanticProof(altered,rows,1000,1,{commission_type:'cash_per_order',commission_value:0}).verified,false);
   }
-  const short=structuredClone(report);for(const trade of short.trades.slice(0,2)){trade.e.tp='se';trade.x.p=200-trade.x.p;}assert.equal(equitySemanticProof(short,rows,1000,1,{commission_type:'cash_per_order',commission_value:0}).verified,true);
+  const short=structuredClone(report);for(const trade of short.trades.slice(0,2)){trade.e.tp='se';trade.x.tp='sx';trade.x.p=200-trade.x.p;}assert.equal(equitySemanticProof(short,rows,1000,1,{commission_type:'cash_per_order',commission_value:0}).verified,true);
+});
+
+it('equity rejects masked backward exits, unknown open schema/count and same-bar cross-trade ordering through serialized collection',async()=>{
+  const cases=[
+    p=>{p.report().trades[0].x.tm=p.times[1];p.report().trades[0].x.p=120;p.report().trades[1].x.tm=p.times[0];p.report().trades[1].x.p=110;},
+    p=>{delete p.report().trades[1].x.c;p.report().performance.all.totalTrades=1;p.report().performance.all.netProfit=10;p.report().performance.openPL=25;},
+    p=>{const r=p.report();r.trades[1].e.tm=p.times[0];r.trades[1].x.tm=p.times[0];r.trades[2].e.tm=p.times[0]+1800000;r.trades[2].x={tm:p.times[1],p:105,c:'exit',tp:'lx'};r.performance.all.totalTrades=3;r.performance.all.netProfit=35;r.performance.openPL=0;p.values[0]=1030;p.values[1]=1035;},
+    p=>{p.report().performance.all.totalTrades=1;},
+    p=>{p.report().trades[0].x.tp='unknown';},
+    p=>{delete p.report().trades[2].x.c;},
+  ];
+  for(const change of cases){const p=equityPage();change(p);const rows=p.times.map((time_ms,i)=>({time_ms,equity:p.values[i]}));
+    assert.equal(equitySemanticProof(p.report(),rows,1000,1,{commission_type:'percent',commission_value:0}).verified,false);
+    p.refreshReport();p.completeInputs();const result=await getEquity({plot_id:'plot_0',_deps:{evaluateAsync:p.evaluate}});assert.equal(result.code,'EQUITY_SEMANTICS_UNVERIFIED');assert.equal(result.data,undefined);
+  }
 });
 
 

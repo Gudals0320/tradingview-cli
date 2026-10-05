@@ -256,3 +256,10 @@ a known zero-history-dispatch outcome captured before replacement. Unknown and
 pending records without that proof retain their phase and private bytes; status
 reports replacement without persisting a superseded phase. Unit and real CLI
 fixtures cover transport uncertainty and pending work followed by GUI replacement.
+
+Equity review corrections validate each trade's entry/exit order, known native
+exit schema and exact closed ledger count against totalTrades. Multiple entry/exit
+events at one timestamp are unverified instead of netting their counts. Real CLI
+negative fixtures publish neither points nor CSV. A subsequent working-tree live
+observation retained 343 native points and 34 applicable flat-close checkpoints,
+with maximum error 3.637978807091713e-12; immutable commit validation is separate.
