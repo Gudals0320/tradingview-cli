@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto';
 import { projectStrategyProperties } from '../strategy-properties.js';
 import { EQUITY_PAGE_CODE } from '../equity-plot-page.js';
 
-const MAX_OHLCV_BARS = 500;
+const MAX_OHLCV_BARS = 20000;
 const MAX_TRADES = 20;
 
 // Round to 8 dp — enough to kill float noise (29899.999999997 → 29900) without
@@ -117,7 +117,7 @@ function buildGraphicsJS(collectionName, mapKey, filter) {
 }
 
 export async function getOhlcv({ count, summary, _deps } = {}) {
-  const limit = requireInteger(count === undefined ? 100 : count, 'count', 1, MAX_OHLCV_BARS);
+  const limit = requireInteger(count === undefined ? 500 : count, 'count', 1, MAX_OHLCV_BARS);
   const extracted = await readData(`
       (function() {
         var bars = ${BARS_PATH};

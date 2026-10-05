@@ -13,7 +13,7 @@ it('CLI rejects incorrect arguments before lease or connection, even with a rese
     ['ohlcv', 'AAPL'], ['ohlcv', '--cout', '900'], ['data', 'lines', '--filer', 'x'],
     ['alert', 'delete', '--all=false'], ['pine', 'compile', '--save=false'],
     ['ohlcv', '--count', '0'], ['ohlcv', '--count', 'abc'], ['ohlcv', '--count', '10.5'],
-    ['ohlcv', '--count', '501'], ['stream', 'quote', '--interval', '-1'],
+    ['ohlcv', '--count', '20001'], ['stream', 'quote', '--interval', '-1'],
     ['range', '--from', '1'], ['alert', 'create', '--price', '', '--condition', 'above'],
   ]) {
     assert.throws(() => execFileSync(process.execPath, ['src/cli/index.js', ...args], {
@@ -24,6 +24,15 @@ it('CLI rejects incorrect arguments before lease or connection, even with a rese
       return true;
     });
   }
+});
+
+it('only OHLCV count accepts up to 20000; other pagination limits remain 500', () => {
+  for (const count of ['1', '500', '501', '20000']) {
+    assert.doesNotThrow(() => validateArguments('ohlcv', { count }, []));
+  }
+  assert.throws(() => validateArguments('ohlcv', { count: '20001' }, []), /20000/);
+  assert.throws(() => validateArguments('data ledger', { limit: '501' }, []), /500/);
+  assert.throws(() => validateArguments('data equity', { limit: '501' }, []), /500/);
 });
 
 it('invalid alert condition and price do not invoke the adapter', async () => {

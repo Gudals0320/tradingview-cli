@@ -709,6 +709,35 @@ it('existing GUI and legacy boolean/ledger workspaces fail close before Desktop 
   }
 });
 
+it('real OHLCV entry accepts count and short alias through 20000 and reports loaded-history limits', async t => {
+  const page = reportPage();
+  let available = 21000;
+  page.window.TradingViewApi._activeChartWidgetWV.value()._chartWidget.model().mainSeries().bars = () => ({
+    firstIndex: () => 50, lastIndex: () => available + 49, size: () => available,
+    valueAt: i => [1704067200 + i * 60, 1, 3, 1, 2, 5],
+  });
+  const f = await fixture(t, expression => page.evaluate(expression), { snapshotFactory: page.snapshot, epochFactory: page.epoch });
+  page.bind(loadWorkspace(join(f.root, 'contract.json'), f.options));
+  for (const [args, expected] of [[[], 500], [['--count', '501'], 501], [['-n', '20000'], 20000], [['--count', '20000', '--summary'], 20000]]) {
+    const result = jsonResult(await f.run(['--workspace', 'contract', 'ohlcv', ...args]));
+    assert.equal(result.requested, expected);
+    assert.equal(result.applied, expected);
+    assert.equal(result.limit, 20000);
+    assert.equal(result.total_available, 21000);
+    assert.equal(result.insufficient_history, false);
+    assert.equal(result.truncated, true);
+    if (!args.includes('--summary')) assert.equal(result.bars.length, expected);
+  }
+  available = 5000;
+  const partial = jsonResult(await f.run(['--workspace', 'contract', 'ohlcv', '-n', '20000']));
+  assert.equal(partial.applied, 5000);
+  assert.equal(partial.insufficient_history, true);
+  assert.equal(partial.truncated, false);
+  const requests = f.requests.length;
+  jsonError(await f.run(['--workspace', 'contract', 'ohlcv', '-n', '20001']), /20000/);
+  assert.equal(f.requests.length, requests);
+});
+
 it('real extraction CLI returns structured error codes and study details on stderr with exit 1', async t => {
   let failure;
   const f = await fixture(t, () => ({ extraction_error: failure }));

@@ -26,8 +26,8 @@ tv --version
 tv status
 ```
 
-현재 코드 버전은 `2.3.0`입니다. [2.3.0 변경 기록](docs/release-2.3.0.md)에서
-신규 전략 기능과 호환성·지원 한계를 확인하세요. 전역 연결 없이 `node src/cli/index.js ...`로 실행할 수
+현재 코드 버전은 `2.3.1`입니다. [2.3.1 변경 기록](docs/release-2.3.1.md)에서
+OHLCV 수집 한도 변경을 확인하세요. 전역 연결 없이 `node src/cli/index.js ...`로 실행할 수
 있습니다. PowerShell 모듈을 쓰는 동안 저장소 진입점을 고정하려면
 `$env:TV_CLI_ENTRY = (Resolve-Path .\src\cli\index.js).Path`를 설정합니다.
 
@@ -69,6 +69,22 @@ tv timeframe 60
 tv quote
 tv ohlcv --count 20 --summary
 ```
+
+OHLCV 수집: `ohlcv`는 개수를 생략하면 최근 로드된 봉을 최대 **500개** 반환합니다.
+`--count 20000` 또는 `-n 20000`으로 **1~20,000개**를 요청할 수 있습니다.
+
+```powershell
+tv --workspace research-a ohlcv --count 20000
+tv --workspace research-a ohlcv -n 20000 --summary
+```
+
+계정 플랜·종목·차트 로딩 상태 때문에 요청보다 적은 봉만 로드되어 있으면
+현재 로드된 구간만 반환합니다. 화면에 보이는 봉뿐 아니라 차트에 로드된 전체 이력 중
+최근 구간을 읽으며, 추가 이력 다운로드나 플랜 한도 우회는 하지 않습니다.
+`requested`는 요청 개수, `applied`/`bar_count`는 반환 개수, `total_available`은
+로드된 전체 개수입니다. 요청보다 적으면 `insufficient_history: true`, 로드된 봉 중
+일부만 반환하면 `truncated: true`입니다. 부족한 원인이 플랜 제한인지 단순 미로딩인지는
+추정하지 않습니다. 20,000개 초과 요청은 오류로 거부합니다.
 
 레이아웃 생성은 **새 탭**에서 이루어지며 이전 활성 target과 foreground 변경을
 결과에 표시합니다. 기존 레이아웃을 새 탭에 열려면 `tv layout open LAYOUT_URL_ID`를

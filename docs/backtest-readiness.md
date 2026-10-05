@@ -33,7 +33,7 @@
 | 2. pagination 경계/변경 | native ordinal ascending, 다음 offset/has_more로 종료. revision을 전달하면 전체 native 배열 변경 검출(내부 거래도 포함). 전달 없으면 다른 snapshot이 섞일 수 있음. revision은 immutable server snapshot이나 거래소 완전성 증명이 아님; 매 페이지 O(전체 ledger) 직렬화·전송·해시. |
 | 2. timestamp/open trade | 원본 tm/e/x/b 보존, 숫자 크기 기반 초/ms와 ISO → UTC. missing null, malformed null+timestamp_errors. open은 x 없음만 표현. 실제 native가 open 거래를 포함하는지 미검증. |
 | 2. windows | backtest=settings dateRange, loaded=메모리 봉 범위, trade=첫 진입/마지막 청산 또는 진입. trade_window는 min/max/미청산 평가시각 아님. `strategy_state` metadata fixtures, batch verifyHistory의 달력 구간 검사. |
-| 2. OHLCV/주문 상한 | ohlcv는 1..500(기본100), 초과 요청은 오류. tail 잘림/부족 별도. orders는 요청값/20 cap/총수/잘림 명시. `data-contracts` 및 `arguments` 입력 상한 검사. |
+| 2. OHLCV/주문 상한 | ohlcv는 1..20000(기본500), 초과 요청은 오류. 로드된 이력만 반환하며 추가 로딩 없이 tail 잘림/부족 별도. orders는 요청값/20 cap/총수/잘림 명시. `data-contracts` 및 `arguments` 입력 상한 검사. |
 | 2. 없음/미지원/추출 실패 | complete gate, missing_metrics(누락/비유한값 모두), availability code, equity error, filter not found, 추출 예외 실패. study 하나의 values/graphics 읽기 예외도 전체 호출 실패, code/study details 포함. Pine graphics collection 부재는 현재 검출 출력 없음이며 역사 전체가 빈 증거 아님. `values`는 표시 문자열, dataWindowView 없는 source는 제외. |
 | 3. batch 현재 CLI/저장 identity | `examples/pine-batch.js`는 현재 core 직접 호출과 자체 parseArgs 사용(tv batch 명령 없음). CLI help data/pine compile/indicator set/ohlcv/quote로 옵션 확인. 각 성공 결과는 source/hash/token/study/inputs/context/parameters 포함. 예제는 metrics+최근 주문만 수집하며 full ledger 자동 수집 안 함. |
 | 3. batch 실패/후속 실행 | 첫 실패에서 다음 variant를 실행하지 않고 cleanup. 실패 details는 완료 결과와 실패 단계/parameters 보존, --out은 전체 성공에만 작성. 미완료 journal은 새 baseline 채택 차단. `pine_batch`, `session`, `cli-contract` 복구/실패 tests. |

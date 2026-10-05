@@ -58,7 +58,7 @@ export function validateArguments(command, values, positionals) {
   for (const name of ['count', 'max', 'limit', 'offset', 'interval', 'timeout', 'port', 'speed']) {
     if (values[name] === undefined) continue;
     const low = name === 'offset' ? 0 : name === 'interval' ? 100 : 1;
-    const high = name === 'port' ? 65535 : ['count', 'limit'].includes(name) ? 500 : Number.MAX_SAFE_INTEGER;
+    const high = name === 'port' ? 65535 : command === 'ohlcv' && name === 'count' ? 20000 : ['count', 'limit'].includes(name) ? 500 : Number.MAX_SAFE_INTEGER;
     requireInteger(values[name], `--${name}`, low, high);
   }
   for (const name of ['price', 'price2', 'time', 'time2', 'from', 'to', 'amount']) {

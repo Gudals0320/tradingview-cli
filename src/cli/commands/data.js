@@ -9,7 +9,7 @@ register('quote', {
 register('ohlcv', {
   description: 'Get latest loaded OHLCV bars, with truncation and insufficient-history flags',
   options: {
-    count: { type: 'string', short: 'n', description: 'Number of bars (default 100, max 500)' },
+    count: { type: 'string', short: 'n', description: 'Latest loaded bars (default 500, max 20000); returns available bars if fewer are loaded, without fetching history' },
     summary: { type: 'boolean', short: 's', description: 'Return summary stats instead of all bars' },
   },
   handler: (opts) => core.getOhlcv({

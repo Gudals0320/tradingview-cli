@@ -29,7 +29,7 @@ it('OHLCV reports a loaded tail separately from insufficient history and never i
   const tail = await getOhlcv({ count: 1, _deps: f._deps });
   assert.equal(tail.total_available, 2); assert.equal(tail.truncated, true); assert.equal(tail.insufficient_history, false);
   const short = await getOhlcv({ count: 5, summary: true, _deps: f._deps });
-  assert.equal(short.truncated, false); assert.equal(short.insufficient_history, true); assert.equal(short.limit, 500);
+  assert.equal(short.truncated, false); assert.equal(short.insufficient_history, true); assert.equal(short.limit, 20000);
   f.bars.valueAt = i => [100 + i, 1, 3, 1, 2];
   assert.equal((await getOhlcv({ count: 1, _deps: f._deps })).bars[0].volume, null);
   assert.equal((await getOhlcv({ summary: true, _deps: f._deps })).avg_volume, null);
@@ -37,7 +37,44 @@ it('OHLCV reports a loaded tail separately from insufficient history and never i
   await assert.rejects(getOhlcv({ count: 2, _deps: f._deps }), error => {
     assert.equal(error.code, 'OHLCV_EXTRACTION_FAILED'); assert.equal(error.details.bar_index, 1); return true;
   });
-  await assert.rejects(getOhlcv({ count: 501, _deps: f._deps }), /500/);
+  await assert.rejects(getOhlcv({ count: 20001, _deps: f._deps }), /20000/);
+});
+
+it('OHLCV defaults to 500 and supports the latest 20000 loaded bars including nonzero indices', async () => {
+  const f = fixture();
+  f.bars.firstIndex = () => 70;
+  f.bars.lastIndex = () => 25069;
+  f.bars.size = () => 25000;
+  for (const count of [undefined, 501, 20000]) {
+    const result = await getOhlcv({ count, _deps: f._deps });
+    const expected = count ?? 500;
+    assert.equal(result.requested, expected);
+    assert.equal(result.applied, expected);
+    assert.equal(result.bars.length, expected);
+    assert.equal(result.bars[0].time, 100 + 25070 - expected);
+    assert.equal(result.bars.at(-1).time, 25169);
+    assert.equal(result.truncated, true);
+    assert.equal(result.insufficient_history, false);
+  }
+  const summary = await getOhlcv({ count: 20000, summary: true, _deps: f._deps });
+  assert.equal(summary.bar_count, 20000);
+  assert.equal(summary.avg_volume, 5);
+  assert.equal(summary.high, 3);
+  assert.equal(summary.last_5_bars.length, 5);
+});
+
+it('OHLCV returns only available history without claiming the account plan is known', async () => {
+  const f = fixture();
+  f.bars.lastIndex = () => 4999;
+  f.bars.size = () => 5000;
+  for (const summary of [false, true]) {
+    const result = await getOhlcv({ count: 20000, summary, _deps: f._deps });
+    assert.equal(result.requested, 20000);
+    assert.equal(result.applied, 5000);
+    assert.equal(result.total_available, 5000);
+    assert.equal(result.insufficient_history, true);
+    assert.equal(result.truncated, false);
+  }
 });
 
 it('graphics extraction failures are errors rather than successful empty collections', async () => {
