@@ -160,6 +160,28 @@ it('normal reset never disconnects GUI/unrecorded work or borrows an old zero-hi
     const before=p.manager.activeStrategyStatus.value(),result=await resetNormal({_deps:{store,evaluateAsync:p.evaluate}});assert.equal(result.success,false,kind);assert.equal(result.code,'DEEP_RUN_UNSETTLED',kind);assert.equal(result.mutation_dispatched,false,kind);assert.equal(changes,0,kind);assert.equal(p.manager.activeStrategyStatus.value(),before,kind);
   }
 });
+it('completed owned history permits normal reset for actual disconnected state and an identical retained connection',async()=>{
+  for(const connected of [false,true]){const p=deepPage(),store=memoryStore();await start(p);await p.complete();assert.equal(p.window.__tvCliDeepRun.sender_guard_released,true);
+    if(connected)p.manager._wsConnection.connected=true;
+    const result=await resetNormal({_deps:{store,evaluateAsync:p.evaluate}});assert.equal(result.success,true);assert.equal(result.mode,'normal');assert.equal(p.window.__tvCliDeepRun,undefined);
+  }
+});
+it('completed owned history never authorizes clearing a foreign completed range, report or connection',async()=>{
+  for(const kind of ['range','report','connection']){const p=deepPage(),store=memoryStore();await start(p);await p.complete();
+    if(kind==='range'){p.manager._fromDate+=86400000;p.manager._toDate+=86400000;p.manager._requestId++;}
+    if(kind==='report'){const data=p.manager.activeStrategyReportData;data.set({...data.value(),performance:{all:{netProfit:999,totalTrades:1}}});}
+    if(kind==='connection'){p.manager._wsConnection._socket={};p.manager._wsConnection.connected=true;}
+    let mutations=0;p.history.handleSetIsDeepHistoryMode=()=>{mutations++;};p.facade.resetDeepBacktestingReportData=()=>{mutations++;};
+    const result=await resetNormal({_deps:{store,evaluateAsync:p.evaluate}});assert.equal(result.success,false,kind);assert.equal(result.code,'DEEP_RUN_UNSETTLED',kind);assert.equal(result.mutation_dispatched,false,kind);assert.equal(mutations,0,kind);
+  }
+});
+it('after owned completion the native GUI can run again, while its response is never adopted by the old monitor',async()=>{
+  const p=deepPage();await start(p);await p.complete();assert.equal(p.window.__tvCliDeepRun.sender_guard_released,true);
+  p.manager.requestData(1704240000000,1704326400000);assert.equal(p.dispatches(),2);await p.complete(999,1);
+  const result=await call(p,'deepReportSnapshot','exact-run');assert.equal(result.success,false);assert.equal(result.snapshot,undefined);
+  let changes=0;p.history.handleSetIsDeepHistoryMode=()=>{changes++;};p.facade.resetDeepBacktestingReportData=()=>{changes++;};
+  const normal=await resetNormal({_deps:{store:memoryStore(),evaluateAsync:p.evaluate}});assert.equal(normal.success,false);assert.equal(normal.mutation_dispatched,false);assert.equal(changes,0);
+});
 it('an exact native rejection is observable even when setting initial null emits no report-change event',async()=>{
   const p=deepPage();await start(p);await p.error();const status=await call(p,'inspectDeepRun','exact-run');assert.equal(status.phase,'server_error');assert.equal(status.code,'DEEP_SERVER_ERROR');assert.equal(status.success,false);assert.equal(p.window.__tvCliDeepRun.report_cycle,0);
   const settlement=await call(p,'inspectDeepSettlement','exact-run');assert.equal(settlement.known,true);assert.equal(settlement.settled,true);assert.equal(settlement.phase,'server_error');

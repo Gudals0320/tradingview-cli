@@ -45,6 +45,12 @@ An old known-zero marker cannot authorize clearing a new provider/socket/job.
 Its failure-time connection/socket/counter/range and current owned generation
 must still match. Already-normal idle state returns a no-op; unrecorded Deep work
 remains protected.
+Completed owned history may reset on the observed disconnected native socket or
+an identical retained connection. Native range/counter, current attributed report
+identity and generation must match; loading/connecting or a foreign completed
+report refuse. Exact terminal attribution releases only the temporary send gate,
+so later GUI jobs can run; response monitoring continues to reject their results
+for the earlier run.
 
 Source verification pins saved/applied document version, canonical editor hash,
 verified compilation token/protected identity, full input fingerprint, effective

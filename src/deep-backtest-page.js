@@ -83,6 +83,7 @@ export function installDeepAttribution(manager,run,toolkit){
     const candidates=matches.filter(p=>p.own&&p.sequence===sequence);
     run.cycle_proof=candidates.length&&!matches.some(p=>!p.own)?{cycle:cycle.cycle,sequence,kind:candidates[0].kind,session:candidates[0].session,request_number:candidates[0].request_number}:null;
     run.snapshot=null;
+    run.release_finished_sender?.();
   };
   const response=async(raw,connection,socket)=>{
     const current=()=>hooks.active===active&&manager._wsConnection===connection&&(connection._socket||connection)===socket;
@@ -219,11 +220,20 @@ export function deepResetAdmission(window,facade,run){
   let generation;try{generation=JSON.parse(run.identity).page_generation;}catch{return denied();}
   if(generation!==(window.__tvCliWorkspace?.nonce??null))return denied();
   const settlement=inspectDeepSettlement(window,run.run_id);if(!settlement.settled)return denied();
+  if(manager._fromDate!==run.from_ms||manager._toDate!==run.to_ms)return denied();
   if(settlement.no_history_dispatch_verified){
     const connection=run.failure_connection||run.connection||run.setup_connection,socket=run.failure_socket||run.socket||run.setup_socket;
     const counter=run.failure_request_counter;
     if(!connection||!socket||manager._wsConnection!==connection||connection._socket!==socket||manager._fromDate!==run.from_ms||manager._toDate!==run.to_ms||(Number.isInteger(counter)?counter!==manager._requestId:![run.request_before,run.request_before+1].includes(manager._requestId)))return denied();
-  }else if(busy)return denied();
+  }else{
+    const report=manager.activeStrategyReportData?.value?.();
+    if(report!==run.cycle_report||JSON.stringify(report??null)!==run.cycle_report_json||[0,1].includes(status?.type)||manager._wsConnection?.isConnecting?.()===true)return denied();
+    if(busy){
+      const connection=manager._wsConnection;if(connection!==run.connection||connection?._socket!==run.socket)return denied();
+      let session;try{session=JSON.parse(connection.getSessionId()).session_id;}catch{return denied();}
+      if(session!==run.created_session)return denied();
+    }
+  }
   return {success:true,already_normal:false};
 }
 
@@ -267,9 +277,15 @@ export async function startDeepRun(window,document,request){
     return result;
   };
   manager._sendRequest=tracedSend;
+  run.release_finished_sender=()=>{
+    const status=manager.activeStrategyStatus?.value?.(),kind=status?.type===2?'ready':status?.type===3?'server_error':null;
+    if(run.history_send_completed&&kind&&run.cycle_proof?.cycle===run.report_cycle&&run.cycle_proof.kind===kind&&manager._sendRequest===tracedSend){manager._sendRequest=originalSend;run.sender_guard_released=true;}
+  };
+  const statusSignal=manager.activeStrategyStatus;
+  statusSignal?.subscribe?.(run.release_finished_sender);
   let attribution;
-  try{attribution=installDeepAttribution(manager,run,toolkit);}catch(error){signal.unsubscribe(changed);if(manager._sendRequest===tracedSend)manager._sendRequest=originalSend;delete window.__tvCliDeepRun;return {success:false,code:'DEEP_NATIVE_PATH_UNAVAILABLE',error:error.message,mutation_dispatched:false,native_history_request_started:false};}
-  run.dispose=()=>{signal.unsubscribe(changed);attribution();if(manager._sendRequest===tracedSend)manager._sendRequest=originalSend;};
+  try{attribution=installDeepAttribution(manager,run,toolkit);}catch(error){signal.unsubscribe(changed);statusSignal?.unsubscribe?.(run.release_finished_sender);if(manager._sendRequest===tracedSend)manager._sendRequest=originalSend;delete window.__tvCliDeepRun;return {success:false,code:'DEEP_NATIVE_PATH_UNAVAILABLE',error:error.message,mutation_dispatched:false,native_history_request_started:false};}
+  run.dispose=()=>{signal.unsubscribe(changed);statusSignal?.unsubscribe?.(run.release_finished_sender);attribution();if(manager._sendRequest===tracedSend)manager._sendRequest=originalSend;};
   // Observed native provider's false argument prevents copying a chart report
   // into the Deep slot. Date-state updates alone do not request a new job.
   history.handleSetIsDeepHistoryMode(true,false);

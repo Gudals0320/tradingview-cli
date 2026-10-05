@@ -77,6 +77,15 @@ it('real normal reset refuses unrecorded loading and old zero-history proof borr
     const denied=jsonResult(await f.run(['--workspace','contract','backtest','normal']),1);assert.equal(denied.code,'DEEP_RUN_UNSETTLED',kind);assert.equal(denied.mutation_dispatched,false,kind);assert.equal(page.manager.activeStrategyStatus.value().type,1,kind);assert.equal(page.facade._isDeepBacktesting,true,kind);assert.equal(page.dispatches(),0,kind);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null,kind);
   }
 });
+it('real normal reset permits exact completed history and refuses a later foreign completed GUI report',async t=>{
+  for(const foreign of [false,true]){const page=deepPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+    const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('completed-history-normal-v2');
+    const accepted=jsonResult(await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00Z','--to','2024-01-02T00:00:00Z','--request-id','owned-history']));await page.complete();
+    if(foreign){page.manager.requestData(1704240000000,1704326400000);await page.complete(999,1);const denied=jsonResult(await f.run(['--workspace','contract','backtest','normal']),1);assert.equal(denied.code,'DEEP_RUN_UNSETTLED');assert.equal(denied.mutation_dispatched,false);assert.equal(page.manager.activeStrategyStatus.value().type,2);assert.equal(page.facade._isDeepBacktesting,true);assert.equal(page.manager.activeStrategyReportData.value().performance.all.netProfit,999);}
+    else{page.manager._wsConnection.connected=true;const reset=jsonResult(await f.run(['--workspace','contract','backtest','normal']));assert.equal(reset.mode,'normal');assert.equal(page.manager.activeStrategyStatus.value(),null);assert.ok(accepted.run_id);}
+    assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+  }
+});
 
 it('real typed Properties CLI rejects invalid patches and untyped bypass before mutation, then verifies one matching cycle',async t=>{
   const page=propertiesPage();

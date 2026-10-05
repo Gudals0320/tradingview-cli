@@ -86,7 +86,7 @@ export async function resetNormal({_deps}={}){
     if(!settlement.settled)return {success:false,code:'DEEP_RUN_UNSETTLED',error:'An exact persistent native run is pending or unknown; normal reset cannot abandon it.',run_id:entry.record.run_id,intent_preserved:true,mutation_dispatched:false};
     store.update(entry,{...entry.record,phase:'settled',settlement});
   }
-  return inspect(`(()=>{${DEEP_PAGE_CODE};const run=window.__tvCliDeepRun;if(run){const status=inspectDeepSettlement(window,run.run_id);if(!status.settled)return {success:false,code:'DEEP_RUN_UNSETTLED',error:'Wait/reconcile the exact native job; normal reset does not abandon unknown outcomes.'};}
+  return inspect(`(()=>{${DEEP_PAGE_CODE};const run=window.__tvCliDeepRun;if(run){const status=inspectDeepSettlement(window,run.run_id);if(!status.settled)return {success:false,code:'DEEP_RUN_UNSETTLED',error:'Wait/reconcile the exact native job; normal reset does not abandon unknown outcomes.',mutation_dispatched:false};}
     const {facade,history}=findDeepReportProviders(document);if(!facade||!history||typeof facade.resetDeepBacktestingReportData!=='function')return {success:false,code:'DEEP_NATIVE_PATH_UNAVAILABLE',error:'Open the owned report with its native explicit reset capability.'};
     const admission=deepResetAdmission(window,facade,run);if(!admission.success)return admission;if(admission.already_normal)return {success:true,mode:'normal',performed:false,results_invalidated:false};
     const noHistory=run&&inspectDeepSettlement(window,run.run_id).no_history_dispatch_verified===true;
@@ -94,3 +94,4 @@ export async function resetNormal({_deps}={}){
     if(noHistory){const manager=facade._deepBacktestingManager,toolkit=nativeDeepToolkit(window);manager._sendRequest=originalDeepSender(manager,toolkit?.consumer_source,true);}
     delete window.__tvCliDeepRun;return {success:true,mode:'normal',results_invalidated:true};})()`,{mutation:true});
 }
+
