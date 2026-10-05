@@ -209,9 +209,10 @@ export async function updateStrategyAlert(window,request){
   const userId=toolkit.getAlertSession().user.value()?.id;
   if(userId===undefined||await strategyAlertHash(window,String(userId))!==request.account_hash)return {success:false,code:'STRATEGY_ALERT_ACCOUNT_CHANGED',mutation_dispatched:false};
   const target=new window.URL(rest._options.baseRestUrl+'/modify_restart_alert',rest._options.originUrl),original=rest._fetch,builder=handler._buildModifyRestartParams;
-  let expected=null,attempted=false,knownRejected=false;
+  let expected=null,attempted=false,knownRejected=false,diagnostic=null;
   handler._buildModifyRestartParams=function(dto,id){const built=builder.call(this,dto,id),base=JSON.parse(JSON.stringify({...prepared.wire,active:true,ignore_warnings:true,alert_id:request.alert_id,symbol_style:toolkit.deriveSymbolStyle(dto.conditions)})),withoutClient={...built};delete withoutClient.client_id;
-    if(id!==request.alert_id||!exact(JSON.parse(JSON.stringify(withoutClient)),base)||!['string','number'].includes(typeof built.client_id)||!String(built.client_id))throw Error('STRATEGY_ALERT_UPDATE_CHANGED');expected=JSON.parse(JSON.stringify({payload:built}));return built;};
+    const checks={alert_id:id===request.alert_id,wire:exact(JSON.parse(JSON.stringify(withoutClient)),base),client_id:['string','number'].includes(typeof built.client_id)&&!!String(built.client_id)};
+    if(Object.values(checks).some(value=>!value)){diagnostic={stage:'native_builder',checks,changed_fields:[...new Set([...Object.keys(base),...Object.keys(withoutClient)])].filter(key=>!exact(withoutClient[key],base[key]))};throw Error('STRATEGY_ALERT_UPDATE_CHANGED');}expected=JSON.parse(JSON.stringify({payload:built}));return built;};
   rest._fetch=async(url,options)=>{
     let body;try{body=JSON.parse(options.body);}catch{throw Error('STRATEGY_ALERT_UPDATE_CHANGED');}
     const actual=new window.URL(url);
@@ -220,7 +221,7 @@ export async function updateStrategyAlert(window,request){
     return {response,metrics:{delay:Date.now()-start,statusCode:response.status}};
   };
   try{await collection.modifyRestartAlert(request.alert_id,prepared.dto,{checkSecurityIssues:true});}
-  catch{return {success:false,code:!attempted?'STRATEGY_ALERT_NOT_DISPATCHED':knownRejected?'STRATEGY_ALERT_SERVER_REJECTED':'STRATEGY_ALERT_UPDATE_UNKNOWN',mutation_dispatched:attempted,known_no_mutation:!attempted||knownRejected,replay_safe:false};}
+  catch(error){return {success:false,code:!attempted?'STRATEGY_ALERT_NOT_DISPATCHED':knownRejected?'STRATEGY_ALERT_SERVER_REJECTED':'STRATEGY_ALERT_UPDATE_UNKNOWN',native_error_code:typeof error.code==='string'||typeof error.code==='number'?error.code:null,_private_diagnostic:diagnostic||{stage:'native_call',code:error.code??null,error_class:error.name},mutation_dispatched:attempted,known_no_mutation:!attempted||knownRejected,replay_safe:false};}
   finally{rest._fetch=original;handler._buildModifyRestartParams=builder;}
   if(!attempted)return {success:false,code:'STRATEGY_ALERT_UPDATE_UNKNOWN',mutation_dispatched:false};
   const after=await readStrategyAlert(window,{...request,wire:request.update_wire,active:true});return {...after,success:after.success&&after.active===true,code:after.success&&after.active===true?undefined:after.code||'STRATEGY_ALERT_UPDATE_UNVERIFIED',mutation_dispatched:true,restarted:true,snapshot_automatically_updated:false};
