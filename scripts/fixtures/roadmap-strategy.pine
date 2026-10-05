@@ -1,0 +1,23 @@
+//@version=6
+strategy("CLI Roadmap QA", overlay=true, initial_capital=10000, default_qty_type=strategy.fixed, default_qty_value=0.01, commission_type=strategy.commission.percent, commission_value=0.05, slippage=1, calc_on_every_tick=true)
+mode = input.string("cycle", "Case", options=["cycle", "zero", "open", "breakeven"])
+cycle = input.int(10, "Cycle", minval=4)
+if mode == "cycle"
+    if bar_index % cycle == 0
+        strategy.entry("QA-L", strategy.long, alert_message="qa-fill")
+    if bar_index % cycle == cycle / 2
+        strategy.close("QA-L", alert_message="qa-close")
+if mode == "open" and barstate.islastconfirmedhistory
+    strategy.entry("QA-OPEN", strategy.long, alert_message="qa-open")
+if mode == "breakeven"
+    if bar_index % cycle == 0
+        strategy.entry("QA-BE", strategy.long)
+    if strategy.position_size > 0
+        strategy.exit("QA-BE-EXIT", "QA-BE", limit=strategy.position_avg_price)
+if barstate.isrealtime and barstate.isnew
+    alert('{"qa":"roadmap46","kind":"pine-event"}', alert.freq_once_per_bar)
+plot(ta.sma(close, cycle))
+plot(strategy.equity, title="QA equity", display=display.data_window)
+plot(strategy.initial_capital + strategy.netprofit, title="QA realized capital", display=display.data_window)
+plot(strategy.netprofit, title="QA net PnL", display=display.data_window)
+plot(strategy.openprofit, title="QA open PnL", display=display.data_window)

@@ -93,13 +93,54 @@ tv workspace show research-a
 
 ## Pine과 백테스트
 
-Pine 문서는 기본 생성 조건이 아닙니다. 전용 탭에서 별도의 저장 문서를 준비하고
-해당 문서를 에디터에 연 뒤 현재 generation을 확인해 붙입니다. 이미 준비됐으면
+실제 적용 전략 Properties는 `strategy properties`로 읽습니다.
+`strategy set-properties --values JSON`은 전체 patch를 타입·단위·native 옵션으로 먼저 검사하고 한 번 적용한
+뒤 readback과 해당 계산 완료를 확인합니다. `indicator set`은 strategy_props 내부 ID
+변경을 거부합니다. [필드·통화·호환성 계약](docs/strategy-properties.md)을 확인하세요.
+
+개발 브랜치의 `backtest run --mode deep`은 별도 native Deep 작업을 명시 실행합니다.
+현재 검증된 native 계산은 UTC이며, from/to를 UTC 시각으로 정규화한 두 경계가 모두
+자정인 whole-day 구간만 지원합니다. 다른 시간대 계산·subday 구간은 전송 전에 거부합니다.
+개발 브랜치의 `data equity --list-plots`로 native plot ID를 확인하고,
+`data equity --plot-id plot_1`으로 사용자가 이미 추가한 `strategy.equity` plot을
+검증해 수집할 수 있습니다. source 자동 삽입은 하지 않으며, 순손익·수량·통화·수수료
+대조가 불충분하면 미검증으로 거부합니다. [equity 계약](docs/strategy-equity.md).
+status/wait/results는 순수 관측이며 일반 `data strategy`를 딥 결과로 대신 반환하지
+않습니다. [기간·timezone·응답 귀속·불명 작업 계약](docs/deep-backtesting.md)과
+[실제 Desktop 인수 근거·지원 한계](docs/roadmap46-validation.md)를 확인하세요.
+설치된 정식 2.2.0의 지원 목록과 구분하세요.
+
+개발 브랜치의 `alert strategy-create`는 검증된 전략의 체결·alert()·both 서버
+스냅샷을 만들고 정확한 ID로 설정을 재조회합니다. 고정 request ID 재호출은 기존
+결과를 확인하며 중복 생성하지 않습니다. 메시지는 그대로 전달하고 출력에는 hash만
+남깁니다. [전략 알림 계약](docs/strategy-alerts.md)의 fixture와 live 인수는 구분됩니다.
+설정 수정은 기존 스냅샷을 유지하고 알림을 활성화합니다. 명시적 전략 교체는
+`gap` 또는 `overlap` 정책을 사용하며 원자성을 보장하지 않습니다. 일반 보고서와
+원장은 `mode:normal`을 반환합니다. 미청산 원장의 `exit_time`은 null이고 native
+평가 시각은 `mark_time`으로 구분합니다.
+
+```powershell
+tv --workspace research-a alert strategy-create --request-id strategy-week-1 --mode both --name 'Research QA' --message '{{strategy.order.alert_message}}' --expiration 2027-01-01T00:00:00Z
+tv --workspace research-a alert strategy-get --request-id strategy-week-1
+tv --workspace research-a alert strategy-pause --request-id strategy-week-1 --operation-id stop-week-1
+tv --workspace research-a alert strategy-resume --request-id strategy-week-1 --operation-id restart-week-1
+tv --workspace research-a alert strategy-fires --request-id strategy-week-1 --limit 50
+tv --workspace research-a alert strategy-create-then-pause --request-id paused-week-1 --mode both --name 'Research QA paused' --message '{{strategy.order.alert_message}}' --expiration 2027-01-01T00:00:00Z
+tv --workspace research-a alert strategy-update --request-id strategy-week-1 --operation-id rename-week-1 --name 'Research QA renamed'
+tv --workspace research-a alert strategy-replace-plan --request-id strategy-week-1 --replacement-request-id strategy-week-2 --operation-id replace-week-1 --policy gap --mode both --name 'Research QA replacement' --message '{{strategy.order.alert_message}}' --expiration 2027-01-01T00:00:00Z
+tv --workspace research-a alert strategy-replace --request-id strategy-week-1 --replacement-request-id strategy-week-2 --operation-id replace-week-1 --policy gap --mode both --name 'Research QA replacement' --message '{{strategy.order.alert_message}}' --expiration 2027-01-01T00:00:00Z
+```
+
+Pine 문서는 기본 생성 조건이 아닙니다. chart-only workspace에서 명시적으로 새 저장
+문서를 준비하거나 정확한 저장 ID를 엽니다. 현재 generation과 재호출에 사용할 고정
+request ID가 필요합니다. `--mount`는 에디터만 열며 기존 수정 draft를 저장/폐기하지
+않습니다. 이미 준비됐으면
 `workspace create`에 `--pine 'USER;DOCUMENT'`를 지정해도 됩니다.
 
 ```powershell
 tv pine list
 tv workspace show research-a
+tv workspace pine-prepare research-a --create 'Research A Strategy' --file strategy.pine --request-id research-a-document --generation EXACT_GENERATION --mount
 tv workspace attach research-a --pine 'USER;DOCUMENT_A' --generation EXACT_GENERATION
 tv --workspace research-a pine set --file strategy.pine
 tv --workspace research-a pine compile --save
@@ -114,6 +155,13 @@ tv --workspace research-a data ledger --offset 0 --limit 100
 바인딩된 `pine new/open`은 문서 교체를 거부합니다. 전용 문서를 준비한 뒤 attach하거나,
 `workspace detach NAME --generation GEN`으로 차트-only로 전환합니다. GUI 수정 draft를
 몰래 버리거나 저장하지 않습니다. GUI 입력 변경은 CLI 잠금을 따르지 않습니다.
+
+`pine-prepare`는 생성/원격 저장 검증/열기/연결 결과와 ID·버전·generation을 반환합니다.
+기존 문서는 chart-only workspace에서 `--create` 대신 `--open 'USER;DOCUMENT_A'`로
+선택합니다. 수정되지 않은 저장 문서 전환은 previous_document에 기록됩니다. 문서
+생성은 탭 종료 소유권을 부여하지 않습니다. 응답 유실은 같은 request ID로 재개하며
+0개/여러 후보는 불명으로 보존합니다. 완료 뒤 옛 generation 재호출은 현재 generation
+안내와 함께 거부하며, 새 generation으로 재호출하면 중복 생성 없이 재사용합니다.
 
 `pine analyze`는 offline 휴리스틱이고 `pine check`는 차트 없이 서버에서 검사합니다.
 컴파일 완료·전략 계산·저장된 소스 일치·결과 검증은 별개입니다. 이미 검증된 동일
@@ -130,8 +178,8 @@ tv --workspace research-a data ledger --offset 100 --limit 100 --report-revision
 
 원장 페이지 간 revision이 바뀌면 `REPORT_CHANGED`로 거부하며 offset 0부터 다시
 수집해야 합니다. 데이터/히스토리는 실제 로드된 봉과 계정 권한 범위입니다. Deep
-Backtesting과 서버 전체 히스토리 완전성을 보장하지 않습니다. `data equity`는 해당
-Desktop 내부 배열이 제공될 때만 성공하며 buy-and-hold로 대체하지 않습니다.
+Backtesting과 서버 전체 히스토리 완전성을 보장하지 않습니다. `data equity`는 명시적인
+native plot과 수량·통화·수수료 대조를 검증해야 성공하며, 로드된 봉의 범위만 수집합니다.
 
 ## 병렬 작업과 관찰
 

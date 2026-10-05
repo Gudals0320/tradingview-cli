@@ -1,8 +1,19 @@
 import { requireFinite, requireInteger } from '../connection.js';
 import { alertCondition } from '../core/alerts.js';
+import { validateStrategyProperties } from '../strategy-properties.js';
+import { deepPeriod } from '../core/deep-backtest.js';
+import {validateStrategyAlert,validateStrategyAlertAction} from '../core/strategy-alerts.js';
+import {validateStrategyAlertUpdate,validateStrategyAlertReplacement} from '../core/strategy-alert-workflows.js';
 
 // A command without an entry accepts no positional arguments.
 export const POSITIONALS = new Map([
+  ['alert strategy-create',[0,0]],['alert strategy-get',[0,0]],
+  ['alert strategy-create-then-pause',[0,0]],
+  ['alert strategy-update',[0,0]],['alert strategy-replace-plan',[0,0]],['alert strategy-replace',[0,0]],
+  ['alert strategy-fires',[0,0]],
+  ['alert strategy-pause',[0,0]],['alert strategy-resume',[0,0]],['alert strategy-delete',[0,0]],
+  ['workspace backtest-archive',[1,1]],
+  ['workspace pine-prepare',[1,1]],
   ['workspace reconnect', [1, 1]], ['workspace attach', [1, 1]], ['workspace detach', [1, 1]],
   ['workspace reset',[1,1]],
   ['workspace create', [1, 1]], ['workspace select', [1, 1]], ['workspace import', [1, 1]], ['workspace show', [1, 1]],
@@ -23,6 +34,16 @@ export const POSITIONALS = new Map([
 ]);
 
 export function validateArguments(command, values, positionals) {
+  if(command==='alert strategy-update')validateStrategyAlertUpdate({request_id:values['request-id'],operation_id:values['operation-id'],name:values.name,message:values.message,expiration:values.expiration});
+  if(['alert strategy-replace','alert strategy-replace-plan'].includes(command))validateStrategyAlertReplacement({request_id:values['request-id'],operation_id:values['operation-id'],replacement_request_id:values['replacement-request-id'],policy:values.policy,mode:values.mode,name:values.name,message:values.message,expiration:values.expiration});
+  if(command==='alert strategy-fires'&&(!/^[-a-zA-Z0-9_]{1,100}$/.test(values['request-id']||'')||values.limit!==undefined&&(Number(values.limit)>50||Number(values.limit)<1)||values.before!==undefined&&(!Number.isSafeInteger(Number(values.before))||Number(values.before)<0)))throw Object.assign(Error('Pass exact request ID, limit 1..50 and a native fire-ID cursor.'),{code:'INVALID_STRATEGY_ALERT_LOG'});
+  if(['alert strategy-pause','alert strategy-resume','alert strategy-delete'].includes(command))validateStrategyAlertAction({request_id:values['request-id'],operation_id:values['operation-id'],action:command.slice('alert strategy-'.length),after_operation_id:values['after-operation-id']});
+  if(['alert strategy-create','alert strategy-create-then-pause'].includes(command))validateStrategyAlert({request_id:values['request-id'],mode:values.mode,name:values.name,message:values.message,expiration:values.expiration,active:!values.paused});
+  if(command==='alert strategy-get'&&!/^[-a-zA-Z0-9_]{1,100}$/.test(values['request-id']||''))throw Object.assign(Error('Pass the exact owned creation request ID.'),{code:'INVALID_STRATEGY_ALERT'});
+  if(command==='workspace backtest-archive'&&(!values['request-id']||!values['run-id']||!values['acknowledge-no-adoption']))throw Object.assign(new Error('Exact request/run IDs and --acknowledge-no-adoption are required.'),{code:'DEEP_ARCHIVE_CONFIRMATION_REQUIRED'});
+  if(command==='backtest run'){deepPeriod(values);if(values.mode!=='deep'||!values['request-id']||!/^[-a-zA-Z0-9_]{1,100}$/.test(values['request-id']))throw Object.assign(new Error('Pass --mode deep and a stable --request-id.'),{code:'INVALID_DEEP_REQUEST'});}
+  if(command==='strategy set-properties')validateStrategyProperties(JSON.parse(values.values||'null'));
+  if(command==='data equity'&&(values['list-plots']&&values['plot-id']||values.export&&!values['plot-id']||values['list-plots']&&values.export))throw Object.assign(new Error('Listing plots and collecting/exporting a selected plot are separate modes.'),{code:'INVALID_EQUITY_REQUEST'});
   const [min, max] = POSITIONALS.get(command) || [0, 0];
   if (positionals.length < min || positionals.length > max) {
     throw new Error(`${command} accepts ${min === max ? min : `${min} to ${max}`} positional arguments; received ${positionals.length}.`);
@@ -41,6 +62,7 @@ export function validateArguments(command, values, positionals) {
     requireInteger(values[name], `--${name}`, low, high);
   }
   for (const name of ['price', 'price2', 'time', 'time2', 'from', 'to', 'amount']) {
+    if(command==='backtest run'&&['from','to'].includes(name))continue;
     if (values[name] !== undefined) requireFinite(values[name], `--${name}`);
   }
   if (command === 'range' && ((values.from === undefined) !== (values.to === undefined))) {

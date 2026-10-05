@@ -7,6 +7,8 @@ import { nativeCheckpoint, nativeQuiescent } from '../session.js';
 import { waitForChartReady } from '../wait.js';
 import { reportExpression, STRATEGY_PAGE_CODE } from '../strategy-state.js';
 import { createHash } from 'node:crypto';
+import { projectStrategyProperties } from '../strategy-properties.js';
+import { EQUITY_PAGE_CODE } from '../equity-plot-page.js';
 
 const MAX_OHLCV_BARS = 500;
 const MAX_TRADES = 20;
@@ -192,7 +194,9 @@ export async function getIndicator({ entity_id }) {
 
 export async function getStrategyResults(options = {}) {
   const inspect = options._deps?.evaluate || evaluate;
-  return inspect(reportExpression({ strategy_id: options.strategy_id, strategy: options.strategy }));
+  const result=await inspect(reportExpression({ strategy_id: options.strategy_id, strategy: options.strategy }));
+  if(result.effective_properties)result.effective_properties=projectStrategyProperties(result.effective_properties);
+  return result;
 }
 
 export async function getTrades({ max_trades = 20, strategy_id, _deps } = {}) {
@@ -227,18 +231,20 @@ export async function getTradeLedger({ offset = 0, limit = 100, strategy_id, rep
     const ledger = item.report.trades;
     if (!Array.isArray(ledger)) return { success: false, code:'LEDGER_UNAVAILABLE', error: 'Trade ledger unavailable in this build.' };
     const time = strategyTime;
-    const trades = ledger.slice(${offset}, ${offset + limit}).map((trade, index) => ({
-      trade_seq: index + ${offset}, entry_time: time(trade.e?.tm), exit_time: time(trade.x?.tm),
-      open: !trade.x, timestamp_errors: ['e','x'].filter(key => trade[key]?.tm != null && time(trade[key].tm) == null),
-      entry_bar: trade.e?.b ?? null, exit_bar: trade.x?.b ?? null, raw: trade }));
-    return { success: true, strategy_id: summary.strategy_id, currency: summary.currency, total_trades: ledger.length,
+    const trades = ledger.slice(${offset}, ${offset + limit}).map((trade, index) => {
+      const open = strategyTradeIsOpen(trade);
+      return {trade_seq: index + ${offset}, entry_time: time(trade.e?.tm), exit_time: open ? null : time(trade.x?.tm),
+      open, mark_time: open ? time(trade.x?.tm) : null, mark_bar: open ? trade.x?.b ?? null : null,
+      timestamp_errors: ['e','x'].filter(key => trade[key]?.tm != null && time(trade[key].tm) == null),
+      entry_bar: trade.e?.b ?? null, exit_bar: open ? null : trade.x?.b ?? null, raw: trade };});
+    return { success: true,mode:summary.mode, strategy_id: summary.strategy_id, currency: summary.currency, total_trades: ledger.length,
       compilation_token:summary.compilation_token,source_hash:summary.source_hash,strategy_inputs:summary.strategy_inputs,
-      context:summary.context,backtest_window:summary.backtest_window,loaded_window:summary.loaded_window,trade_window:summary.trade_window,
+      context:summary.context,effective_properties:summary.effective_properties,backtest_window:summary.backtest_window,loaded_window:summary.loaded_window,trade_window:summary.trade_window,
       record_kind:'trade_ledger',order:'native_ordinal_ascending',
       units:{time_fields:'ISO-8601 UTC',raw_time:'native tm; magnitude < 1e11 interpreted as seconds, otherwise milliseconds'},
       _snapshot:JSON.stringify({strategy_id:summary.strategy_id,token:summary.compilation_token,source_hash:summary.source_hash,
         inputs:summary.strategy_inputs,symbol:summary.context.symbol,resolution:summary.context.resolution,chart_type:summary.context.chart_type,
-        performance:item.report.performance,settings:item.report.settings,trades:ledger}),
+        effective_properties:summary.effective_properties,performance:item.report.performance,settings:item.report.settings,trades:ledger}),
       offset: ${offset}, limit: ${limit}, trades, has_more: ${offset + limit} < ledger.length,
       next_offset: ${offset + limit} < ledger.length ? ${offset} + trades.length : null };
   })()`);
@@ -248,20 +254,20 @@ export async function getTradeLedger({ offset = 0, limit = 100, strategy_id, rep
   if (report_revision && report_revision !== revision) return { success: false, code: 'REPORT_CHANGED',
     error: 'Strategy report changed during pagination; restart collection at offset 0.',
     expected_revision: report_revision, report_revision: revision, strategy_id: page.strategy_id };
-  return { ...page, report_revision: revision };
+  return { ...page, ...(page.effective_properties?{effective_properties:projectStrategyProperties(page.effective_properties)}:{}),report_revision: revision };
 }
 
-export async function getEquity({ strategy_id, _deps } = {}) {
+export async function getEquity({ strategy_id,plot_id,offset=0,limit=100,report_revision,mode='normal',list_plots=false,export_all=false,_deps } = {}) {
+  if(!Number.isSafeInteger(offset)||offset<0||!Number.isInteger(limit)||limit<1||limit>500||!Number.isSafeInteger(offset+limit))throw Object.assign(new Error('Require safe offset >= 0 and limit 1..500.'),{code:'INVALID_EQUITY_REQUEST'});
+  if(mode!=='normal')return {success:false,code:'EQUITY_DEEP_UNSUPPORTED',error:'No verified native per-bar Deep equity plot path is available; no normal fallback.'};
+  if(list_plots&&plot_id||export_all&&!plot_id||list_plots&&export_all)throw Object.assign(new Error('list-plots and plot-id/export are separate modes; exporting requires an explicit plot-id.'),{code:'INVALID_EQUITY_REQUEST'});
+  if(plot_id||list_plots){const result=await (_deps?.evaluateAsync||_deps?.evaluate||evaluateAsync)(`(async()=>{${EQUITY_PAGE_CODE};return readEquityPlot(window,document,${JSON.stringify({strategy_id,plot_id,offset,limit,report_revision,list_plots,export_all})});})()`);return result.success?{...result,...(result.effective_properties?{effective_properties:projectStrategyProperties(result.effective_properties)}:{})}:result;}
   const inspect = _deps?.evaluate || evaluate;
   return inspect(`(() => { ${STRATEGY_PAGE_CODE};
     const summary = readStrategyReport(window, ${JSON.stringify({ strategy_id })});
     if (!summary.success) return summary;
-    const report = pageStrategies(window).find(item => item.id === summary.strategy_id).report;
-    const curve = report.equity || report.equityChart;
-    if (Array.isArray(curve)) return {success:true,data:curve,data_points:curve.length,source:'internal_api',strategy_id:summary.strategy_id};
     return {success:false,code:'EQUITY_UNAVAILABLE',data:[],data_points:0,
-      buy_hold_points:Array.isArray(report.buyHold)?report.buyHold.length:0,
-      error:'Per-bar equity is unavailable in this Desktop build; buy-and-hold is not strategy equity.'};
+      error:'Select an explicit native plot of strategy.equity; an untyped report array does not verify per-bar equity.'};
   })()`);
 }
 

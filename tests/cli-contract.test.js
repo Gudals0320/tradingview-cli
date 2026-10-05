@@ -3,23 +3,330 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync,existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import CDP from 'chrome-remote-interface';
 import { acquireSession, sessionPaths, sessionStatus } from '../src/session.js';
-import { reserveWorkspace, acquireWorkspace, noteWorkspaceState, workspaceStatus, loadWorkspace } from '../src/workspace-store.js';
+import { reserveWorkspace, acquireWorkspace, noteWorkspaceState, workspaceStatus, loadWorkspace,workspaceArtifactDirectory } from '../src/workspace-store.js';
 import { registerWorkspaceName, recordCreatedLayout } from '../src/workspace-registry.js';
 import { sourceHash } from '../src/session.js';
 import { runInNewContext } from 'node:vm';
 import { WORKSPACE_PAGE_CODE } from '../src/workspace-page.js';
 import { beginCompilation } from '../src/strategy-state.js';
 import { reportPage } from './fixtures/report-page.mjs';
-import { resourceLockStatus } from '../src/resource-lock.js';
+import { resourceLockStatus,acquireResources } from '../src/resource-lock.js';
+import { preparationPage } from './fixtures/preparation-page.mjs';
+import { propertiesPage } from './fixtures/properties-page.mjs';
+import { deepPage } from './fixtures/deep-page.mjs';
+import { equityPage } from './fixtures/equity-page.mjs';
+import {strategyAlertPage} from './fixtures/strategy-alert-page.mjs';
+import {createHash} from 'node:crypto';
 
 const CLI = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
+
+it('real update and staged replacement preserve source snapshots, explicit plans and no-replay partial outcomes',async t=>{
+  for(const policy of ['gap','overlap']){const page=strategyAlertPage(),f=await fixture(t,e=>page.evaluate(e),{snapshotFactory:page.snapshot,epochFactory:page.epoch}),ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('workflow-entry');page.refreshReport();page.completeInputs();
+    const creation=['--workspace','contract','alert','strategy-create','--request-id','old','--mode','both','--name','QA','--message','private','--expiration','2099-01-01T00:00:00Z'];jsonResult(await f.run(creation));
+    page.loseActionResponse();const update=['--workspace','contract','alert','strategy-update','--request-id','old','--operation-id','update-1','--name','Renamed','--message','changed private'];const uncertain=jsonResult(await f.run(update),1);assert.equal(uncertain.code,'STRATEGY_ALERT_UPDATE_UNKNOWN');assert.equal(page.counts().actions,1);const adopted=jsonResult(await f.run(update));assert.equal(adopted.reused,true);assert.equal(page.counts().actions,1);assert.equal(JSON.stringify(adopted).includes('changed private'),false);
+    const args=['--workspace','contract','alert','strategy-replace-plan','--request-id','old','--operation-id','replace-1','--replacement-request-id','new','--policy',policy,'--mode','alerts','--name','Replacement','--message','new private','--expiration','2099-01-01T00:00:00Z'],before=snapshot(f.root),plan=jsonResult(await f.run(args));assert.equal(plan.plan.atomic,false);assert.deepEqual(snapshot(f.root),before);assert.equal(page.counts().posts,1);
+    // Fresh pause response remains lost, so the replacement must retain exact partial progress.
+    const command=args.map(v=>v==='strategy-replace-plan'?'strategy-replace':v),partial=jsonResult(await f.run(command),1);assert.equal(partial.code,'STRATEGY_ALERT_REPLACEMENT_INCOMPLETE');assert.equal(partial.automatic_rollback,false);const completed=jsonResult(await f.run(command));assert.equal(completed.old_alert_id,101);assert.equal(completed.new_alert_id,102);assert.equal(page.server.get(101).active,false);assert.equal(page.server.get(102).active,true);assert.equal(page.server.get(7).message,'private user message');assert.equal(page.counts().posts,2);assert.equal(page.counts().actions,2);
+    const catalog=jsonResult(await f.run(['help','--json','alert','strategy-replace'])).commands[0];assert.equal(catalog.invocation,'native');assert.equal(catalog.scope,'app-shared');assert.deepEqual(catalog.locks,['app','layout','workspace','document']);
+  }
+});
+
+it('real strategy alert entry verifies modes and inactive creation, hides private payloads and reuses exact IDs without duplicate sends',async t=>{
+  for(const mode of ['fills','alerts','both']){
+    const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+    const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('native-alert-entry-v2');page.refreshReport();page.completeInputs();
+    const args=['--workspace','contract','alert','strategy-create','--request-id','owned-alert','--mode',mode,'--name','QA','--message','{"secret":"{{strategy.order.alert_message}}"}','--expiration','2099-01-01T00:00:00Z',...(mode==='both'?['--paused']:[])];
+    const output=await f.run(args),created=jsonResult(output);assert.equal(created.settings_verified,true);assert.equal(created.active,mode!=='both');assert.equal(created.server_event_observed,false);assert.equal(created.creation_provenance.server_source_hash_verified,false);assert.equal(created.creation_provenance.properties_fingerprint.length,64);assert.equal(output.stdout.includes('{{strategy.order.alert_message}}'),false);assert.equal(output.stdout.includes('private user message'),false);assert.equal(page.counts().posts,1);
+    const reused=jsonResult(await f.run(args));assert.equal(reused.reused,true);assert.equal(reused.alert_id,created.alert_id);assert.equal(page.counts().posts,1);
+    const before=snapshot(f.root),read=jsonResult(await f.run(['--workspace','contract','alert','strategy-get','--request-id','owned-alert']));assert.equal(read.alert_id,created.alert_id);assert.deepEqual(snapshot(f.root),before);assert.equal(page.counts().posts,1);
+    const catalog=jsonResult(await f.run(['help','--json','alert','strategy-create'])).commands[0];assert.equal(catalog.scope,'app-shared');assert.equal(catalog.invocation,'native');assert.deepEqual(catalog.locks,['app','layout','workspace','document']);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+  }
+});
+it('real strategy alert entry refuses foreign native targets and unexpected create endpoints with zero POST',async t=>{
+  const changes=[
+    p=>{const state=p.exports.getEditorStateForAlertFromStudy;p.exports.getEditorStateForAlertFromStudy=()=>({...state(),studyId:'ForeignScript'});},
+    ...['symbol','session','currency-id'].map(key=>p=>{const state=p.exports.getEditorStateForAlertFromStudy;p.exports.getEditorStateForAlertFromStudy=()=>{const s=state();return {...s,symbol:{...s.symbol,[key]:'FOREIGN'}};};}),
+    p=>{p.mainSeries.interval=()=> '240';},
+    p=>{p.source._getStudyIdWithLatestVersion=()=> 'ForeignScript';},
+    p=>{p.rest.createAlert=payload=>p.rest.request('alternate_create',payload);},
+    p=>{p.rest.createAlert=payload=>p.rest._fetch('https://pricealerts.tradingview.com/list_alerts',{method:'GET',credentials:'include',body:JSON.stringify({payload})});},
+    p=>{p.rest.createAlert=payload=>p.rest._fetch('https://pricealerts.tradingview.com/create_alert',{method:'POST',credentials:'include',headers:{'X-Unknown':'value'},body:JSON.stringify({payload})});},
+    p=>{p.rest.createAlert=()=>p.rest._fetch('https://pricealerts.tradingview.com/create_alert',{method:'POST',credentials:'include',body:'malformed'});},
+  ];
+  for(const change of changes){const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+    const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('foreign-alert-entry-v2');page.refreshReport();page.completeInputs();change(page);
+    const result=jsonResult(await f.run(['--workspace','contract','alert','strategy-create','--request-id','foreign-target','--mode','fills','--name','QA','--message','private message','--expiration','2099-01-01T00:00:00Z']),1);assert.equal(result.mutation_dispatched,false);assert.ok(['STRATEGY_ALERT_TARGET_UNVERIFIED','STRATEGY_ALERT_NOT_DISPATCHED'].includes(result.code));assert.equal(page.counts().posts,0);assert.equal(page.server.size,1);
+  }
+});
+it('real strategy alert reads flag a verified changed input/Properties baseline while preserving the server snapshot',async t=>{
+  const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('snapshot-alert-entry-v2');page.refreshReport();page.completeInputs();
+  const created=jsonResult(await f.run(['--workspace','contract','alert','strategy-create','--request-id','snapshot-alert','--mode','both','--name','QA','--message','private message','--expiration','2099-01-01T00:00:00Z'])),raw=JSON.stringify(page.server.get(created.alert_id));
+  jsonResult(await f.run(['--workspace','contract','strategy','set-properties','--values','{"commission_value":0.5}']));
+  const result=jsonResult(await f.run(['--workspace','contract','alert','strategy-get','--request-id','snapshot-alert']));assert.equal(result.snapshot_stale,true);assert.equal(result.current_snapshot.verified,true);assert.equal(result.current_snapshot.changes.inputs,true);assert.equal(result.current_snapshot.changes.properties,true);assert.equal(result.snapshot_automatically_updated,false);assert.equal(JSON.stringify(page.server.get(created.alert_id)),raw);assert.equal(page.counts().posts,1);
+});
+it('real owned fire log entry handles empty/native pages and never exposes message or external delivery details',async t=>{
+  const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('fires-entry-v2');page.refreshReport();page.completeInputs();const created=jsonResult(await f.run(['--workspace','contract','alert','strategy-create','--request-id','fires-alert','--mode','both','--name','QA','--message','private message','--expiration','2099-01-01T00:00:00Z']));
+  const args=['--workspace','contract','alert','strategy-fires','--request-id','fires-alert','--limit','2'];assert.equal(jsonResult(await f.run(args)).count,0);
+  page.fires.push(...[3,2,1].map(id=>({fire_id:id,alert_id:created.alert_id,fire_time:new Date(Date.UTC(2026,9,5,0,id)).toISOString(),message:'private fire body',webhook:{error:'private delivery'}})));
+  const output=await f.run(args),first=jsonResult(output);assert.equal(first.next_before,2);assert.equal(first.count,2);assert.equal(output.stdout.includes('private fire body'),false);assert.equal(output.stdout.includes('private delivery'),false);const next=jsonResult(await f.run([...args,'--before',String(first.next_before)]));assert.equal(next.count,1);assert.equal(next.end_of_observed_log,true);assert.equal(page.counts().posts,1);assert.equal(page.counts().actions,0);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+});
+it('real fire log entry rejects cursor violations, invalid order and impossible timestamps without publishing events',async t=>{
+  const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('fire-bounds-entry-v2');page.refreshReport();page.completeInputs();const created=jsonResult(await f.run(['--workspace','contract','alert','strategy-create','--request-id','fires-alert','--mode','both','--name','QA','--message','private message','--expiration','2099-01-01T00:00:00Z'])),row=id=>({fire_id:id,alert_id:created.alert_id,fire_time:'2024-02-28T00:00:00Z',message:'private'});
+  for(const rows of [[row(6)],[row(5)],[row(1),row(2)],[row(2),row(2)],[{...row(3),fire_time:'2024-02-30T00:00:00Z'}]]){page.rest.listFires=async()=>rows;const result=jsonResult(await f.run(['--workspace','contract','alert','strategy-fires','--request-id','fires-alert','--before','5']),1);assert.equal(result.code,'STRATEGY_ALERT_LOG_UNVERIFIED');assert.equal(result.data,undefined);assert.equal(page.counts().actions,0);assert.equal(page.counts().posts,1);}
+});
+it('real owned strategy alert lifecycle verifies pause/resume/delete and never retries lost action responses',async t=>{
+  const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('lifecycle-alert-entry-v2');page.refreshReport();page.completeInputs();
+  const created=jsonResult(await f.run(['--workspace','contract','alert','strategy-create','--request-id','owned-alert','--mode','both','--name','QA','--message','private message','--expiration','2099-01-01T00:00:00Z']));
+  for(const action of ['pause','resume','delete']){const args=['--workspace','contract','alert','strategy-'+action,'--request-id','owned-alert','--operation-id','owned-'+action],result=jsonResult(await f.run(args));assert.equal(result.desired_state_verified,true);assert.equal(result.alert_id,created.alert_id);const again=jsonResult(await f.run(args));assert.equal(again.reused,true);assert.equal(again.mutation_dispatched,false);}
+  assert.equal(page.counts().actions,3);assert.equal(page.server.get(7).message,'private user message');assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+});
+it('real owned strategy alert action reconciles the desired state after response loss with one mutation',async t=>{
+  const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('lost-lifecycle-entry-v2');page.refreshReport();page.completeInputs();
+  jsonResult(await f.run(['--workspace','contract','alert','strategy-create','--request-id','owned-alert','--mode','fills','--name','QA','--message','private message','--expiration','2099-01-01T00:00:00Z']));page.loseActionResponse();
+  const args=['--workspace','contract','alert','strategy-pause','--request-id','owned-alert','--operation-id','lost-pause'];const lost=jsonResult(await f.run(args),1);assert.equal(lost.code,'STRATEGY_ALERT_ACTION_UNKNOWN');assert.equal(page.counts().actions,1);const read=jsonResult(await f.run(args));assert.equal(read.reused,true);assert.equal(read.desired_state_verified,true);assert.equal(page.counts().actions,1);
+});
+it('real strategy alert creation reconciles the unchanged request after its expiration without another POST',async t=>{
+  const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('expired-reconcile-entry-v2');page.refreshReport();page.completeInputs();page.loseResponse();
+  const expiration=new Date(Date.now()+4000).toISOString(),args=['--workspace','contract','alert','strategy-create','--request-id','expired-reconcile','--mode','fills','--name','QA','--message','private message','--expiration',expiration],unknown=jsonResult(await f.run(args),1);assert.equal(unknown.code,'STRATEGY_ALERT_OUTCOME_UNKNOWN');assert.equal(page.counts().posts,1);
+  const path=join(workspaceArtifactDirectory(ws,f.options),'strategy-alert-request-'+createHash('sha256').update('expired-reconcile').digest('hex')+'.json'),before=JSON.parse(readFileSync(path,'utf8'));
+  await new Promise(resolve=>setTimeout(resolve,Math.max(0,Date.parse(expiration)-Date.now()+50)));
+  const result=jsonResult(await f.run(args));assert.equal(result.reused,true);assert.equal(result.run_id,unknown.run_id);assert.equal(result.alert_id,101);assert.equal(page.counts().posts,1);const after=JSON.parse(readFileSync(path,'utf8'));assert.equal(after.phase,'created');assert.equal(after.run_id,before.run_id);assert.equal(after.expiration,before.expiration);assert.deepEqual(after.wire,before.wire);
+  jsonError(await f.run(args.map(value=>value==='expired-reconcile'?'new-expired-request':value)),/new creation requires a future/,'INVALID_STRATEGY_ALERT');assert.equal(page.counts().posts,1);
+});
+it('real deleted-alert get and lost-delete reconciliation sanitize failed absence reads without replay',async t=>{
+  for(const lost of [false,true]){const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('safe-delete-entry-v2');page.refreshReport();page.completeInputs();
+    jsonResult(await f.run(['--workspace','contract','alert','strategy-create','--request-id','owned-alert','--mode','fills','--name','QA','--message','private message','--expiration','2099-01-01T00:00:00Z']));if(lost)page.loseActionResponse();const action=['--workspace','contract','alert','strategy-delete','--request-id','owned-alert','--operation-id','safe-delete'];jsonResult(await f.run(action),lost?1:0);
+    page.rest.getAlerts=async()=>{throw Object.assign(Error('private https://user:secret@example.test/body'),{code:'offline'});};const directory=workspaceArtifactDirectory(ws,f.options),paths=['strategy-alert-request-'+createHash('sha256').update('owned-alert').digest('hex')+'.json','strategy-alert-operation-request-'+createHash('sha256').update('safe-delete').digest('hex')+'.json'].map(name=>join(directory,name)),before=paths.map(path=>readFileSync(path,'hex')),output=await f.run(lost?action:['--workspace','contract','alert','strategy-get','--request-id','owned-alert']),result=jsonResult(output,1);assert.equal(result.code,'STRATEGY_ALERT_READBACK_FAILED');assert.equal((output.stdout+output.stderr).includes('secret'),false);assert.equal((output.stdout+output.stderr).includes('example.test'),false);assert.equal(page.counts().actions,1);assert.deepEqual(paths.map(path=>readFileSync(path,'hex')),before);
+  }
+});
+it('real creation reconciliation verifies server-added symbol attributes against the original owned wire without replay',async t=>{
+  const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('symbol-reconcile-entry-v2');page.refreshReport();page.completeInputs();page.loseResponse();
+  const args=['--workspace','contract','alert','strategy-create','--request-id','symbol-reconcile','--mode','alerts','--name','QA','--message','private message','--expiration','2099-01-01T00:00:00Z'];jsonResult(await f.run(args),1);page.server.get(101).symbol='='+JSON.stringify({adjustment:'splits',symbol:'FIXTURE:OWNED'});
+  const matched=jsonResult(await f.run(args));assert.equal(matched.server_added_symbol_fields.adjustment,'splits');assert.equal(matched.reused,true);assert.equal(matched.settings_verified,true);assert.equal(page.counts().posts,1);
+  page.server.get(101).symbol='='+JSON.stringify({adjustment:'dividends',symbol:'FIXTURE:OWNED'});const refused=jsonResult(await f.run(['--workspace','contract','alert','strategy-get','--request-id','symbol-reconcile']),1);assert.equal(refused.code,'STRATEGY_ALERT_READBACK_UNVERIFIED');assert.equal(page.counts().posts,1);
+});
+it('real symbol readback rejects nested foreign attributes in requested and originally pinned extra values',async t=>{
+  for(const kind of ['requested','added']){const page=strategyAlertPage();if(kind==='requested'){const state=page.exports.getEditorStateForAlertFromStudy;page.exports.getEditorStateForAlertFromStudy=()=>({...state(),symbol:{symbol:'FIXTURE:OWNED',extra:{original:'owned'}}});page.mainSeries.getAlertSymbolString=()=> '='+JSON.stringify({symbol:'FIXTURE:OWNED',extra:{original:'owned'}});}else page.mainSeries.getSymbolString=()=> '='+JSON.stringify({symbol:'FIXTURE:OWNED',adjustment:{mode:'splits'}});
+    const f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch}),ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('nested-symbol-entry-v2');page.refreshReport();page.completeInputs();const created=jsonResult(await f.run(['--workspace','contract','alert','strategy-create','--request-id','nested-symbol','--mode','alerts','--name','QA','--message','private message','--expiration','2099-01-01T00:00:00Z']));page.server.get(created.alert_id).symbol='='+JSON.stringify(kind==='requested'?{symbol:'FIXTURE:OWNED',extra:{original:'owned',foreign:'unowned'}}:{symbol:'FIXTURE:OWNED',adjustment:{mode:'splits',foreign:'unowned'}});
+    const result=jsonResult(await f.run(['--workspace','contract','alert','strategy-get','--request-id','nested-symbol']),1);assert.equal(result.code,'STRATEGY_ALERT_READBACK_UNVERIFIED');assert.equal(page.counts().posts,1);
+  }
+});
+it('real explicit create-then-pause distinguishes a non-atomic success and partial ACTIVE outcomes',async t=>{
+  for(const kind of ['success','failure','unknown']){const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch}),ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('two-step-paused-entry-v2');page.refreshReport();page.completeInputs();if(kind==='failure')page.rest.stopAlerts=async()=>{throw Error('native preflight failure');};if(kind==='unknown')page.loseActionResponse();
+    const args=['--workspace','contract','alert','strategy-create-then-pause','--request-id','two-step','--mode','both','--name','QA','--message','private','--expiration','2099-01-01T00:00:00Z'],result=jsonResult(await f.run(args),kind==='success'?0:1);assert.equal(result.atomic,false);assert.equal(result.steps.create.success,true);assert.equal(result.could_fire_during_active_window,true);assert.equal(page.counts().posts,1);if(kind==='success'){assert.equal(result.active,false);assert.ok(result.active_window.milliseconds>=0);jsonResult(await f.run(args));assert.equal(page.counts().posts,1);assert.equal(page.counts().actions,1);}else{assert.equal(result.active,kind==='unknown'?false:true);assert.equal(result.active_state,'ACTIVE_UNTIL_INACTIVE_VERIFIED');assert.equal(result.automatic_delete,false);assert.ok(result.next_commands[1].includes('-recovery-1'));}
+  }
+});
+it('real two-step recovery explicitly sends a new pause only after fresh active state and preserves original uncertainty',async t=>{
+  const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch}),ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('pause-recovery-entry-v2');page.refreshReport();page.completeInputs();const fetch=page.window.fetch;page.window.fetch=(url,options)=>new URL(url).pathname==='/stop_alerts'?Promise.reject(Error('lost before commit')):fetch(url,options);
+  const args=['--workspace','contract','alert','strategy-create-then-pause','--request-id','recover-pause','--mode','both','--name','QA','--message','private','--expiration','2099-01-01T00:00:00Z'],failed=jsonResult(await f.run(args),1);assert.equal(failed.active,true);const guidance=failed.next_commands[1].split(' '),newId=guidance[guidance.indexOf('--operation-id')+1],oldId=guidance[guidance.indexOf('--after-operation-id')+1],path=join(workspaceArtifactDirectory(ws,f.options),'strategy-alert-operation-request-'+createHash('sha256').update(oldId).digest('hex')+'.json'),before=readFileSync(path,'hex');page.window.fetch=fetch;
+  assert.equal(jsonResult(await f.run(['--workspace','contract','alert','strategy-get','--request-id','recover-pause'])).active,true);const recovered=jsonResult(await f.run(['--workspace','contract','alert','strategy-pause','--request-id','recover-pause','--operation-id',newId,'--after-operation-id',oldId]));assert.equal(recovered.active,false);assert.equal(page.counts().actions,1);assert.equal(page.counts().posts,1);assert.equal(readFileSync(path,'hex'),before);
+});
+it('real strategy alert entry reconciles a lost server response without SDK or CLI create retries',async t=>{
+  const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('lost-alert-entry-v2');page.refreshReport();page.completeInputs();page.loseResponse();
+  const args=['--workspace','contract','alert','strategy-create','--request-id','lost-alert','--mode','both','--name','QA','--message','private message','--expiration','2099-01-01T00:00:00Z'];
+  const unknown=jsonResult(await f.run(args),1);assert.equal(unknown.code,'STRATEGY_ALERT_OUTCOME_UNKNOWN');assert.equal(page.counts().posts,1);
+  const reused=jsonResult(await f.run(args));assert.equal(reused.reused,true);assert.equal(reused.settings_verified,true);assert.equal(page.counts().posts,1);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+});
+it('invalid strategy alert options fail before Desktop or intent writes and foreign readback never publishes secrets',async t=>{
+  const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch}),before=snapshot(f.root);
+  jsonError(await f.run(['--workspace','contract','alert','strategy-create','--request-id','invalid','--mode','wrong']),/Mode must be/,'INVALID_STRATEGY_ALERT');assert.deepEqual(snapshot(f.root),before);assert.equal(f.connections,0);
+  jsonResult(await f.run(['--workspace','contract','alert','strategy-get','--request-id','not-owned']),1);assert.equal(page.counts().posts,0);assert.equal(page.server.get(7).message,'private user message');
+});
+
+it('real equity entry refuses malformed time/schema/count and ambiguous same-bar allocation without points or CSV',async t=>{
+  const changes=[
+    p=>{p.report().trades[0].x.tm=p.times[1];p.report().trades[0].x.p=120;p.report().trades[1].x.tm=p.times[0];p.report().trades[1].x.p=110;},
+    p=>{delete p.report().trades[1].x.c;p.report().performance.all.totalTrades=1;p.report().performance.all.netProfit=10;p.report().performance.openPL=25;},
+    p=>{const r=p.report();r.trades[1].e.tm=p.times[0];r.trades[1].x.tm=p.times[0];r.trades[2].e.tm=p.times[0]+1800000;r.trades[2].x={tm:p.times[1],p:105,c:'exit',tp:'lx'};r.performance.all.totalTrades=3;r.performance.all.netProfit=35;r.performance.openPL=0;p.values[0]=1030;p.values[1]=1035;},
+    p=>{p.report().performance.all.totalTrades=1;},
+  ];
+  for(const change of changes){const page=equityPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+    const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('equity-schema-entry-v2');change(page);page.refreshReport();page.completeInputs();
+    const csv=join(f.root,'unverified.csv'),result=jsonResult(await f.run(['--workspace','contract','data','equity','--plot-id','plot_0','--export',csv]),1);assert.equal(result.code,'EQUITY_SEMANTICS_UNVERIFIED');assert.equal(result.data,undefined);assert.equal(existsSync(csv),false);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+  }
+});
+it('real equity entry returns verified finite native plot pages and refuses fake plots, changed revisions and Deep fallback',async t=>{
+  const page=equityPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('equity-entry-v2');page.refreshReport();page.completeInputs();
+  const args=['--workspace','contract','data','equity','--plot-id','plot_0','--limit','1'];
+  const first=jsonResult(await f.run(args));assert.equal(first.total_points,3);assert.equal(first.data.length,1);assert.equal(first.semantic_proof.verified,true);assert.equal(first.effective_properties.fingerprint.length,64);
+  const second=jsonResult(await f.run([...args,'--offset','1','--report-revision',first.report_revision]));assert.equal(second.report_revision,first.report_revision);assert.equal(second.data[0].equity,1030);
+  const catalog=jsonResult(await f.run(['--workspace','contract','data','equity','--list-plots']));assert.equal(catalog.plot_values_verified,false);assert.equal(catalog.plots[0].plot_id,'plot_0');
+  const csv=join(f.root,'equity.csv'),exported=jsonResult(await f.run([...args,'--export',csv]));assert.equal(exported.export.rows,3);assert.equal(exported.export.report_revision,first.report_revision);assert.equal(exported._export_rows,undefined);assert.equal(readFileSync(csv,'utf8').trim().split(/\r?\n/).length,4);
+  const previous=readFileSync(csv,'utf8');jsonError(await f.run([...args,'--export',csv]),/already exists/,'EQUITY_EXPORT_EXISTS');assert.equal(readFileSync(csv,'utf8'),previous);
+  const wrong=jsonResult(await f.run(['--workspace','contract','data','equity','--plot-id','plot_9']),1);assert.equal(wrong.code,'EQUITY_PLOT_UNVERIFIED');
+  const rejectedCsv=join(f.root,'rejected.csv');jsonResult(await f.run(['--workspace','contract','data','equity','--plot-id','plot_9','--export',rejectedCsv]),1);assert.equal(existsSync(rejectedCsv),false);
+  const deep=jsonResult(await f.run(['--workspace','contract','data','equity','--plot-id','plot_0','--mode','deep']),1);assert.equal(deep.code,'EQUITY_DEEP_UNSUPPORTED');assert.equal(deep.data,undefined);
+  assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+});
+
+it('real Deep CLI pins native source and response identity, pages one revision and rejects later foreign reports',async t=>{
+  const page=deepPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('deep-entry-compiled-v2');
+  const args=['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00Z','--to','2024-01-02T00:00:00Z','--request-id','deep-entry'];
+  const accepted=jsonResult(await f.run(args));assert.equal(accepted.mode,'deep');assert.equal(accepted.phase,'pending');assert.equal(page.dispatches(),1);
+  await page.complete(10);const ready=jsonResult(await f.run(['--workspace','contract','backtest','wait','--run-id',accepted.run_id,'--timeout','1000']));assert.equal(ready.phase,'ready');
+  const first=jsonResult(await f.run(['--workspace','contract','backtest','results','--run-id',accepted.run_id,'--limit','1']));assert.equal(first.performance.all.netProfit,10);assert.equal(first.ledger.rows.length,1);assert.equal(first.snapshot.period_validation,'once_per_snapshot');
+  const repeated=jsonResult(await f.run(args));assert.equal(repeated.reused,true);assert.equal(page.dispatches(),1);
+  await page.complete(999,99);const foreign=jsonResult(await f.run(['--workspace','contract','backtest','results','--run-id',accepted.run_id]),1);assert.equal(foreign.code,'DEEP_REPORT_UNVERIFIED');assert.equal(foreign.performance,undefined);
+  const reset=jsonResult(await f.run(['--workspace','contract','backtest','normal']),1);assert.equal(reset.code,'DEEP_RUN_UNSETTLED');assert.ok(page.window.__tvCliDeepRun);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+});
+it('real Deep entry rejects stale manager kernel and tiny periods with zero native dispatch',async t=>{
+  const page=deepPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('deep-entry-compiled-v2');
+  const before=snapshot(f.root),requests=f.requests.length;
+  const timezone=jsonError(await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00Z','--to','2024-01-02T00:00:00Z','--timezone','Asia/Seoul','--request-id','unsupported-zone']),/Only native UTC/,'DEEP_TIMEZONE_UNSUPPORTED');
+  assert.equal(timezone.details.mutation_dispatched,false);assert.equal(f.requests.length,requests);assert.deepEqual(snapshot(f.root),before);assert.equal(page.dispatches(),0);
+  const precision=jsonError(await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-03-10T00:00:00-05:00','--to','2024-03-11T00:00:00-04:00','--request-id','unsupported-subday']),/UTC midnight/,'DEEP_PERIOD_PRECISION_UNSUPPORTED');assert.equal(precision.details.mutation_dispatched,false);assert.equal(f.requests.length,requests);assert.deepEqual(snapshot(f.root),before);
+  jsonError(await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00.100Z','--to','2024-01-01T00:00:00.900Z','--request-id','tiny']),/whole seconds/,'INVALID_DEEP_PERIOD');
+  page.manager._activeStrategyInputs.value=()=>({studyName:'wrong',inputs:{text:'wrong',pineId:'foreign',pineVersion:9},dependencies:[]});
+  const denied=jsonResult(await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00Z','--to','2024-01-02T00:00:00Z','--request-id','stale']),1);assert.equal(denied.code,'DEEP_KERNEL_UNVERIFIED');assert.equal(denied.mutation_dispatched,false);assert.equal(page.dispatches(),0);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+});
+it('real Deep entry rejects independently mismatched symbol, interval and each native input field without dispatch',async t=>{
+  const page=deepPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('deep-matrix-compiled-v2');
+  const symbol=page.manager._symbolString.value,resolution=page.manager._resolution.value,kernel=page.manager._activeStrategyInputs.value;
+  const changes=[
+    ['symbol',()=>{page.manager._symbolString.value=()=> 'FOREIGN';},'DEEP_CONTEXT_UNVERIFIED'],
+    ['resolution',()=>{page.manager._resolution.value=()=>({value:()=> '240',isTicks:()=>false,isRange:()=>false});},'DEEP_CONTEXT_UNVERIFIED'],
+    ...['text','pineId','pineVersion','prop_fee','prop_qty_type'].map(id=>[id,()=>{page.manager._activeStrategyInputs.value=()=>{const n=kernel();n.inputs[id]=typeof n.inputs[id]==='object'?{...n.inputs[id],v:'foreign'}:'foreign';return n;};},'DEEP_KERNEL_UNVERIFIED']),
+  ];
+  for(const [name,change,code] of changes){page.manager._symbolString.value=symbol;page.manager._resolution.value=resolution;page.manager._activeStrategyInputs.value=kernel;change();
+    const denied=jsonResult(await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00Z','--to','2024-01-02T00:00:00Z','--request-id','matrix-'+name]),1);assert.equal(denied.code,code,name);assert.equal(denied.mutation_dispatched,false,name);assert.equal(page.dispatches(),0,name);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null,name);
+  }
+});
+it('real normal reset settles a known pre-wire refusal, clears its native loading state and preserves the private record',async t=>{
+  const page=deepPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('deep-normal-zero-v2');
+  const original=page.manager._sendRequest;page.manager._sendRequest=function(method,args){const result=original.call(this,method,args);if(method==='history_create_session')this._sessionid='foreign';return result;};
+  const args=['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00Z','--to','2024-01-02T00:00:00Z','--request-id','zero-normal'];
+  jsonError(await f.run(args),/DEEP_REQUEST_CHANGED/);assert.equal(page.dispatches(),0);assert.equal(page.manager.activeStrategyStatus.value().type,1);
+  const status=jsonResult(await f.run(['--workspace','contract','backtest','status']),1);assert.equal(status.no_history_dispatch_verified,true);
+  const normal=jsonResult(await f.run(['--workspace','contract','backtest','normal']));assert.equal(normal.mode,'normal');assert.equal(page.window.__tvCliDeepRun,undefined);assert.equal(page.manager.activeStrategyStatus.value(),null);assert.equal(page.dispatches(),0);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+});
+it('real normal reset refuses unrecorded loading and old zero-history proof borrowed by a replaced native provider',async t=>{
+  for(const kind of ['unrecorded','provider']){const page=deepPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+    const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('normal-unrecorded-v2');
+    if(kind==='provider'){const original=page.manager._sendRequest;page.manager._sendRequest=function(method,args){const result=original.call(this,method,args);if(method==='history_create_session')this._sessionid='foreign';return result;};
+      jsonError(await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00Z','--to','2024-01-02T00:00:00Z','--request-id','old-zero']),/DEEP_REQUEST_CHANGED/);
+      page.window.__deepFacade={...page.facade,_deepBacktestingManager:{...page.manager}};page.evaluate('document.__deepRoot.__reactFiber$deep.memoizedProps.value=window.__deepFacade');
+    }else{page.facade._isDeepBacktesting=true;page.manager.activeStrategyStatus.set({type:1});}
+    const denied=jsonResult(await f.run(['--workspace','contract','backtest','normal']),1);assert.equal(denied.code,kind==='provider'?'DEEP_RUN_SUPERSEDED':'DEEP_RUN_UNSETTLED',kind);assert.equal(denied.mutation_dispatched,false,kind);assert.equal(page.manager.activeStrategyStatus.value().type,1,kind);assert.equal(page.facade._isDeepBacktesting,true,kind);assert.equal(page.dispatches(),0,kind);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null,kind);
+  }
+});
+it('real normal reset permits exact completed history and refuses a later foreign completed GUI report',async t=>{
+  for(const foreign of [false,true]){const page=deepPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+    const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('completed-history-normal-v2');
+    const accepted=jsonResult(await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00Z','--to','2024-01-02T00:00:00Z','--request-id','owned-history']));await page.complete();
+    if(foreign){page.manager.requestData(1704240000000,1704326400000);await page.complete(999,1);const denied=jsonResult(await f.run(['--workspace','contract','backtest','normal']),1);assert.equal(denied.code,'DEEP_RUN_SUPERSEDED');assert.equal(denied.mutation_dispatched,false);assert.equal(page.manager.activeStrategyStatus.value().type,2);assert.equal(page.facade._isDeepBacktesting,true);assert.equal(page.manager.activeStrategyReportData.value().performance.all.netProfit,999);}
+    else{page.manager._wsConnection.connected=true;const reset=jsonResult(await f.run(['--workspace','contract','backtest','normal']));assert.equal(reset.mode,'normal');assert.equal(page.manager.activeStrategyStatus.value(),null);assert.ok(accepted.run_id);}
+    assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+  }
+});
+it('real CLI keeps unknown and pending Deep record bytes after GUI replacement and refuses archive',async t=>{
+  for(const kind of ['unknown','pending']){
+    const page=deepPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+    const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('unknown-replacement-v2');
+    if(kind==='unknown'){const send=page.manager._sendRequest;page.manager._sendRequest=function(method,args){if(method==='history_create_session'){const result=send.call(this,method,args);this._wsConnection.send=raw=>JSON.parse(raw).m!=='request_history_data';return result;}return send.call(this,method,args);};}
+    const run=await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00Z','--to','2024-01-02T00:00:00Z','--request-id','unresolved']);
+    if(kind==='unknown')jsonError(run,/DEEP_TRANSPORT_UNCONFIRMED/);else jsonResult(run);
+    const path=join(workspaceArtifactDirectory(ws,f.options),'deep-request-'+createHash('sha256').update('unresolved').digest('hex')+'.json'),before=readFileSync(path,'hex'),record=JSON.parse(readFileSync(path,'utf8'));
+    page.manager._requestId++;page.manager._fromDate+=86400000;
+    const status=jsonResult(await f.run(['--workspace','contract','backtest','status','--run-id',record.run_id]),1);assert.equal(status.code,'DEEP_RUN_SUPERSEDED');assert.equal(status.archive_eligible,false);assert.equal(status.supersession_recorded,false);assert.equal(readFileSync(path,'hex'),before);
+    jsonError(await f.run(['workspace','backtest-archive','contract','--request-id','unresolved','--run-id',record.run_id,'--acknowledge-no-adoption']),/pending\/unknown/,'DEEP_ARCHIVE_OUTCOME_UNKNOWN');assert.equal(readFileSync(path,'hex'),before);
+  }
+});
+it('real supersession metadata honors the archive mutex and never resurrects an archived record',async t=>{
+  const page=deepPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('archive-mutex-v2');
+  const accepted=jsonResult(await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00Z','--to','2024-01-02T00:00:00Z','--request-id','archive-mutex']));await page.complete();page.manager.requestData(1704240000000,1704326400000);await page.complete(999,1);
+  const path=join(workspaceArtifactDirectory(ws,f.options),'deep-request-'+createHash('sha256').update('archive-mutex').digest('hex')+'.json'),before=readFileSync(path,'hex'),args=['--workspace','contract','backtest','status','--run-id',accepted.run_id];
+  const mutex=await acquireResources(['workspace:'+ws.id],{...f.options,command:'archive mutex owner'});
+  try{const status=jsonResult(await f.run(args),1);assert.equal(status.code,'DEEP_RUN_SUPERSEDED');assert.equal(status.supersession_recorded,false);assert.equal(status.archive_eligible,false);assert.equal(status.metadata_warning.code,'LOCK_TIMEOUT');assert.equal(readFileSync(path,'hex'),before);}finally{mutex.release();}
+  assert.equal(jsonResult(await f.run(args),1).supersession_recorded,true);
+  jsonResult(await f.run(['workspace','backtest-archive','contract','--request-id','archive-mutex','--run-id',accepted.run_id,'--acknowledge-no-adoption']));const archived=readFileSync(path,'hex');
+  const later=jsonResult(await f.run(args),1);assert.equal(later.record_archived,true);assert.equal(later.supersession_recorded,false);assert.equal(readFileSync(path,'hex'),archived);assert.equal(page.manager.activeStrategyReportData.value().performance.all.netProfit,999);
+});
+it('superseded runs have an explicit offline record archive, preserving evidence without touching GUI work or trapping new requests',async t=>{
+  const page=deepPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('superseded-archive-v2');
+  const accepted=jsonResult(await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00Z','--to','2024-01-02T00:00:00Z','--request-id','old-owned']));
+  const pendingPath=join(workspaceArtifactDirectory(ws,f.options),'deep-request-'+createHash('sha256').update('old-owned').digest('hex')+'.json'),pendingBytes=readFileSync(pendingPath,'hex');
+  jsonError(await f.run(['workspace','backtest-archive','contract','--request-id','old-owned','--run-id',accepted.run_id,'--acknowledge-no-adoption']),/pending\/unknown/,'DEEP_ARCHIVE_OUTCOME_UNKNOWN');assert.equal(readFileSync(pendingPath,'hex'),pendingBytes);
+  jsonError(await f.run(['workspace','backtest-archive','contract','--request-id','old-owned','--run-id','wrong-id','--acknowledge-no-adoption']),/identity does not match/,'DEEP_ARCHIVE_ID_MISMATCH');assert.equal(readFileSync(pendingPath,'hex'),pendingBytes);
+  await page.complete();
+  page.manager.requestData(1704240000000,1704326400000);await page.complete(999,1);
+  const status=jsonResult(await f.run(['--workspace','contract','backtest','status','--run-id',accepted.run_id]),1);assert.equal(status.code,'DEEP_RUN_SUPERSEDED');assert.equal(status.result_adopted,false);
+  const recordPath=join(workspaceArtifactDirectory(ws,f.options),'deep-request-'+createHash('sha256').update('old-owned').digest('hex')+'.json'),store={read:()=>JSON.parse(readFileSync(recordPath,'utf8'))},before=store.read(),requests=f.requests.length;
+  const archive=['workspace','backtest-archive','contract','--request-id','old-owned','--run-id',accepted.run_id,'--acknowledge-no-adoption'];
+  jsonError(await f.run(archive.slice(0,-1)),/acknowledge-no-adoption/,'DEEP_ARCHIVE_CONFIRMATION_REQUIRED');assert.deepEqual(store.read(),before);
+  const archived=jsonResult(await f.run(archive));assert.equal(archived.native_state_changed,false);assert.equal(archived.record_preserved,true);assert.equal(archived.result_adopted,false);assert.equal(f.requests.length,requests);assert.equal(page.manager.activeStrategyReportData.value().performance.all.netProfit,999);
+  const preserved=store.read();assert.equal(preserved.phase,'archived_unadopted');assert.deepEqual(preserved.source_proof,before.source_proof);assert.deepEqual(preserved.result,before.result);
+  assert.equal(jsonResult(await f.run(archive)).reused,true);
+  const next=jsonResult(await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-05T00:00:00Z','--to','2024-01-06T00:00:00Z','--request-id','new-owned']));assert.equal(next.phase,'pending');assert.notEqual(next.run_id,accepted.run_id);assert.equal(page.dispatches(),3);
+});
+
+it('real typed Properties CLI rejects invalid patches and untyped bypass before mutation, then verifies one matching cycle',async t=>{
+  const page=propertiesPage();
+  const f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile();
+  const invalid=jsonError(await f.run(['--workspace','contract','strategy','set-properties','--values','{"commission_value":0.1,"slippage":-1}']),/slippage/,'INVALID_STRATEGY_PROPERTIES');assert.equal(invalid.details.mutation_dispatched,false);assert.equal(page.mutations(),0);
+  jsonError(await f.run(['--workspace','contract','indicator','set','owned-study','--inputs','{"prop_fee":0.1}']),/typed strategy Properties/,'STRATEGY_PROPERTY_COMMAND_REQUIRED');assert.equal(page.mutations(),0);
+  const unsupported=jsonResult(await f.run(['--workspace','contract','strategy','set-properties','--values','{"slippage":1}']),1);assert.equal(unsupported.code,'STRATEGY_PROPERTY_UNSUPPORTED');assert.equal(unsupported.mutation_dispatched,false);assert.equal(page.mutations(),0);
+  const changed=jsonResult(await f.run(['--workspace','contract','strategy','set-properties','--values','{"commission_value":0.2,"default_qty_value":2}']));assert.equal(changed.report_ready,true);assert.equal(changed.effective_properties.values.commission_value,0.2);assert.equal(changed.effective_properties.values.default_qty_value,2);assert.equal(changed.effective_properties.fingerprint.length,64);assert.equal(page.mutations(),1);
+  const read=jsonResult(await f.run(['--workspace','contract','strategy','properties']));assert.equal(read.effective_properties.fingerprint,changed.effective_properties.fingerprint);
+  const catalog=jsonResult(await f.run(['help','--json','strategy','set-properties'])).commands[0];assert.equal(catalog.invocation,'native');assert.deepEqual(catalog.locks,['layout','workspace','document']);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+});
+it('real Properties guard rejects an unrequested simultaneous native change instead of publishing success',async t=>{
+  const page=propertiesPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile();page.extraChange();
+  const result=jsonError(await f.run(['--workspace','contract','strategy','set-properties','--values','{"commission_value":0.2}']),/WORKSPACE_EXTERNAL_CHANGE/,'WORKSPACE_EXTERNAL_CHANGE');assert.equal(result.success,false);assert.equal(page.mutations(),1);assert.ok(workspaceStatus(ws.file,f.options).interrupted);
+});
+it('real Properties permission never adopts an unrequested Pine saved-version change',async t=>{
+  const page=propertiesPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile();page.changeVersionDuringSetter();
+  jsonError(await f.run(['--workspace','contract','strategy','set-properties','--values','{"commission_value":0.2}']),/WORKSPACE_EXTERNAL_CHANGE/,'WORKSPACE_EXTERNAL_CHANGE');assert.equal(page.mutations(),1);assert.ok(workspaceStatus(ws.file,f.options).interrupted);assert.notEqual(loadWorkspace(ws.file,f.options).binding.snapshot?.version,2);
+});
+
+it('real Pine preparation reassigns then binds, retains browser proof, and resumes without duplicate creation',async t=>{
+  const page=preparationPage();
+  const f=await fixture(t,expression=>page.evaluate(expression),{pine:null,snapshotFactory:page.snapshot});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);
+  const args=['workspace','pine-prepare','contract','--create','QA fixture','--request-id','request-one','--generation','fixture-generation'];
+  const first=jsonResult(await f.run(args));
+  assert.equal(first.document.id,'QA;fixture');assert.equal(first.document.version,'1.0');assert.deepEqual(first.stages,{created:true,persistence_verified:true,opened:true,attached:true});assert.equal(first.residual_resources.tab_ownership_changed,false);
+  const bound=loadWorkspace(ws.file,f.options);assert.equal(bound.binding.browser,'fixture-browser');assert.equal(bound.pine,'QA;fixture');assert.equal(bound.binding.nonce,first.generation);assert.equal(page.creates(),1);
+  const stale=jsonError(await f.run(args),/current --generation/,'WORKSPACE_GENERATION_CHANGED');assert.equal(stale.details.preparation_phase,'complete');assert.equal(stale.details.current_generation,first.generation);
+  const resumed=jsonResult(await f.run([...args.slice(0,-1),first.generation]));assert.equal(resumed.reused,true);assert.equal(resumed.generation,first.generation);assert.equal(page.creates(),1);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+});
+it('real Pine preparation refuses a foreign draft before saving and reports unchanged stages',async t=>{
+  const page=preparationPage(),f=await fixture(t,expression=>page.evaluate(expression),{pine:null,snapshotFactory:page.snapshot});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.setModified(true);
+  const result=jsonError(await f.run(['workspace','pine-prepare','contract','--create','QA fixture','--request-id','request-draft','--generation','fixture-generation']),/editor draft is preserved/,'PINE_FOREIGN_DRAFT');
+  assert.equal(result.code,'PINE_FOREIGN_DRAFT');assert.equal(result.details.stages,null);assert.equal(result.details.residual_resources.saved_document,null);assert.equal(page.creates(),0);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+});
+it('real unknown open provides an exact new open request, which recovers without creating another document',async t=>{
+  const page=preparationPage(),f=await fixture(t,expression=>page.evaluate(expression),{pine:null,snapshotFactory:page.snapshot});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.setOpenFailure(true);
+  const args=['workspace','pine-prepare','contract','--create','QA fixture','--request-id','unknown-open','--generation','fixture-generation'];
+  const error=jsonError(await f.run(args),/native open response unknown/);
+  assert.ok(error.details.next_commands.at(-1).includes("--open 'QA;fixture'"));assert.ok(error.details.next_commands.at(-1).includes('--request-id open-recovery-'));assert.equal(page.creates(),1);
+  page.setOpenFailure(false);const opened=jsonResult(await f.run(['workspace','pine-prepare','contract','--open','QA;fixture','--request-id','safe-open-after-unknown','--generation','fixture-generation']));
+  assert.equal(opened.stages.created,false);assert.equal(opened.stages.attached,true);assert.equal(opened.document.id,'QA;fixture');assert.equal(page.creates(),1);
+});
 
 // Exercise the real entry point, parser, router and filesystem ownership code.
 // An isolated HTTP endpoint counts unexpected Desktop access; no real Desktop,
@@ -95,6 +402,10 @@ async function fixture(t, pageResult, { pine = 'owned-document', snapshotFactory
   return { root, options, requests, run, set targets(value) { targets = value; }, get connections() { return connections; } };
 }
 
+it('real ledger entry keeps open valuation separate from a closed exit and preserves raw native timestamps',async t=>{
+  const page=reportPage(),f=await fixture(t,e=>page.evaluate(e),{snapshotFactory:page.snapshot,epochFactory:page.epoch}),ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('open-native-ledger');const report=page.window.TradingViewApi._activeChartWidgetWV.value()._chartWidget.model().model().dataSources()[0].reportData().value();report.performance.all.totalTrades=0;report.trades=[{e:{c:'QA-OPEN',tp:'le',tm:1704067200000,b:1},x:{c:'',tp:'lx',tm:1704153600000,b:2,p:100},q:1}];
+  const result=jsonResult(await f.run(['--workspace','contract','data','ledger','--limit','100'])),row=result.trades[0];assert.equal(result.mode,'normal');assert.equal(row.open,true);assert.equal(row.exit_time,null);assert.equal(row.mark_time,'2024-01-02T00:00:00.000Z');assert.equal(row.exit_bar,null);assert.equal(row.raw.x.tm,1704153600000);assert.equal(result.trade_window.to,row.entry_time);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+});
 it('real ledger CLI carries selectors and revisions, fails changed pages with exit 1 and leaves no recovery journal', async t => {
   let snapshot = 'first-native-ledger';
   const expressions = [];
@@ -301,7 +612,7 @@ async function operationOwner(f, { resources = false, deferred = false } = {}) {
 }
 
 it('report/wait real entry points reject dead owners before or during production report evaluation without adopting/deleting records', async t => {
-  for (const phase of ['before', 'during']) for (const args of [['workspace', 'wait', '--timeout', '1000'], ['data', 'strategy'], ['data', 'trades'], ['data', 'ledger'], ['data', 'equity']]) {
+  for (const phase of ['before', 'during']) for (const args of [['workspace', 'wait', '--timeout', '1000'], ['data', 'strategy'], ['data', 'trades'], ['data', 'ledger'], ['data', 'equity'],['backtest','status'],['backtest','wait','--timeout','1000'],['backtest','results']]) {
     let owner, killed = false;
     const f = await reportFixture(t, async expression => {
       if (phase === 'during' && owner && !killed && (expression.includes('function readStrategyReport') || expression.includes('function compilationState'))) { killed = true; await owner.kill(); }
@@ -541,3 +852,4 @@ it('catalog HTTP-only inventory behavior reaches the endpoint even while its lea
     assert.deepEqual(snapshot(f.root), before);
   } finally { lease.release(); }
 });
+

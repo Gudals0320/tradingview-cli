@@ -1,8 +1,10 @@
 import { readChartContext } from './chart-context.js';
+import { effectiveStrategyProperties,PROPERTIES_PAGE_CODE } from './strategy-properties.js';
 
 export function formatDiagnostic(message, context = {}) {
   return String(message || '').replace(/\{([^}]+)\}/g, (placeholder, key) => context[key] == null ? placeholder : String(context[key]));
 }
+export function strategyTradeIsOpen(trade){return !trade.x||trade.x.c==='';}
 
 export function pageStrategies(window) {
   const chart = window.TradingViewApi?._activeChartWidgetWV?.value();
@@ -41,8 +43,8 @@ export function compiledIdentity(inputs) {
   return JSON.stringify(inputs.filter(input => ['text', 'pineId', 'pineVersion'].includes(input.id)));
 }
 
-export function calculationKey(inputs, context) {
-  return JSON.stringify({ inputs, symbol: context?.symbol, resolution: context?.resolution, chart_type: context?.chart_type });
+export function calculationKey(inputs, context, propertiesFingerprint=null) {
+  return JSON.stringify({ inputs, symbol: context?.symbol, resolution: context?.resolution, chart_type: context?.chart_type,effective_properties:propertiesFingerprint });
 }
 
 export function rememberVerifiedCompilation(window, epoch) {
@@ -94,6 +96,16 @@ export function observeCalculation(window, epoch, item) {
   epoch.calculation = { cycle: 0, active: false, completed: null, events: [] };
   epoch.accepted_cycle = 0;
   const inspect = () => pageStrategies(window).find(value => value.id === item.id);
+  const completeObservedReport = () => {
+    const current = inspect(),calculation=epoch.calculation;
+    if(!calculation.active||current?.status_type!==2||!reportIsComplete(current.report)||calculation.observed_report!==current.report)return;
+    const key=calculationKey(current.inputs,readChartContext(window),effectiveStrategyProperties(window,current.id)?.fingerprint??null);
+    if(calculation.observed_key!==key)return;
+    calculation.completed={cycle:calculation.cycle,key};
+    calculation.events.push({event:'completed',cycle:calculation.cycle,at:Date.now()});
+    if(calculation.events.length>100)calculation.events.shift();
+    calculation.active=false;calculation.observed_report=null;calculation.observed_key=null;
+  };
   const statusChanged = () => {
     if (window.__tvCliCompilation !== epoch && window.__tvCliVerifiedStrategies?.get(epoch.strategy_id) !== epoch) { epoch.dispose?.(); return; }
     let status, report;
@@ -104,22 +116,21 @@ export function observeCalculation(window, epoch, item) {
     if (status?.type !== 2 || !reportIsComplete(report)) {
       if (!epoch.calculation.active) {
         epoch.calculation.cycle++;
+        epoch.calculation.observed_report=null;epoch.calculation.observed_key=null;
         epoch.calculation.events.push({ event: 'started', cycle: epoch.calculation.cycle, at: Date.now() });
         if (epoch.calculation.events.length > 100) epoch.calculation.events.shift();
       }
       epoch.calculation.active = true;
-    }
+    }else completeObservedReport();
   };
   const reportChanged = () => {
     statusChanged();
     if ((window.__tvCliCompilation !== epoch && window.__tvCliVerifiedStrategies?.get(epoch.strategy_id) !== epoch) || !epoch.calculation.active) return;
     const current = inspect();
-    if (epoch.calculation.active && current?.status_type === 2 && reportIsComplete(current.report)) {
-      epoch.calculation.completed = { cycle: epoch.calculation.cycle,
-        key: calculationKey(current.inputs, readChartContext(window)) };
-      epoch.calculation.events.push({ event: 'completed', cycle: epoch.calculation.cycle, at: Date.now() });
-      if (epoch.calculation.events.length > 100) epoch.calculation.events.shift();
-      epoch.calculation.active = false;
+    if(current&&reportIsComplete(current.report)){
+      epoch.calculation.observed_report=current.report;
+      epoch.calculation.observed_key=calculationKey(current.inputs,readChartContext(window),effectiveStrategyProperties(window,current.id)?.fingerprint??null);
+      completeObservedReport();
     }
   };
   try {
@@ -227,6 +238,7 @@ export function compilationState(window) {
     if (context?.symbol !== epoch.context?.symbol || context?.resolution !== epoch.context?.resolution
       || context?.chart_type !== epoch.context?.chart_type
       || JSON.stringify(selected?.inputs) !== epoch.inputs_fingerprint
+      || (epoch.effective_properties_fingerprint!==undefined&&effectiveStrategyProperties(window,selected.id)?.fingerprint!==epoch.effective_properties_fingerprint)
       || (selected.status_type != null && selected.status_type !== 2)
       || calculation?.active || (calculation?.completed?.cycle > epoch.accepted_cycle)) {
       epoch.phase = 'pending'; epoch.baselines = [{ id: epoch.strategy_id, report: epoch.report,
@@ -266,14 +278,15 @@ export function compilationState(window) {
     if (!epoch.requires_compiled_change) {
       const completed = epoch.calculation?.completed;
       if (!completed || completed.cycle <= epoch.accepted_cycle
-        || completed.key !== calculationKey(item.inputs, readChartContext(window))) continue;
+        || completed.key !== calculationKey(item.inputs, readChartContext(window),effectiveStrategyProperties(window,item.id)?.fingerprint??null)) continue;
     }
     const completed=epoch.calculation?.completed;
-    const observed=completed&&completed.cycle>epoch.accepted_cycle&&completed.key===calculationKey(item.inputs,readChartContext(window));
+    const observed=completed&&completed.cycle>epoch.accepted_cycle&&completed.key===calculationKey(item.inputs,readChartContext(window),effectiveStrategyProperties(window,item.id)?.fingerprint??null);
     if(epoch.allow_same_identity_refresh&&!observed)continue;
     if (!old || observed || (old.stable_reference && item.report !== old.report) || reportFingerprint(item.report) !== old.fingerprint) {
       epoch.phase = 'ready'; epoch.strategy_id = item.id; epoch.baselines = [];
       epoch.context = readChartContext(window); epoch.report = item.report;
+      epoch.effective_properties_fingerprint=effectiveStrategyProperties(window,item.id)?.fingerprint??null;
       epoch.fingerprint = reportFingerprint(item.report); epoch.inputs_fingerprint = JSON.stringify(item.inputs);
       epoch.compiled_identity = compiledIdentity(item.inputs);
       if (epoch.requires_compiled_change) observeCalculation(window, epoch, item);
@@ -335,7 +348,8 @@ export function readStrategyReport(window, options = {}) {
   const iso = strategyTime;
   const range = report.settings?.dateRange?.backtest || {};
   const trades = Array.isArray(report.trades) ? report.trades : [];
-  return { success: true, strategy: found.name, strategy_id: found.id, currency: report.currency || null,
+  return { success: true, mode:'normal',strategy: found.name, strategy_id: found.id, currency: report.currency || null,
+    effective_properties:effectiveStrategyProperties(window,found.id),
     source: 'internal_api', compilation_token: compile.phase === 'ready' && found.id === compile.strategy_id ? compile.token : null,
     source_hash: compile.phase === 'ready' && found.id === compile.strategy_id ? window.__tvCliCompilation?.source_hash || null : null,
     strategy_inputs: found.inputs,
@@ -344,14 +358,14 @@ export function readStrategyReport(window, options = {}) {
     missing_metrics: Object.keys(metrics).filter(key => !Number.isFinite(metrics[key])),
     context, backtest_window: { from: iso(range.from), to: iso(range.to) },
     loaded_window: { from: iso(context?.first_bar_time), to: iso(context?.last_bar_time) },
-    trade_window: { from: iso(trades[0]?.e?.tm), to: iso(trades.at(-1)?.x?.tm ?? trades.at(-1)?.e?.tm) },
+    trade_window: { from: iso(trades[0]?.e?.tm), to: iso(strategyTradeIsOpen(trades.at(-1)||{})?trades.at(-1)?.e?.tm:trades.at(-1)?.x?.tm) },
     units: { money: report.currency || null, percent_fields: 'fraction (0.01 = 1%)',
       time_fields: 'ISO-8601 UTC', order_sequence: 'ordinal, not timestamp or bar index' },
   };
 }
 
-export const STRATEGY_PAGE_CODE = [readChartContext, formatDiagnostic, pageStrategies, reportFingerprint, reportIsComplete, compiledIdentity,
-  calculationKey, rememberVerifiedCompilation, forgetVerifiedCompilation, failCompilation, invalidateEditedSource, strategyTime, observeCalculation, prepareInputChange, beginCompilation, compilationState, readStrategyReport].map(fn => fn.toString()).join('\n');
+export const STRATEGY_PAGE_CODE = PROPERTIES_PAGE_CODE+'\n'+[readChartContext, formatDiagnostic, pageStrategies, reportFingerprint, reportIsComplete, compiledIdentity,
+  calculationKey, rememberVerifiedCompilation, forgetVerifiedCompilation, failCompilation, invalidateEditedSource, strategyTime,strategyTradeIsOpen, observeCalculation, prepareInputChange, beginCompilation, compilationState, readStrategyReport].map(fn => fn.toString()).join('\n');
 
 export function reportExpression(options = {}) {
   return `(() => { ${STRATEGY_PAGE_CODE}; return readStrategyReport(window, ${JSON.stringify(options)}); })()`;

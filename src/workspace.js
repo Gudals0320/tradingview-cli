@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { readFileSync,existsSync } from 'node:fs';
 import { CDP_HOST, CDP_PORT } from './config.js';
-import { acquireWorkspace, reserveWorkspace, releaseWorkspace, workspaceError, loadWorkspace, workspaceStatus, noteWorkspaceState, assertObservationAdmission, workspaceWaitTimeout } from './workspace-store.js';
+import { acquireWorkspace, reserveWorkspace, releaseWorkspace, workspaceError, loadWorkspace, workspaceStatus, noteWorkspaceState, assertObservationAdmission, workspaceWaitTimeout, workspaceArtifactDirectory } from './workspace-store.js';
 import { withWorkspaceSession, sourceHash, canonicalSessionHost, assertLegacyCompatibility } from './session.js';
 import { configureTarget, getClient } from './connection.js';
 import { WORKSPACE_PAGE_CODE } from './workspace-page.js';
@@ -21,6 +21,8 @@ import { newTab } from './core/tab.js';
 import { secureDirectory } from './private-store.js';
 import { layoutList } from './core/ui.js';
 import { canonicalPineSource } from './pine-source.js';
+import { preparationRequest, preparationJournal, preparePineDocument, pinePreparationAdapter,waitPineEditorMount } from './pine-preparation.js';
+import { ensurePineEditorOpen } from './core/pine.js';
 export { WORKSPACE_COMMANDS } from './cli/policy.js';
 
 async function raw(client, expression) {
@@ -133,6 +135,59 @@ export async function verifyWorkspaceSelection(name) {
   await checkLayout(workspace);
   return selectWorkspace(name);
 }
+
+/** Explicit document preparation never relaxes pine new/open replacement guards. */
+export async function prepareWorkspacePine(name,values={}) {
+  const file=resolveWorkspace(name),selected=loadWorkspace(file);
+  const request=preparationRequest({create:values.create,open:values.open,type:values.type,source:values.file?readFileSync(values.file,'utf8'):undefined,requestId:values['request-id'],generation:values.generation});
+  const journal=preparationJournal(workspaceArtifactDirectory(selected),request.request_id),previous=journal.read();
+  if(selected.binding?.nonce!==values.generation)throw Object.assign(workspaceError('WORKSPACE_GENERATION_CHANGED','Pass the exact current --generation from workspace show.'),{details:{request_id:request.request_id,preparation_phase:previous?.phase||null,current_generation:selected.binding?.nonce||null,next_action:'Inspect workspace show, then resume this same request with the current generation; a completed request returns reused:true.'}});
+  if(selected.pine&&!(previous?.document?.id===selected.pine&&previous.fingerprint===request.fingerprint))throw workspaceError('WORKSPACE_PINE_ALREADY_BOUND','Detach explicitly before preparing a different document.');
+  const resources=await acquireResources(['app',`layout:${selected.layout}`,`workspace:${selected.id}`,...(values.open?[`document:${values.open}`]:[])],{command:'workspace pine-prepare',workspace_id:selected.id,timeout:values['lock-timeout-ms']});
+  let lease,resourcesChanged=false;
+  try{
+    lease=acquireWorkspace(file,{command:'workspace pine-prepare'});
+    return await withWorkspaceSession(lease,async()=>{
+      const workspace=lease.workspace;
+      if(workspace.binding?.nonce!==values.generation||workspace.pine!==selected.pine)throw workspaceError('WORKSPACE_GENERATION_CHANGED','Resources changed while waiting.');
+      await checkLayout(workspace);
+      if(await browserIdentity()!==workspace.binding.browser)throw workspaceError('WORKSPACE_GENERATION_CHANGED','Desktop browser changed.');
+      configureTarget(workspace.target);const client=await getClient();
+      await raw(client,pageCall('guardWorkspacePage',owner(workspace)));
+      const available=id=>{if(readReservations().some(row=>row.id!==workspace.id&&row.pine===id))throw workspaceError('WORKSPACE_RESOURCE_RESERVED','Another workspace reserves this exact Pine document.');};
+      if(values.open)available(values.open);
+      // Mounting is explicit; no editor replacement or saving is performed here.
+      const adapter=pinePreparationAdapter();
+      if(values.mount){lease.checkpoint({phase:'pine-editor-mount',command:'workspace pine-prepare'});await ensurePineEditorOpen();await waitPineEditorMount(adapter);}
+      const prepared=await preparePineDocument(request,{journal,adapter,assertDocumentAvailable:available,checkpoint:data=>lease.checkpoint({command:'workspace pine-prepare',...data})});
+      available(prepared.document.id);
+      if(previous?.phase==='complete'&&previous.generation===workspace.binding.nonce&&workspace.pine===prepared.document.id){
+        const result={...previous.result,reused:true,reused_mounted:prepared.intent.reused_mounted};prepared.intent.phase='complete';journal.write({...prepared.intent,result});lease.finish({success:true,result});return result;
+      }
+      lease.checkpoint({phase:'pine-document-attach',command:'workspace pine-prepare',pine:prepared.document.id,old_generation:values.generation,request_id:request.request_id});
+      if(!workspace.pine){lease.reassign({target:workspace.target,pine:prepared.document.id,expectedGeneration:values.generation,tab_ownership:workspace.tab_ownership});resourcesChanged=true;}
+      const binding=await raw(client,pageCall('bindWorkspacePage',lease.workspace,randomUUID()));
+      const source_proof=await sourceProof(client,binding.snapshot);
+      if(!source_proof||source_proof.hash!==prepared.source_hash)throw workspaceError('PINE_PERSISTENCE_UNVERIFIED','Attached source could not be verified against remote saved identity.');
+      lease.saveBinding({...binding,browser:selected.binding.browser,source_proof});
+      prepared.intent.stages.attached=true;prepared.intent.phase='complete';prepared.intent.generation=binding.nonce;
+      const result={success:true,request_id:request.request_id,document:{id:prepared.document.id,version:prepared.document.version,source_hash:prepared.source_hash},generation:binding.nonce,previous_document:prepared.intent.previous_document,stages:prepared.intent.stages,open_dispatch:prepared.intent.open_dispatch||null,reused_mounted:prepared.intent.reused_mounted===true,reused:!!previous,residual_resources:{saved_document:prepared.document.id,tab_preserved:true,tab_ownership_changed:false}};
+      prepared.intent.result=result;journal.write(prepared.intent);
+      lease.finish({success:true,result});return result;
+    });
+  }catch(error){
+    if(lease){let pending=true;try{pending=await withWorkspaceSession(lease,async()=>{configureTarget(lease.workspace.target);return await raw(await getClient(),'readWorkspacePage(window,document,{pine:false}).pending');});}catch{/* Unreadable native state stays fenced. */}
+      const interrupted=resourcesChanged||pending||error.code==='CDP_TIMEOUT'||error.recovery_required===true;
+      lease.finish({success:false,interrupted,error:error.message});
+      error.details={...error.details,request_id:request.request_id,stages:journal.read()?.stages||null,residual_resources:{saved_document:journal.read()?.document?.id||null,tab_preserved:true},recovery_required:interrupted};
+      if(journal.read()?.open_dispatch==='unknown'){
+        const quoted=`'${name.replace(/'/g,"''")}'`,documentId=journal.read().document.id,newRequest=`open-recovery-${sourceHash(request.request_id).slice(0,24)}`;
+        error.details.next_commands=[`tv workspace show ${quoted}`,...(interrupted?[`tv --workspace ${quoted} workspace recover --operation ${lease.operation}`]:[]),`tv workspace pine-prepare ${quoted} --open '${documentId.replace(/'/g,"''")}' --request-id ${newRequest} --generation CURRENT_GENERATION_FROM_SHOW`];
+        error.details.next_action='Do not replay uncertain create/open. After exact native quiescence and required recovery, open this verified saved document with the shown new request ID and current generation; no new document is created.';
+      }
+    }throw error;
+  }finally{resources.release();}
+}
 export async function resetWorkspace(name,{id,operation,reservationId}={}) {
   const record=workspaceNameRecord(name),row=readReservations().find(row=>row.file===record.file);
   if(record.pending&&ownerAlive(record))throw workspaceError('WORKSPACE_BUSY','Preparation owner is alive or unverifiable.');
@@ -191,7 +246,7 @@ export async function reconnectWorkspace(name, { target, generation, pine, detac
       const snapshot = await raw(client, pageCall('readWorkspacePage', { pine: Boolean(prospective.pine) }));
       if (snapshot.layout !== prospective.layout || (prospective.pine && snapshot.pine !== prospective.pine)) throw workspaceError('WORKSPACE_IDENTITY_MISMATCH', 'New target must already display the owned saved layout and exact document.');
       if(prospective.pine&&snapshot.draft===true)throw workspaceError('WORKSPACE_SAVED_DOCUMENT_REQUIRED','Save the dedicated draft as a document before attaching it; no native save was dispatched.');
-      if (snapshot.pending) throw workspaceError('WORKSPACE_NATIVE_BUSY', 'Wait for the target to settle before reconnecting.');
+      if (snapshot.pending||snapshot.deep_job_pending) throw workspaceError('WORKSPACE_NATIVE_BUSY', 'Wait for the target to settle before reconnecting.');
       lease.checkpoint({phase:'reconnecting',command:'workspace reconnect',target_id:target,old_generation:generation,layout:selected.layout,pine:prospective.pine});
       lease.reassign({ target, pine: prospective.pine, expectedGeneration: generation, tab_ownership: ownedTabProof(selected.layout, target, browser) });
       changedResources=true;
@@ -226,6 +281,9 @@ async function permitFor(command, values, positionals) {
     if (['pineId', 'pineVersion', 'text'].some(key => Object.hasOwn(inputs, key))) throw workspaceError('WORKSPACE_INPUT_FORBIDDEN', 'Compiled document identity inputs cannot be edited.');
     return { inputs,study_id:positionals[0] };
   }
+  if(command==='strategy set-properties')return {properties:JSON.parse(values.values)};
+  if(command==='backtest run')return {deep_request_id:values['request-id']};
+  if(command==='backtest normal')return {deep_normal:true};
   if(command==='indicator add')return {add_study:true};
   if(command==='indicator remove')return {remove_study:positionals[0]};
   if(command==='pane focus')return {pane_index:Number(positionals[0])};
@@ -284,7 +342,7 @@ export async function runWorkspace(file, command, values, positionals, handler, 
       const before = await inspect(client, pageCall('guardWorkspacePage', owner(workspace), { observe: true }));
       if(command==='screenshot'&&values.method!=='api'&&(before.viewport?.width===0||before.viewport?.height===0))throw workspaceError('DESKTOP_VIEWPORT_UNAVAILABLE','Restore the existing Desktop window before CDP capture; the owned viewport is zero.');
       if (workspace.pine && command === 'indicator get' && positionals[0] !== before.studies[0]?.id) throw workspaceError('WORKSPACE_STUDY_MISMATCH', 'Read only the owned study.');
-      if (['data strategy', 'data trades', 'data ledger', 'data equity'].includes(command) && values['strategy-id'] && values['strategy-id'] !== before.studies[0]?.id) {
+      if (['data strategy', 'data trades', 'data ledger', 'data equity','strategy properties','strategy set-properties'].includes(command) && values['strategy-id'] && values['strategy-id'] !== before.studies[0]?.id) {
         const requested = values['strategy-id'];
         const present = await inspect(client, pageCall('workspaceStrategyPresent', requested));
         assertObservationAdmission(getStatus(file), reference, admission);
@@ -301,7 +359,7 @@ export async function runWorkspace(file, command, values, positionals, handler, 
       checkAdmission();
       const stable = sourceHash(before.source) === sourceHash(after.source)
         && JSON.stringify(before.context) === JSON.stringify(after.context)
-        && JSON.stringify(before.studies.map(study => [study.id, study.inputs])) === JSON.stringify(after.studies.map(study => [study.id, study.inputs]));
+        && JSON.stringify(before.studies.map(study => [study.id, study.inputs,study.properties_fingerprint])) === JSON.stringify(after.studies.map(study => [study.id, study.inputs,study.properties_fingerprint]));
       if (!stable && command !== 'workspace wait') throw workspaceError('WORKSPACE_OBSERVATION_CHANGED', 'Source, inputs or chart context changed during this observation; retry after the active operation settles.');
       let reportEpoch;
       if (['data strategy', 'data trades', 'data ledger', 'data equity'].includes(command) && result?.success) {
@@ -328,7 +386,7 @@ export async function runWorkspace(file, command, values, positionals, handler, 
         ...(reportEpoch?{calculation:{phase:reportEpoch.phase,accepted_cycle:reportEpoch.accepted_cycle,cycle:reportEpoch.calculation?.cycle,events:reportEpoch.calculation?.events,completed:reportEpoch.calculation?.completed?{cycle:reportEpoch.calculation.completed.cycle,key_hash:sourceHash(reportEpoch.calculation.completed.key)}:null}}:{}),
         source_hash: sourceHash(after.source), source_scope: 'editor', persisted_applied_source_verified: persistedApplied,
         study: study ? { id: study.id, status: study.status, compiled_hash: sourceHash(JSON.stringify(study.inputs)) } : null,
-        context: after.context, page_generation: workspace.binding.nonce,
+        effective_properties_fingerprint:study?.properties_fingerprint?sourceHash(study.properties_fingerprint):null,context: after.context, page_generation: workspace.binding.nonce,
         changed_during_read: !stable } };
       }
     });
@@ -388,13 +446,13 @@ export async function runWorkspace(file, command, values, positionals, handler, 
       lease.saveBinding({ ...workspace.binding, snapshot: after.snapshot, source_proof });
       noteWorkspaceState(file,after.snapshot.calculating?'calculating':'idle');
       const study = after.snapshot.studies[0];
-      const calculation = after.calculation ? { ...after.calculation, inputs_fingerprint: undefined,
+      const calculation = after.calculation ? { ...after.calculation, inputs_fingerprint: undefined,effective_properties_fingerprint:after.calculation.effective_properties_fingerprint?sourceHash(after.calculation.effective_properties_fingerprint):null,
         inputs_hash: after.calculation.inputs_fingerprint ? sourceHash(after.calculation.inputs_fingerprint) : null,
         completed: after.calculation.completed ? { cycle: after.calculation.completed.cycle, key_hash: sourceHash(after.calculation.completed.key) } : null } : null;
       const provenance = { workspace_id: workspace.id, operation_id: lease.operation, target: workspace.target, layout: workspace.layout, pine: workspace.pine,
         locks: { waited_ms: resourceLease.waited_ms, waited_for:resourceLease.waited_for, resources: resourceLease.resources, command: resourceLease.command },
         page_generation: workspace.binding.nonce, source_hash: sourceHash(after.snapshot.source), context: after.snapshot.context,
-        study: study ? { ...study, inputs: study.inputs.filter(input => input.id !== 'text'), compiled_hash: sourceHash(JSON.stringify(study.inputs)) } : null, calculation, native_events: after.events };
+        effective_properties_fingerprint:study?.properties_fingerprint?sourceHash(study.properties_fingerprint):null,study: study ? { ...study,properties_fingerprint:study.properties_fingerprint?sourceHash(study.properties_fingerprint):null, inputs: study.inputs.filter(input => input.id !== 'text'), compiled_hash: sourceHash(JSON.stringify(study.inputs)) } : null, calculation, native_events: after.events };
       const output = { ...result, provenance };
       lease.checkpoint({ phase: success ? 'complete' : 'failed', command, before, after: after.snapshot, provenance });
       completedResult=output;lease.finish({ success, result: output, interrupted: false }); return output;
@@ -477,7 +535,7 @@ export async function closeWorkspace(file, { _deps } = {}) {
       await (_deps?.checkLayout || checkLayout)(workspace); configureTarget(workspace.target);
       pageProbeStarted = true;
       const snapshot = await (_deps?.raw || raw)(await (_deps?.getClient || getClient)(), pageCall('guardWorkspacePage', owner(workspace)));
-      if (snapshot.pending) throw workspaceError('WORKSPACE_NATIVE_BUSY', 'Cannot release a pending native action.');
+      if (snapshot.pending||snapshot.deep_job_pending) throw workspaceError('WORKSPACE_NATIVE_BUSY', 'Cannot release a pending native action.');
       const result = { success: true, released: true, workspace_id: workspace.id };
       lease.checkpoint({ phase: 'released', result });
       return releaseWorkspace(lease);

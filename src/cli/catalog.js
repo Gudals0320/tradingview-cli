@@ -76,6 +76,7 @@ function describe(name, adapter) {
     ...(workspaceRequired(name) && ['pure', 'mixed'].includes(invocation) ? { observation_admission: 'workspace_read' } : {}),
     ...(MIXED_RULES.has(name) ? { read_only_when: MIXED_RULES.get(name) } : {}),
     output: OUTPUT_RULES.has(name) ? 'conditional' : name.startsWith('stream ') ? 'jsonl' : 'json',
+    ...(['backtest run','backtest status','backtest wait','backtest results','backtest normal'].includes(name)?{metadata_side_effect:'After final workspace owner/generation admission and cleanup, observed supersession may be recorded in the private request metadata. Recovery journals/admission are unchanged; persistence failure preserves the read result and leaves archive eligibility fail-closed.'}:{}),
     ...(OUTPUT_RULES.has(name) ? { output_when: OUTPUT_RULES.get(name) } : {}),
   };
 }

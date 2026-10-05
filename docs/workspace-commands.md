@@ -10,7 +10,7 @@ Policy coverage tests classify every adapter exactly once.
 | Workspace | chart/state/info/quote/OHLCV/values, data, draw, indicator, pane, Pine, replay, stream, discover/ui-state, workspace wait | Named selection required; mutation owns layout/chart and document when compiling/saving; pure reads/streams observe |
 | App/account shared | alert, watchlist, ui, tab new/close/switch, layout switch, launch | Alert/watchlist/UI/tab close/switch require a workspace target; shared changes own app plus affected resources; UI requires selected target |
 | Offline/diagnostic | help/update/search, pine analyze/check, session status/recover/discard, workspace list/import/show/inventory/status/interrupt/abandon/locks/lock-clear/gate-status/gate-clear | Inventory/recovery/target-lost discard still contact CDP; recovery owns its operation |
-| Workspace management | init/rebind/recover/release/reconnect/attach/detach | Exact resource, token, generation and operation checks |
+| Workspace management | init/rebind/recover/release/reconnect/attach/detach/pine-prepare | Exact resource, token, generation and operation checks; Pine preparation owns app/layout/workspace and checks document reservations |
 
 `workspace_required`, `locks` and `foreground` publish selection, resource kinds
 and tab-selection requirements. Mixed reads depend on arguments. `endpoint_lease`
@@ -22,3 +22,26 @@ Pine new/open and bound layout switch reject resource replacement. Attach a
 dedicated document or open/select another workspace. `stream ohlcv` reads prepared
 owned panes only. These restrictions prevent active-tab fallback and form the
 migration contract. See [workspaces.md](workspaces.md) for the full workflow.
+
+`strategy properties` is a pure observation. `strategy set-properties` owns
+layout/workspace/document and applies a prevalidated complete typed patch via
+native inputs, then verifies readback and recalculation. Strategy Properties
+cannot be changed through the untyped indicator input interface.
+
+`backtest run/normal` are explicit native Deep mutations with
+layout/workspace/document ownership. `backtest status/wait/results` are pure
+observations and retain workspace admission/source checks. Pending native Deep
+jobs prevent unrelated mutations/release/reconnect; unknown persistent intents
+cannot be erased by normal reset. [Deep contract](deep-backtesting.md).
+`workspace backtest-archive NAME` is an explicit offline private-record retirement
+with exact request/run IDs and no-adoption acknowledgement. It preserves evidence,
+does not cancel or alter Desktop work. A superseded record requires an exact
+terminal/no-history outcome captured before replacement; genuine unknown/pending
+records retain their fence and cannot be archived. Actual native pending
+jobs and workspace operation ownership still protect mutations/release.
+
+`data equity --plot-id ID` remains an owned pure observation. It verifies an
+explicit existing native strategy.equity plot, finite loaded bars and native
+fill/cost/final PnL audit. `--list-plots` is metadata only. CSV `--export` writes
+the full validated loaded snapshot after final ownership validation and refuses
+existing destinations. [Equity contract](strategy-equity.md).

@@ -3,6 +3,7 @@ import { readChartContext, normalizeTimeframe, symbolMatches } from './chart-con
 import { layoutConfirmationRoot, layoutConfirmationVisible, layoutOperationPending } from './layout-state.js';
 import { trackNativeOperation } from './native-operation.js';
 import { canonicalPineSource } from './pine-source.js';
+import { effectiveStrategyProperties,strategyPropertyInputPatch,PROPERTIES_PAGE_CODE } from './strategy-properties.js';
 
 /** Serialized page functions have no captured Node state. */
 export function readWorkspacePage(window, document, options = {}) {
@@ -21,7 +22,7 @@ export function readWorkspacePage(window, document, options = {}) {
     const inputs = chart.getStudyById(source.id()).getInputValues();
     let status = source.status?.(); status = unwrap(status);
     return [{ id: source.id(), pine: inputs.find(input => input.id === 'pineId')?.value || null,
-      strategy: Boolean(info.isTVScriptStrategy || info.is_strategy), inputs: JSON.parse(JSON.stringify(inputs)), status: status?.type }];
+      strategy: Boolean(info.isTVScriptStrategy || info.is_strategy), inputs: JSON.parse(JSON.stringify(inputs)), status: status?.type,properties_fingerprint:effectiveStrategyProperties(window,source.id())?.fingerprint??null }];
   }).filter(study => !includePine || !identity?.scriptIdPart || study.pine === identity.scriptIdPart);
   const context = readChartContext(window);
   const pending_action = Object.keys(controller?._editorStore?.getStore?.().getState()?.ui?.pendingRequests || {}).length > 0
@@ -34,7 +35,7 @@ export function readWorkspacePage(window, document, options = {}) {
     source: editor ? canonicalPineSource(editor.editor.getValue()) : '', modified: controller?.isModified?.() ?? null,draft:controller?.isDraft?.()??null,
     context: { symbol: context.symbol, aliases: context.aliases, resolution: normalizeTimeframe(context.resolution), chart_type: context.chart_type,
       session: chart.symbolExt?.()?.session || null },
-    studies, pending: pending_action || calculating, pending_action, calculating,
+    studies, pending: pending_action || calculating, pending_action, calculating,deep_job_pending:['accepted','pending'].includes(window.__tvCliDeepRun?.last_phase)||Boolean(window.__tvCliDeepRun&&[0,1].includes(window.__tvCliDeepRun.facade?._deepBacktestingManager?.activeStrategyStatus?.value?.()?.type)),
     viewport: { width: window.innerWidth, height: window.innerHeight }, visibility: document.visibilityState };
 }
 
@@ -43,7 +44,7 @@ export function bindWorkspacePage(window, document, resource, nonce) {
   if (snapshot.layout !== resource.layout || snapshot.pine !== resource.pine) throw new Error('WORKSPACE_IDENTITY_MISMATCH: Saved resources do not match registration.');
   if(resource.pine&&snapshot.draft===true)throw new Error('WORKSPACE_SAVED_DOCUMENT_REQUIRED: Drafts cannot be reserved as saved Pine documents.');
   if (resource.pine && (snapshot.studies.some(study => study.pine !== resource.pine) || snapshot.studies.length > 1)) throw new Error('WORKSPACE_STUDY_CONFLICT: Pine workspaces require a single owned study.');
-  if (snapshot.pending) throw new Error('WORKSPACE_NATIVE_BUSY: Native action or calculation is pending.');
+  if (snapshot.pending||snapshot.deep_job_pending) throw new Error('WORKSPACE_NATIVE_BUSY: Native action or calculation is pending.');
   const chart = window.TradingViewApi._activeChartWidgetWV.value();
   for(const epoch of new Set([window.__tvCliCompilation,...(window.__tvCliVerifiedStrategies?.values?.()||[])]))epoch?.dispose?.();
   delete window.__tvCliCompilation;delete window.__tvCliVerifiedStrategies;
@@ -62,11 +63,12 @@ export async function restoreWorkspaceDocument(window, document, resource) {
     if (controller.isModified?.() !== false) throw new Error('WORKSPACE_FOREIGN_DRAFT: Refusing to discard an unowned modified document.');
     const version = resource.binding?.snapshot?.version;
     if (!version) throw new Error('WORKSPACE_VERSION_REQUIRED: Recorded owned document version is unavailable.');
-    await trackNativeOperation(window, `${resource.id}-restore-document`, () => controller.openScript({ scriptIdPart: resource.pine, version }));
+    if(typeof controller._initScriptVersion!=='function')throw new Error('WORKSPACE_PINE_OPEN_UNSUPPORTED: Exact-version native controller unavailable; editor_changed:false.');
+    await trackNativeOperation(window, `${resource.id}-restore-document`, () => controller._initScriptVersion({ scriptIdPart: resource.pine, version }));
     if (chart !== window.TradingViewApi._activeChartWidgetWV.value()) throw new Error('WORKSPACE_GENERATION_CHANGED: Chart changed during document restore.');
   }
   const after = readWorkspacePage(window, document);
-  if (after.layout !== resource.layout || after.pine !== resource.pine) throw new Error('WORKSPACE_IDENTITY_MISMATCH: Restored document did not match the registered resources.');
+  if (after.layout !== resource.layout || after.pine !== resource.pine || String(after.version)!==String(resource.binding?.snapshot?.version)) throw new Error('WORKSPACE_IDENTITY_MISMATCH: Restored document identity/version did not match the registered resources.');
   const recorded = resource.binding?.snapshot;
   let restoredDraft = false;
   if (recorded?.modified === true && typeof recorded.source === 'string' && after.source !== recorded.source) {
@@ -139,9 +141,15 @@ export function guardWorkspacePage(window, document, owner, { observe = false } 
     return actual;
   }
   const old = before.studies[0], current = actual.studies[0];
-  if (JSON.stringify(old?.inputs) !== JSON.stringify(current?.inputs) || old?.id !== current?.id || actual.version !== before.version) {
+  if (JSON.stringify(old?.inputs) !== JSON.stringify(current?.inputs) || old?.id !== current?.id || actual.version !== before.version || old?.properties_fingerprint!==current?.properties_fingerprint) {
     if (permit.compile) {
       if (old && current && old.id !== current.id) fail();
+    } else if (permit.properties && old && current && old.id===current.id) {
+      if(actual.version!==before.version||old.pine!==current.pine)fail();
+      const patch=strategyPropertyInputPatch(window,current.id,permit.properties).inputs;
+      const expected=old.inputs.map(input=>Object.hasOwn(patch,input.id)?{...input,value:patch[input.id]}:input);
+      if(JSON.stringify(current.inputs)!==JSON.stringify(expected))fail();
+      delete permit.properties;
     } else if (permit.inputs && old && current && old.id === current.id) {
       const expected = old.inputs.map(input => Object.hasOwn(permit.inputs, input.id) ? { ...input, value: permit.inputs[input.id] } : input);
       if (JSON.stringify(current.inputs) !== JSON.stringify(expected)) fail();
@@ -160,6 +168,8 @@ export function guardWorkspacePage(window, document, owner, { observe = false } 
 
 export function startWorkspacePage(window, document, owner, operation, permit) {
   const snapshot = guardWorkspacePage(window, document, owner);
+  const knownZero=permit.deep_normal&&window.__tvCliDeepRun?.pre_wire_failure&&!window.__tvCliDeepRun?.history_send_attempted;
+  if(snapshot.deep_job_pending&&!knownZero&&permit.deep_request_id!==window.__tvCliDeepRun?.request_id)throw new Error('WORKSPACE_DEEP_JOB_PENDING: Observe the exact native Deep run before another mutation; timeout is not cancellation.');
   if (snapshot.pending_action) throw new Error('WORKSPACE_NATIVE_BUSY: Native action is pending.');
   const bound = window.__tvCliWorkspace;
   if (bound.operation) throw new Error('WORKSPACE_PAGE_BUSY: Previous page operation must be reconciled.');
@@ -210,8 +220,8 @@ export function finishWorkspacePage(window, document, owner, operation, {allowIn
   return { snapshot, events: bound.events, calculation: epoch ? { token: epoch.token, source_hash: epoch.source_hash, phase: epoch.phase,
     strategy_id: epoch.strategy_id, accepted_cycle: epoch.accepted_cycle, cycle: epoch.calculation?.cycle,
     events: epoch.calculation?.events, completed: epoch.calculation?.completed,
-    report_verified: epoch.report_verified, inputs_fingerprint: epoch.inputs_fingerprint } : null };
+    report_verified: epoch.report_verified, inputs_fingerprint: epoch.inputs_fingerprint,effective_properties_fingerprint:epoch.effective_properties_fingerprint } : null };
 }
 
-export const WORKSPACE_PAGE_CODE = [canonicalPineSource, findPineEditor, findPineController, readChartContext, normalizeTimeframe, symbolMatches, layoutConfirmationRoot, layoutConfirmationVisible, layoutOperationPending, trackNativeOperation,
+export const WORKSPACE_PAGE_CODE = PROPERTIES_PAGE_CODE+'\n'+[canonicalPineSource, findPineEditor, findPineController, readChartContext, normalizeTimeframe, symbolMatches, layoutConfirmationRoot, layoutConfirmationVisible, layoutOperationPending, trackNativeOperation,
   readWorkspacePage, bindWorkspacePage, restoreWorkspaceDocument, guardWorkspacePage, startWorkspacePage, workspaceStrategyPresent, finishWorkspacePage].map(fn => fn.toString()).join('\n');

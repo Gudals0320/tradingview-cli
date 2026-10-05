@@ -146,6 +146,12 @@ describe('Strategy report identity and metadata', () => {
     assert.equal((await getTradeLedger({ _deps })).code, 'LEDGER_UNAVAILABLE');
   });
 
+  it('native empty exit comment denotes open valuation even with lx/time/price fields',async()=>{
+    const f=fixture();beginCompilation(f.window,'open-run','hash',true);f.compile();f.update();const report=f.source.reportData().value();
+    report.trades=[{e:{tm:1704067200000,b:1,tp:'le'},x:{c:'',tm:1704153600000,b:2,tp:'lx',p:100},q:1}];
+    const result=await getTradeLedger({_deps:{evaluate:expression=>runInNewContext(expression,{window:f.window})}}),row=result.trades[0];assert.equal(row.open,true);assert.equal(row.exit_time,null);assert.equal(row.exit_bar,null);assert.equal(row.mark_time,'2024-01-02T00:00:00.000Z');assert.equal(row.mark_bar,2);assert.equal(row.raw.x.tp,'lx');assert.equal(row.raw.x.c,'');assert.equal(result.trade_window.to,row.entry_time);
+    report.trades[0].x.c='closed';const closed=await getTradeLedger({_deps:{evaluate:expression=>runInNewContext(expression,{window:f.window})}});assert.equal(closed.trades[0].open,false);assert.equal(closed.trades[0].exit_time,row.mark_time);assert.equal(closed.trades[0].mark_time,null);
+  });
   it('order caps, unavailable orders, equity and missing metrics are explicit', async () => {
     const f = fixture(); beginCompilation(f.window, 'run', 'hash', true); f.compile(); f.update();
     const report = f.source.reportData().value();
@@ -161,7 +167,7 @@ describe('Strategy report identity and metadata', () => {
     assert.equal(orders.trades[0].order_seq, 10); assert.equal(orders.trades.at(-1).time_index, 29);
     assert.equal((await getEquity({ _deps })).code, 'EQUITY_UNAVAILABLE');
     report.equity = [[1704067200, 10000]];
-    assert.equal((await getEquity({ _deps })).data_points, 1);
+    assert.equal((await getEquity({ _deps })).code, 'EQUITY_UNAVAILABLE');
   });
 
   it('rejects overlapping input changes and rebases a completed A-B-A sequence before the next setter', () => {
@@ -382,6 +388,18 @@ describe('Strategy report identity and metadata', () => {
     assert.equal(readStrategyReport(f.window).success, true);
     f.input(80); f.tick();
     assert.equal(readStrategyReport(f.window).code, 'REPORT_PENDING');
+  });
+  it('accepts a same-cycle report observed before completed status without adopting status-only stale results',()=>{
+    for(const changed of [false,true]){const f=fixture();beginCompilation(f.window,'run','hash',true);f.compile();f.update();assert.equal(readStrategyReport(f.window).success,true);
+      f.status(1);if(changed)f.input(70);f.update();assert.equal(readStrategyReport(f.window).code,'REPORT_PENDING');
+      f.status(2);assert.equal(readStrategyReport(f.window).success,true);assert.equal(f.window.__tvCliCompilation.calculation.active,false);
+      f.status(1);f.status(2);assert.equal(readStrategyReport(f.window).code,'REPORT_PENDING');
+    }
+  });
+  it('a report-before-status completion cannot verify later changed inputs or ABA',()=>{
+    const f=fixture();beginCompilation(f.window,'run','hash',true);f.compile();f.update();assert.equal(readStrategyReport(f.window).success,true);
+    f.status(1);f.input(60);f.update();f.input(30);f.status(2);assert.equal(readStrategyReport(f.window).code,'REPORT_PENDING');
+    f.status(1);f.update();f.status(2);assert.equal(readStrategyReport(f.window).success,true);
   });
   for (const verification of ['compilation', 'input-change']) {
     for (const beforeStatusEvent of [false, true]) {

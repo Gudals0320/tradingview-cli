@@ -50,10 +50,67 @@ an unknown native operation.
 | RECOVERY_TARGET_LOST | Reachable CDP proved targets absent; exact discard archives incomplete outcomes without claiming restoration. |
 | RECOVERY_TARGET_UNCONFIRMED | No chart pages are inspectable; wait for Desktop startup and re-read inventory rather than inferring termination. |
 | SAVE_REQUIRED | Save owned document or explicitly compile --save; unsaved source is not an applied report. |
+| PINE_PREPARATION_INPUT | Choose create or exact-ID open, stable request ID and current generation; invalid input causes no Desktop mutation. |
+| PINE_REQUEST_CONFLICT | This request ID describes other contents. Inspect its private intent and use a different request ID for new contents. |
+| PINE_DOCUMENT_NAME_EXISTS | Existing exact name is not adopted by create. Select its exact saved ID explicitly. |
+| PINE_CREATION_UNKNOWN | Preserve candidates and resume the same request; never blindly resend creation or infer ownership by name alone. |
+| PINE_CREATION_REJECTED | Observed native pre-dispatch rejection plus no new candidate. Resolve the plan condition, then retry the same request. |
+| PINE_FOREIGN_DRAFT | Modified editor remains unchanged. Save or decide its disposition yourself before preparation. |
+| PINE_DOCUMENT_NOT_FOUND | Exact saved ID is absent; inspect the saved list without guessing a name match. |
+| PINE_DOCUMENT_CHANGED / PINE_PERSISTENCE_UNVERIFIED / PINE_OPEN_UNVERIFIED | Saved source or mounted identity/version/source differs. Preserve artifacts, inspect the recorded stages and reconcile the exact operation if interrupted. |
+| PINE_OPEN_UNSUPPORTED / WORKSPACE_PINE_OPEN_UNSUPPORTED | Exact-version native controller is unavailable. No fallback new/blank document is opened. |
+| PINE_OPEN_FAILED | Native exact open failed; editor_changed and current_identity report observed side effects. |
+| PINE_OPEN_BUSY | Native exact open was not admitted during another open transition. Wait for the editor to settle, then resume the same request; no new document is created. |
+| PINE_EDITOR_SETTLE_TIMEOUT | Initial mount/restore exceeded its finite wait. No document create/open was dispatched. Wait/inspect, then resume the same request. |
+| WORKSPACE_PINE_ALREADY_BOUND | Detach explicitly before preparing a different document; bound resource replacement is not implicit. |
+| INVALID_STRATEGY_PROPERTIES | Entire patch is rejected before dispatch for unknown fields, types, units, enum options or bounds. |
+| STRATEGY_PROPERTY_UNSUPPORTED | No verified native mapping/setter exists; use an explicit Pine source setting, never implicit replacement. |
+| STRATEGY_PROPERTY_COMMAND_REQUIRED | indicator set cannot bypass typed Properties validation; use strategy set-properties. |
+| STRATEGY_PROPERTIES_APPLY_FAILED | Inspect requested versus actual values; native setter atomicity is not guaranteed. Reconcile any exact interrupted workspace before replay. |
+| STRATEGY_PROPERTIES_CHANGED | Complete actual readback differs from requested state. Preserve it; inspect external/partial changes instead of adopting a report. |
+| STRATEGY_PROPERTIES_REPORT_FAILED | Values may be applied but the matching calculation failed. Inspect actual values and native diagnostics. |
+| STRATEGY_PROPERTIES_TIMEOUT | Finite wait expired after dispatch; not cancellation. Inspect/wait for native completion before another change. |
+| INVALID_DEEP_PERIOD / INVALID_DEEP_REQUEST | Invalid explicit period/precision/timezone/request ID; no native dispatch. |
+| DEEP_TIMEZONE_UNSUPPORTED | Only native calculation UTC/Etc/UTC is verified; explicit other zones are refused before dispatch. ISO input offsets still normalize to UTC instants. |
+| DEEP_PERIOD_PRECISION_UNSUPPORTED | Current native path supports whole UTC days: both normalized from/to must be UTC midnight. Nonmidnight/DST-local subday intervals refuse before dispatch without correction. |
+| DEEP_SOURCE_UNVERIFIED / DEEP_KERNEL_UNVERIFIED | Current saved/applied/compiled/full-input proof or native payload mapping is missing; compile and inspect the exact owned strategy. |
+| DEEP_NATIVE_PATH_UNAVAILABLE | Native report provider/decoder/monitor shape is unsupported; reads never mount or create it. |
+| DEEP_CONTEXT_UNVERIFIED | Native extended symbol/session/currency or resolution differs from the owned main series; no history frame is sent. |
+| DEEP_NOT_DISPATCHED | Exact terminal/disconnected preparation has unchanged request counter and no history send attempt; its preserved intent can be recorded as known rejection without replay. |
+| DEEP_TRANSPORT_UNCONFIRMED | Native transport was invoked but frame admission/completion is unknown; preserve intent, never assume the manager's void return proves dispatch. |
+| DEEP_NATIVE_JOB_PENDING / DEEP_RUN_PENDING / WORKSPACE_DEEP_JOB_PENDING | Inspect/wait for exact native work, including GUI jobs; no implicit disconnect, cancellation or overlapping mutation. |
+| DEEP_RUN_UNKNOWN / DEEP_RUN_UNSETTLED | Preserve persistent intent after response/page/owner loss; do not resend or discard uncertain work. |
+| DEEP_RUN_SUPERSEDED | Later GUI/native work owns the visible state; no reset/result adoption. Archive requires archive_eligible:true and an exact prior terminal/no-history outcome. With archive_eligible:false, the earlier unknown/pending intent remains fenced and unchanged. |
+| DEEP_ARCHIVE_CONFIRMATION_REQUIRED / DEEP_ARCHIVE_ID_MISMATCH | Explicit exact request/run IDs and --acknowledge-no-adoption are required; wrong/missing values leave the record unchanged. |
+| DEEP_ARCHIVE_OUTCOME_UNKNOWN | Genuine pending/unknown outcome cannot be archived. Replacement alone is insufficient; an exact prior terminal/no-history outcome is required. Original record bytes and GUI/native work remain untouched. |
+| INVALID_STRATEGY_ALERT | Supply stable request ID, fills/alerts/both, explicit name/message and future explicit-offset expiration. Input rejection precedes Desktop access. |
+| STRATEGY_ALERT_REQUEST_CONFLICT | This exact ID already pins different creation parameters; no replay. Inspect its original request. |
+| STRATEGY_ALERT_OUTCOME_UNKNOWN / STRATEGY_ALERT_PENDING | Preserve intent; an absent readback is not proof of no creation. Observe the exact request, wait for native quiescence, recover exact workspace ownership if needed, then repeat only the same request to reconcile. |
+| STRATEGY_ALERT_NOT_DISPATCHED / STRATEGY_ALERT_SERVER_REJECTED | A known zero dispatch or exact native server rejection is preserved. Same-ID retries do not create; native_error_code is reported without message/body secrets. |
+| STRATEGY_ALERT_READBACK_UNVERIFIED / STRATEGY_ALERT_ACCOUNT_CHANGED | Exact settings/account do not match the pinned request. Do not adopt or modify that alert. |
+| STRATEGY_ALERT_ACTION_UNKNOWN / STRATEGY_ALERT_ACTION_UNCONFIRMED | Preserve the exact operation ID. Repeat only its observation/reconciliation; no mutation replay. Success requires the desired end state, not merely a successful read. |
+| STRATEGY_ALERT_OPERATION_CONFLICT / STRATEGY_ALERT_DELETED | An operation ID cannot change targets/actions; a deleted creation cannot be recreated with its old request ID. |
+| STRATEGY_ALERT_LOG_UNSUPPORTED / STRATEGY_ALERT_LOG_FAILED / STRATEGY_ALERT_LOG_UNVERIFIED | Logs are unsupported, failed, or have unverified account/ID/time schema. These are distinct from a successful empty page. Messages and external delivery fields remain omitted. |
+| INVALID_STRATEGY_ALERT_UPDATE / STRATEGY_ALERT_EXPIRED | Choose an explicit settings change. Native modification restarts active; an expired alert needs a new future expiration. No dispatch occurs on validation failure. |
+| STRATEGY_ALERT_UPDATE_UNKNOWN / STRATEGY_ALERT_UPDATE_UNVERIFIED | Preserve the update operation ID and repeat its exact desired-settings observation. Do not resend an uncertain native modification. |
+| INVALID_STRATEGY_ALERT_REPLACEMENT / STRATEGY_ALERT_REPLACEMENT_INCOMPLETE / STRATEGY_ALERT_REPLACEMENT_NEW_INACTIVE | Use a distinct new creation ID and explicit gap/overlap policy. Inspect exact old/new steps; repeat the same workflow to reconcile. No automatic deletion, reactivation or rollback. An inactive new alert does not complete replacement. |
+| DEEP_RUN_ARCHIVED | The original request evidence remains preserved without adoption; use a new request ID after current native/GUI work is idle. |
+| DEEP_REQUEST_CONFLICT | Stable request ID describes different source/full inputs/context/settings/period; use an explicit new request after old work settles. |
+| DEEP_RESULT_STALE / DEEP_REQUEST_CHANGED / DEEP_RESULT_GENERATION_CHANGED | Current source or native run/provider identity changed; no stale result adoption. |
+| DEEP_REPORT_PENDING / DEEP_REPORT_UNVERIFIED | Native report is pending or its exact decoded response cycle cannot be proved; no chart/old-report fallback. |
+| DEEP_SERVER_ERROR | Exact native server rejection is separate from an unknown transport outcome; inspect its request and observed error. |
+| DEEP_WAIT_TIMEOUT | Original finite wait expired; server work was not cancelled. |
+| DEEP_PERIOD_MISMATCH | Native trades fall outside requested absolute bounds; metrics/ledger are refused and the actual native window is reported. |
+| DEEP_PERIOD_UNVERIFIED | Native decoded window or applicable trade timestamps are missing; no vacuous coverage proof or legacy timestamp-unit guessing. |
 | PINE_COMPILE_ERROR | Fix diagnostic locations and compile requested source. |
 | REPORT_UNVERIFIED / REPORT_INVALIDATED | Compile owned source or perform verified input change; never adopt prior metrics. |
 | REPORT_PENDING / REPORT_TIMEOUT / STRATEGY_CALCULATION_PENDING | Wait for existing calculation; normal waiting does not imply cancellation/manual recovery. |
 | REPORT_CHANGED | Discard pages and restart offset0 with new revision. |
+| EQUITY_UNAVAILABLE | Select an explicit verified native strategy.equity plot; untyped arrays, buy-and-hold and closed cumulative PnL are not substitutes. |
+| EQUITY_SOURCE_UNVERIFIED / EQUITY_PLOT_UNVERIFIED | Saved/applied/full-input proof or direct expression/native mapping is missing. Inspect --list-plots and explicitly compile the owned source. |
+| EQUITY_DATA_INCOMPLETE / EQUITY_SEMANTICS_UNVERIFIED | Rows or currency/quantity/point-value/commission/checkpoint audit are incomplete; no points are adopted or interpolated. |
+| EQUITY_DEEP_UNSUPPORTED | No verified native Deep per-bar plot path; no normal fallback. |
+| EQUITY_EXPORT_EXISTS / EQUITY_EXPORT_WRITE_FAILED / EQUITY_EXPORT_UNVERIFIED | Choose a new destination. Export follows final ownership validation and reports partial-file possibility on I/O failure. |
 | STUDY_NOT_FOUND / WORKSPACE_STUDY_MISMATCH | Read current owned IDs; IDs do not survive reconnect. |
 | STUDY_NOT_FOUND for strategy-id | Requested ID is absent (including removed/another-page ID), even if calculation is pending. Re-read the safe owned current_strategy_id using the exact state/wait hint; no fallback to another strategy. A same-page nonowned strategy yields WORKSPACE_STUDY_MISMATCH. |
 | REPORT_AMBIGUOUS | More than one matching strategy; select the owned current ID rather than waiting. Runtime errors remain distinct even when the report is incomplete. |

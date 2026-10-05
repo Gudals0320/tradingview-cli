@@ -73,6 +73,7 @@ resources implicitly. Use attach or open/select a different workspace.
 
 ```bash
 tv workspace show agent-research
+tv workspace pine-prepare agent-research --create 'Agent Strategy' --file strategy.pine --request-id agent-strategy-document --generation EXACT_GENERATION --mount
 tv workspace attach agent-research --pine 'USER;DOCUMENT' --generation EXACT_GENERATION
 tv pine analyze --file strategy.pine
 tv pine check --file strategy.pine
@@ -80,7 +81,14 @@ tv --workspace agent-research pine set --file strategy.pine
 tv --workspace agent-research pine compile --save
 tv --workspace agent-research pine errors
 tv --workspace agent-research data strategy
+tv --workspace agent-research strategy properties
+tv --workspace agent-research strategy set-properties --values '{"commission_type":"percent","commission_value":0.1}' --timeout 30000
+tv --workspace agent-research backtest run --mode deep --from 2018-01-01T00:00:00Z --to 2018-01-07T00:00:00Z --timezone UTC --request-id historical-week-1
+tv --workspace agent-research backtest wait --run-id EXACT_RUN_ID --timeout 30000
+tv --workspace agent-research backtest results --run-id EXACT_RUN_ID --offset 0 --limit 100
 tv --workspace agent-research data ledger --offset 0 --limit 100
+tv --workspace agent-research data equity --list-plots
+tv --workspace agent-research data equity --plot-id plot_1 --limit 100
 ```
 
 Analyze is heuristic, not syntax validation. Check compiles on the server without
@@ -108,6 +116,11 @@ tv workspace reconnect agent-research --target NEW_TARGET --generation OLD_GENER
 tv session status
 tv session recover --run-id EXACT_RUN
 ```
+
+`workspace backtest-archive` retires only settled, known-rejected or proven
+superseded private Deep records, with exact IDs and explicit no-adoption consent.
+Genuine unknown/pending outcomes are refused. Never auto-archive unknown B/C QA
+records, cancel a native job, or treat archive as result adoption or GUI cleanup.
 
 Recovery validates recorded resources/panes, not unrelated targets. Whole-layout
 effects retain broad validation. Reconnect requires saved layout/document identity

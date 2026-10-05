@@ -1,4 +1,20 @@
 # Selection belongs to this PowerShell process, never to User/Machine environment.
+# Document preparation uses an explicit name, stable request ID and current generation:
+# tv workspace pine-prepare research-a --create 'Research A Strategy' --file strategy.pine --request-id research-a-document --generation EXACT_GENERATION --mount
+# tv --workspace research-a strategy set-properties --values '{"commission_type":"percent","commission_value":0.1}' --timeout 30000
+# tv --workspace research-a backtest run --mode deep --from 2018-01-01T00:00:00Z --to 2018-01-07T00:00:00Z --timezone UTC --request-id historical-week-1
+# tv workspace backtest-archive research-a --request-id historical-week-1 --run-id EXACT_RUN_ID --acknowledge-no-adoption
+# tv --workspace research-a data equity --list-plots
+# tv --workspace research-a data equity --plot-id plot_1 --export results/equity.csv
+# tv --workspace research-a alert strategy-create --request-id strategy-week-1 --mode both --name 'Research QA' --message '{{strategy.order.alert_message}}' --expiration 2027-01-01T00:00:00Z
+# tv --workspace research-a alert strategy-get --request-id strategy-week-1
+# tv --workspace research-a alert strategy-pause --request-id strategy-week-1 --operation-id stop-week-1
+# tv --workspace research-a alert strategy-resume --request-id strategy-week-1 --operation-id restart-week-1
+# tv --workspace research-a alert strategy-fires --request-id strategy-week-1 --limit 50
+# tv --workspace research-a alert strategy-create-then-pause --request-id paused-week-1 --mode both --name 'Research QA paused' --message '{{strategy.order.alert_message}}' --expiration 2027-01-01T00:00:00Z
+# tv --workspace research-a alert strategy-update --request-id strategy-week-1 --operation-id rename-week-1 --name 'Research QA renamed'
+# tv --workspace research-a alert strategy-replace-plan --request-id strategy-week-1 --replacement-request-id strategy-week-2 --operation-id replace-week-1 --policy gap --mode both --name 'Research QA replacement' --message '{{strategy.order.alert_message}}' --expiration 2027-01-01T00:00:00Z
+# tv --workspace research-a alert strategy-replace --request-id strategy-week-1 --replacement-request-id strategy-week-2 --operation-id replace-week-1 --policy gap --mode both --name 'Research QA replacement' --message '{{strategy.order.alert_message}}' --expiration 2027-01-01T00:00:00Z
 $script:TvModulePath = $PSCommandPath
 function Invoke-TvApplication {
     param([string[]]$Arguments, [object[]]$InputValues = @())

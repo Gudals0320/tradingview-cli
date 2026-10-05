@@ -378,7 +378,7 @@ export async function launch({ port, kill_existing, _deps } = {}) {
       // Direct WindowsApps launch was blocked or CDP never bound — fall back to
       // a local copy of the package (see _copyMsixPackageLocal).
       const localExe = _copyMsixPackageLocal(tvPath, deps);
-      await killExisting();
+      if (killFirst) await killExisting();
       child = _spawnDetached(deps.spawn, localExe, cdpArgs);
       tvPath = localExe;
       usedLocalCopy = true;

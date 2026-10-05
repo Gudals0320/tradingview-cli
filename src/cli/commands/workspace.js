@@ -1,17 +1,20 @@
 import { register } from '../router.js';
-import { initWorkspace, recoverWorkspace, closeWorkspace, workspaceInventory, rebindWorkspace, createWorkspace, verifyWorkspaceSelection, reconnectWorkspace,resetWorkspace } from '../../workspace.js';
+import { initWorkspace, recoverWorkspace, closeWorkspace, workspaceInventory, rebindWorkspace, createWorkspace, verifyWorkspaceSelection, reconnectWorkspace,resetWorkspace,prepareWorkspacePine } from '../../workspace.js';
 import { listWorkspaceNames, registerWorkspaceName, resolveWorkspace } from '../../workspace-registry.js';
 import { workspaceStatus, markInterrupted, abandonWorkspace, assertObservationAdmission, observationOperationMatches, workspaceWaitTimeout } from '../../workspace-store.js';
 import { compilationState, STRATEGY_PAGE_CODE } from '../../strategy-state.js';
 import { evaluate } from '../../connection.js';
 import { admissionGateStatus, clearAdmissionGate,currentWorkspaceSession } from '../../session.js';
 import { resourceLockStatus, clearDeadResource } from '../../resource-lock.js';
+import {archiveDeepRecord} from '../../deep-record-archive.js';
 
 const file = { type: 'string', description: 'Persistent workspace file' };
 const operation = { type: 'string', description: 'Exact interrupted operation ID' };
 register('workspace', {
   description: 'Independent target/layout/Pine ownership',
   subcommands: new Map([
+    ['backtest-archive',{description:'Explicitly retire settled/known-rejected/proven-superseded private Deep records; genuine unknown refused; no native cancellation, GUI changes or result adoption',options:{'request-id':{type:'string',description:'Exact private Deep request ID'},'run-id':{type:'string',description:'Exact recorded run ID'},'acknowledge-no-adoption':{type:'boolean',description:'Explicit consent to retire this record while preserving its original evidence'}},handler:(opts,args)=>archiveDeepRecord(args[0],{request_id:opts['request-id'],run_id:opts['run-id'],acknowledge_no_adoption:opts['acknowledge-no-adoption'],timeout:opts['lock-timeout-ms']})}],
+    ['pine-prepare',{description:'Explicit chart-only Pine create or exact-ID open, remote persistence verification and attachment; stable request ID prevents blind replay',options:{create:{type:'string',description:'New dedicated saved document name; existing exact name is refused'},open:{type:'string',description:'Exact saved Pine document ID'},type:{type:'string',description:'strategy (default), indicator or library'},file:{type:'string',description:'Source file for a new document only'},generation:{type:'string',description:'Exact current generation from workspace show'},'request-id':{type:'string',description:'Stable caller request ID reused for explicit reconciliation'},mount:{type:'boolean',description:'Explicitly mount Pine editor before checking for foreign modified drafts'}},handler:(opts,args)=>prepareWorkspacePine(args[0],opts)}],
     ['reset',{description:'Explicitly release a quiescent/lost workspace and its name; preserve artifacts, never recreate or reset while disconnected',options:{id:{type:'string',description:'Exact workspace ID from list/show'},operation:{type:'string',description:'Exact dead/interrupted operation ID for a proven lost target'},'reservation-id':{type:'string',description:'Exact dead preparation reservation ID when no workspace exists'}},handler:(opts,args)=>resetWorkspace(args[0],{...opts,reservationId:opts['reservation-id']})}],
     ['locks', {description:'Inspect resource holders and bounded wait tickets without Desktop access',handler:()=>({success:true,...resourceLockStatus()})}],
     ['lock-clear', {description:'Clear an exact dead resource token only after its native journal is reconciled',options:{token:{type:'string',description:'Exact dead holder token from workspace locks'}},handler:opts=>clearDeadResource(opts.token)}],
@@ -80,3 +83,4 @@ register('workspace', {
     } }],
   ]),
 });
+

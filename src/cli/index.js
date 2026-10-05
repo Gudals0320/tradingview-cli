@@ -17,7 +17,7 @@ try {
     console.log(version);
   } else {
     for (const name of ['health', 'chart', 'data', 'pine', 'capture', 'replay', 'drawing',
-      'alerts', 'watchlist', 'layout', 'indicator', 'ui', 'pane', 'tab', 'stream', 'session', 'workspace', 'help']) {
+      'alerts', 'watchlist', 'layout', 'indicator', 'ui', 'pane', 'tab', 'stream', 'session', 'workspace', 'strategy','backtest', 'help']) {
       await import(`./commands/${name}.js`);
     }
     const { run } = await import('./router.js');
