@@ -48,6 +48,7 @@ it('creation keeps the original pinned snapshot when the chart changes after con
 it('exact native server rejection is known and sanitized while a response without observed transport remains unknown',async()=>{
   const p=strategyAlertPage(),store=memoryStore(),input=options(p,store);p.rejectCreate('fixture_limit');const result=await createStrategyServerAlert(input);assert.equal(result.code,'STRATEGY_ALERT_SERVER_REJECTED');assert.equal(result.native_error_code,'fixture_limit');assert.equal(result.known_no_create,true);assert.equal(store.read().phase,'rejected_known');assert.equal(p.counts().posts,1);assert.equal(JSON.stringify(result).includes('private server rejection'),false);
   await createStrategyServerAlert(input);assert.equal(p.counts().posts,1);
+  assert.equal(store.read().result._private_diagnostic.server_rejection.message,'private server rejection details');assert.equal(result._private_diagnostic,undefined);
   const missing=strategyAlertPage(),unknownStore=memoryStore();missing.collection.createAlert=async()=>({alertId:42});const unknown=await createStrategyServerAlert(options(missing,unknownStore));assert.equal(unknown.code,'STRATEGY_ALERT_OUTCOME_UNKNOWN');assert.equal(unknownStore.read().phase,'unknown');assert.equal(missing.counts().posts,0);
 });
 it('ambiguous correlation after a lost response cannot adopt either copied server alert',async()=>{
@@ -113,4 +114,8 @@ it('failed deletion absence reads are sanitized and preserve the exact unknown/d
     if(lost)p.loseActionResponse();await operateStrategyServerAlert(opts);const previous=JSON.stringify(store.read());p.rest.getAlerts=async()=>{throw Object.assign(Error('private https://user:secret@example.test/body'),{code:'offline'});};
     const result=lost?await operateStrategyServerAlert(opts):await getStrategyServerAlert({request_id:input.request_id,_deps:input._deps});assert.equal(result.success,false);assert.equal(result.code,'STRATEGY_ALERT_READBACK_FAILED');assert.equal(JSON.stringify(result).includes('secret'),false);assert.equal(JSON.stringify(store.read()),previous);assert.equal(p.counts().actions,1);
   }
+});
+it('fire pagination refuses outside/equal cursors, ascending/duplicate IDs and impossible calendar timestamps',async()=>{
+  const p=strategyAlertPage(),store=memoryStore(),input=options(p,store),created=await createStrategyServerAlert(input),row=id=>({fire_id:id,alert_id:created.alert_id,fire_time:'2024-02-28T00:00:00Z',message:'private'});
+  for(const rows of [[row(6)],[row(5)],[row(1),row(2)],[row(2),row(2)],[{...row(3),fire_time:'2024-02-30T00:00:00Z'}]]){p.rest.listFires=async()=>rows;const result=await getStrategyAlertFires({request_id:input.request_id,before:5,_deps:input._deps});assert.equal(result.success,false);assert.equal(result.code,'STRATEGY_ALERT_LOG_UNVERIFIED');assert.equal(result.data,undefined);}
 });

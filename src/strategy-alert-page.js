@@ -104,7 +104,7 @@ export async function createStrategyAlert(window,document,request){
     // still supplies URL/auth/session/body; this one-attempt transport avoids
     // duplicate creates after an uncertain HTTP response.
     const started=Date.now(),send=toolkit.native_fetch,response=await send(url,{...options,body},{logBodyOnError:false});
-    try{const result=await response.clone().json();if(result.s==='error'||result.err){knownRejected=true;rejectionCode=result.err?.code??null;}}catch{/* Invalid/lost response remains unknown. */}
+    try{const result=await response.clone().json();if(result.s==='error'||result.err){knownRejected=true;rejectionCode=result.err?.code??null;diagnostic={server_rejection:{code:rejectionCode,message:typeof result.errmsg==='string'?result.errmsg:null}};}}catch{/* Invalid/lost response remains unknown. */}
     return {response,metrics:{delay:Date.now()-started,statusCode:response.status}};
   };
   rest._fetch=transport;
@@ -166,9 +166,11 @@ export async function readStrategyAlertFires(window,request){
   const userId=toolkit.getAlertSession().user.value()?.id;if(userId===undefined||await strategyAlertHash(window,String(userId))!==request.account_hash)return {success:false,code:'STRATEGY_ALERT_ACCOUNT_CHANGED'};
   let rows;try{rows=await toolkit.getAlertsRestApi().listFires({alert_ids:[request.alert_id],limit:request.limit,...(request.before!==undefined?{before:request.before}:{})});}catch(error){return {success:false,code:'STRATEGY_ALERT_LOG_FAILED',native_error_code:typeof error.code==='string'||typeof error.code==='number'?error.code:null};}
   if(!Array.isArray(rows)||rows.length>request.limit)return {success:false,code:'STRATEGY_ALERT_LOG_UNVERIFIED'};
-  const data=[],seen=new Set();for(const row of rows){
+  const data=[],seen=new Set();let previousId=request.before??Infinity;for(const row of rows){
     const id=Number(row.fire_id),time=typeof row.fire_time==='number'?row.fire_time:typeof row.fire_time==='string'&&/^\d{4}-\d\d-\d\dT.*(?:Z|[+-]\d\d:\d\d)$/.test(row.fire_time)?Date.parse(row.fire_time):NaN;
-    if(String(row.alert_id)!==String(request.alert_id)||!['number','string'].includes(typeof row.fire_id)||typeof row.fire_id==='string'&&!/^\d+$/.test(row.fire_id)||!Number.isSafeInteger(id)||id<0||seen.has(id)||!Number.isSafeInteger(time)||!Number.isFinite(new Date(time).getTime())||typeof row.message!=='string')return {success:false,code:'STRATEGY_ALERT_LOG_UNVERIFIED'};
+    if(typeof row.fire_time==='string'){const match=row.fire_time.match(/^(\d{4})-(\d\d)-(\d\d)T\d\d:\d\d:\d\d(?:\.\d{1,3})?(?:Z|[+-]\d\d:\d\d)$/);if(!match||Number(match[2])<1||Number(match[2])>12||Number(match[3])<1||Number(match[3])>new Date(Date.UTC(Number(match[1]),Number(match[2]),0)).getUTCDate())return {success:false,code:'STRATEGY_ALERT_LOG_UNVERIFIED'};}
+    if(String(row.alert_id)!==String(request.alert_id)||!['number','string'].includes(typeof row.fire_id)||typeof row.fire_id==='string'&&!/^\d+$/.test(row.fire_id)||!Number.isSafeInteger(id)||id<0||id>=previousId||seen.has(id)||!Number.isSafeInteger(time)||!Number.isFinite(new Date(time).getTime())||typeof row.message!=='string')return {success:false,code:'STRATEGY_ALERT_LOG_UNVERIFIED'};
+    previousId=id;
     seen.add(id);
     data.push({fire_id:String(row.fire_id),alert_id:row.alert_id,event_time:new Date(time).toISOString(),event_time_ms:time,message_hash:await strategyAlertHash(window,row.message),message_body:'omitted',record_kind:'tv_internal_alert_fire',broker_execution_verified:false});
   }

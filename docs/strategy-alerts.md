@@ -109,8 +109,11 @@ tv --workspace research-a alert strategy-fires --request-id strategy-week-1 --li
 
 Only verified local creation IDs, including retained deleted records, can select
 logs. The supported native listFires contract filters exact alert_ids and uses a
-numeric fire-ID before cursor. It is not a time cursor. Pages expose the observed
-time window, latest observation time and message hashes; message bodies and all
+numeric fire-ID before cursor. It is not a time cursor.
+IDs must be strictly descending and strictly below before; duplicate/equal/outside
+IDs or invalid calendar timestamps fail without publishing events. The last ID of
+a full page is therefore a strictly advancing next_before cursor. Pages expose the
+observed time window, latest observation time and message hashes; message bodies and all
 webhook/delivery fields are omitted. Empty success differs from unsupported API,
 request errors or unverified row/account/time/ID schema. A full page leaves total
 coverage unknown and returns next_before. A short page ends this server observation.
