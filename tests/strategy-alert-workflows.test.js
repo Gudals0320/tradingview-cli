@@ -1,0 +1,44 @@
+import {it} from 'node:test';
+import assert from 'node:assert/strict';
+import {strategyAlertPage} from './fixtures/strategy-alert-page.mjs';
+import {createStrategyServerAlert,getStrategyServerAlert} from '../src/core/strategy-alerts.js';
+import {updateStrategyServerAlert,planStrategyAlertReplacement,replaceStrategyServerAlert} from '../src/core/strategy-alert-workflows.js';
+const memory=()=>{let record=null;return {read:()=>record,write:r=>{record=structuredClone(r);},list:()=>record?[{record}]:[]};};
+async function setup(){const p=strategyAlertPage(),store=memory(),operationStore=memory(),replacementStore=memory(),replacementCreationStore=memory(),_deps={store,operationStore,replacementStore,replacementCreationStore,evaluateAsync:p.evaluate},base={request_id:'old',mode:'both',name:'QA',message:'private {{strategy.order.alert_message}}',expiration:'2099-01-01T00:00:00Z',active:true,_deps};const created=await createStrategyServerAlert(base);assert.equal(created.success,true);return {p,base,created,store,operationStore};}
+it('owned settings update restarts exact ID, preserves frozen source/inputs and never resends a lost update',async()=>{
+  for(const lost of [false,true]){const {p,base,created,store,operationStore}=await setup(),proof=JSON.stringify(store.read().source_proof),conditions=JSON.stringify(p.server.get(created.alert_id).conditions);p.server.get(created.alert_id).active=false;if(lost)p.loseActionResponse();
+    const input={request_id:'old',operation_id:'update-1',name:'New name',message:'new private message',expiration:'2099-02-01T00:00:00Z',_deps:base._deps},first=await updateStrategyServerAlert(input);assert.equal(first.success,!lost);assert.equal(p.counts().actions,1);assert.equal(p.counts().posts,1);assert.equal(JSON.stringify(first).includes('new private message'),false);if(lost)assert.equal(operationStore.read().phase,'unknown');
+    const repeat=await updateStrategyServerAlert(input);assert.equal(repeat.success,true);assert.equal(repeat.reused,true);assert.equal(repeat.active,true);assert.equal(p.counts().actions,1);assert.equal(JSON.stringify(store.read().source_proof),proof);assert.equal(JSON.stringify(p.server.get(created.alert_id).conditions),conditions);assert.equal(store.read().creation_wire.message,base.message);assert.equal((await getStrategyServerAlert({request_id:'old',_deps:base._deps})).success,true);
+  }
+});
+it('GUI settings edits and unexpected update endpoints are refused before update sends',async()=>{
+  for(const change of [p=>{p.server.get(101).message='GUI changed';},p=>{p.rest.modifyRestartAlert=payload=>p.rest.request('alternate_modify',payload);},p=>p.beforeSend(()=>{p.user.id=999;})]){const {p,base}=await setup();change(p);const result=await updateStrategyServerAlert({request_id:'old',operation_id:'update-1',name:'new',_deps:base._deps});assert.equal(result.success,false);assert.equal(result.mutation_dispatched,false);assert.equal(p.counts().actions,0);assert.equal(p.counts().posts,1);assert.equal(p.server.get(7).message,'private user message');}
+});
+it('replacement plans never write or mutate; gap/overlap staged replacement retains old paused and uses new exact ID',async()=>{
+  for(const policy of ['gap','overlap']){const {p,base,created}=await setup(),input={...base,operation_id:'replace-1',replacement_request_id:'new',policy},plan=await planStrategyAlertReplacement(input);assert.equal(plan.success,true);assert.equal(base._deps.replacementStore.read(),null);assert.equal(p.counts().posts,1);assert.equal(p.counts().actions,0);
+    const result=await replaceStrategyServerAlert(input);assert.equal(result.success,true);assert.equal(result.old_alert_id,created.alert_id);assert.notEqual(result.new_alert_id,created.alert_id);assert.equal(result.atomic,false);assert.equal(result.old_alert_deleted,false);assert.ok(result.window.milliseconds>=0);assert.equal(p.server.get(created.alert_id).active,false);assert.equal(p.server.get(result.new_alert_id).active,true);assert.equal(p.counts().posts,2);assert.equal(p.counts().actions,1);
+    assert.equal((await replaceStrategyServerAlert(input)).success,true);assert.equal(p.counts().posts,2);assert.equal(p.counts().actions,1);
+  }
+});
+it('replacement stops at an unknown create and reconciles that exact new ID without duplicate creation or rollback',async()=>{
+  for(const policy of ['gap','overlap']){const {p,base,created}=await setup(),input={...base,operation_id:'replace-1',replacement_request_id:'new',policy};p.loseResponse();const failed=await replaceStrategyServerAlert(input);assert.equal(failed.success,false);assert.equal(failed.code,'STRATEGY_ALERT_REPLACEMENT_INCOMPLETE');assert.equal(failed.automatic_rollback,false);assert.equal(p.server.get(created.alert_id).active,policy==='overlap');assert.equal(p.counts().posts,2);
+    const reconciled=await replaceStrategyServerAlert(input);assert.equal(reconciled.success,true);assert.equal(p.counts().posts,2);assert.equal(p.server.get(created.alert_id).active,false);assert.equal(p.counts().actions,1);
+  }
+});
+it('replacement known rejection/GUI edits leave explicit partial state and never delete or reactivate old alert',async()=>{
+  for(const policy of ['gap','overlap']){const {p,base,created}=await setup(),input={...base,operation_id:'replace-1',replacement_request_id:'new',policy};p.rejectCreate('account_limit');const result=await replaceStrategyServerAlert(input);assert.equal(result.success,false);assert.equal(p.server.get(created.alert_id).active,policy==='overlap');assert.equal(p.server.has(created.alert_id),true);assert.equal((await replaceStrategyServerAlert(input)).success,false);assert.equal(p.counts().posts,2);
+  }
+  const {p,base}=await setup();p.server.get(101).name='GUI modified';const result=await replaceStrategyServerAlert({...base,operation_id:'replace-1',replacement_request_id:'new',policy:'gap'});assert.equal(result.success,false);assert.equal(p.counts().actions,0);assert.equal(p.counts().posts,1);
+});
+it('expired settings require explicit future expiration and replacement accepts already paused old state',async()=>{
+  const {p,base,created,store}=await setup(),past='2020-01-01T00:00:00.000Z',record=store.read();record.expiration=past;record.wire.expiration=past;store.write(record);p.server.get(created.alert_id).expiration=past;p.server.get(created.alert_id).active=false;
+  const refused=await updateStrategyServerAlert({request_id:'old',operation_id:'expired-name',name:'new',_deps:base._deps});assert.equal(refused.code,'STRATEGY_ALERT_EXPIRED');assert.equal(p.counts().actions,0);
+  const updated=await updateStrategyServerAlert({request_id:'old',operation_id:'expired-renew',expiration:'2099-02-01T00:00:00Z',_deps:base._deps});assert.equal(updated.success,true);assert.equal(updated.active,true);p.server.get(created.alert_id).active=false;
+  // Use a separate action journal after verified settings update.
+  base._deps.operationStore=memory();const result=await replaceStrategyServerAlert({...base,operation_id:'paused-replace',replacement_request_id:'new',policy:'gap'});assert.equal(result.success,true);assert.equal(result.steps.pause_old.performed,false);assert.equal(p.counts().actions,1);
+});
+it('interrupted replacement preserves its pinned new snapshot and cannot adopt later changed Properties',async()=>{
+  const {p,base,created}=await setup(),input={...base,operation_id:'replace-1',replacement_request_id:'new',policy:'gap'};p.loseActionResponse();const first=await replaceStrategyServerAlert(input);assert.equal(first.success,false);assert.equal(p.counts().posts,1);assert.equal(p.server.get(created.alert_id).active,false);
+  p.externalFee(0.5);p.bind({id:'props-workspace',token:'props-token',layout:'fixture-layout',pine:'owned-document'});p.compile('changed-properties');p.refreshReport();p.completeInputs();
+  const repeated=await replaceStrategyServerAlert(input);assert.equal(repeated.success,false);assert.equal(repeated.steps.create_new.code,'STRATEGY_ALERT_SOURCE_CHANGED');assert.equal(p.counts().posts,1);assert.equal(p.server.get(created.alert_id).active,false);assert.equal(repeated.automatic_rollback,false);
+});

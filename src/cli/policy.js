@@ -6,6 +6,7 @@ export const WORKSPACE_COMMANDS = new Set(['state', 'symbol', 'timeframe', 'type
   'indicator get', 'indicator set', 'data strategy', 'data trades', 'data ledger', 'data equity', 'workspace wait',
   'ohlcv', 'values', 'quote', 'data lines', 'data labels', 'data tables', 'data boxes']);
 export const PURE_READ_COMMANDS = new Set(['status', 'state', 'info', 'ohlcv', 'values', 'data lines', 'data labels',
+  'alert strategy-replace-plan',
   'strategy properties',
   'backtest status','backtest wait','backtest results',
   'data tables', 'data boxes', 'data strategy', 'data trades', 'data ledger', 'data equity', 'data depth',
@@ -42,6 +43,7 @@ export const ADMIN_COMMANDS = new Set(['workspace init', 'workspace recover', 'w
 // Only these commands dispatch native changes which may outlive the CLI.
 // Pure collection and observation never create a recovery journal.
 export const NATIVE_COMMANDS = new Set(['launch', 'range', 'scroll', 'pine set', 'pine compile', 'pine raw-compile',
+  'alert strategy-update','alert strategy-replace',
   'strategy set-properties',
   'backtest run','backtest normal',
   'pine save', 'pine new', 'pine open', 'indicator set', 'indicator add', 'indicator remove', 'indicator toggle',
@@ -64,6 +66,7 @@ export function invocationClass(command) {
   throw new Error(`Unclassified invocation contract: ${command}`);
 }
 export const LEGACY_COMMANDS = new Set(['status', 'launch', 'range', 'scroll', 'discover', 'ui-state', 'screenshot',
+  'alert strategy-update','alert strategy-replace','alert strategy-replace-plan',
   'alert list', 'alert create', 'alert delete','alert strategy-create','alert strategy-create-then-pause','alert strategy-get','alert strategy-fires','alert strategy-pause','alert strategy-resume','alert strategy-delete', 'data depth', 'data indicator',
   'draw shape', 'draw list', 'draw get', 'draw remove', 'draw clear', 'indicator add', 'indicator remove', 'indicator toggle',
   'layout list', 'layout switch', 'pane list', 'pane layout', 'pane focus', 'pane symbol', 'pine new', 'pine open', 'pine list',
@@ -84,6 +87,7 @@ export const PREPARATION_COMMANDS = new Set(['status', 'tab list', 'layout list'
 DESKTOP_REQUIREMENTS.set('layout select','none');
 for (const name of PREPARATION_COMMANDS) LEGACY_COMMANDS.delete(name);
 export const APP_COMMANDS = new Set(['launch', 'alert list', 'alert create', 'alert delete','alert strategy-create','alert strategy-create-then-pause','alert strategy-get','alert strategy-fires','alert strategy-pause','alert strategy-resume','alert strategy-delete', 'watchlist get', 'watchlist raw', 'watchlist add', 'watchlist add-bulk', 'watchlist remove',
+  'alert strategy-update','alert strategy-replace','alert strategy-replace-plan',
   'tab new', 'tab close', 'tab switch', 'layout switch', 'stream ohlcv', 'ui click', 'ui keyboard', 'ui hover', 'ui scroll', 'ui find', 'ui eval', 'ui type', 'ui panel', 'ui fullscreen', 'ui mouse']);
 for (const name of [...LEGACY_COMMANDS]) {
   if (APP_COMMANDS.has(name)) continue;
@@ -95,11 +99,13 @@ for (const name of ['workspace list', 'workspace import', 'workspace show','work
 for (const name of ['workspace reconnect', 'workspace attach', 'workspace detach','workspace reset']) ADMIN_COMMANDS.add(name);
 for (const name of PURE_READ_COMMANDS) if (WORKSPACE_COMMANDS.has(name)) WORKSPACE_READS.add(name);
 for (const name of ['alert list','alert strategy-get','alert strategy-fires','watchlist get','watchlist raw','ui find']) WORKSPACE_READS.add(name);
+WORKSPACE_READS.add('alert strategy-replace-plan');
 for (const name of ['layout create','layout open']) NATIVE_COMMANDS.add(name);
 WORKSPACE_READS.add('workspace wait');WORKSPACE_READS.add('stream ohlcv');
 for(const name of ['symbol','timeframe','type','range','screenshot'])WORKSPACE_READS.add(name);
 // Results have their own revision/source validation; do not open panels while observing.
 export const PINE_COMMANDS = new Set(['pine get', 'pine set', 'pine compile', 'pine raw-compile', 'pine save', 'pine errors', 'pine console', 'pine new', 'pine open',
+  'alert strategy-replace','alert strategy-replace-plan',
   'alert strategy-create','alert strategy-create-then-pause',
   'strategy properties','strategy set-properties',
   'backtest run','backtest status','backtest wait','backtest results','backtest normal',
@@ -116,5 +122,6 @@ export function resourceKinds(command, values = {}, positionals = []) {
   if(command==='screenshot'&&values.method==='api')kinds.push('app');
   if (workspaceRequired(command)) kinds.push('layout', 'workspace');
   if (['pine save', 'pine compile', 'pine raw-compile', 'pine new', 'pine open','strategy set-properties','backtest run','backtest normal','alert strategy-create','alert strategy-create-then-pause'].includes(command)) kinds.push('document');
+  if(command==='alert strategy-replace')kinds.push('document');
   return kinds;
 }

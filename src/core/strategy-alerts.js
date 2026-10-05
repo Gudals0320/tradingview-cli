@@ -3,6 +3,8 @@ import {evaluateAsync} from '../connection.js';
 import {currentWorkspaceSession} from '../session.js';
 import {nativeRequestStore} from '../native-request-store.js';
 import {STRATEGY_ALERT_PAGE_CODE} from '../strategy-alert-page.js';
+export {digest,pageCall,storeFor,project};
+export const strategyAlertSnapshotFingerprint=proof=>digest(Object.fromEntries(['document_id','document_version','source_hash','inputs_fingerprint','properties_fingerprint','semantic_context'].map(key=>[key,proof[key]])));
 
 export function validateStrategyAlert(options,{require_future=false}={}){
   const error=message=>{throw Object.assign(Error(message),{code:'INVALID_STRATEGY_ALERT',details:{mutation_dispatched:false}});};
@@ -16,7 +18,7 @@ export function validateStrategyAlert(options,{require_future=false}={}){
   if(typeof options.active!=='boolean')error('Active must be explicitly represented by the adapter.');
 }
 const digest=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const pageCall=(inspect,name,request,mutation=false)=>inspect(`(async()=>{${STRATEGY_ALERT_PAGE_CODE};return ${name}(window,${['readStrategyAlert','observeStrategyAlertAction','mutateStrategyAlert','readStrategyAlertFires'].includes(name)?'':'document,'}${JSON.stringify(request)});})()`,mutation?{mutation:true}:undefined);
+const pageCall=(inspect,name,request,mutation=false)=>inspect(`(async()=>{${STRATEGY_ALERT_PAGE_CODE};return ${name}(window,${['readStrategyAlert','observeStrategyAlertAction','mutateStrategyAlert','readStrategyAlertFires','prepareStrategyAlertUpdate','updateStrategyAlert'].includes(name)?'':'document,'}${JSON.stringify(request)});})()`,mutation?{mutation:true}:undefined);
 function storeFor(request_id,_deps){const workspace=currentWorkspaceSession()?.workspace,store=_deps?.store||(workspace&&nativeRequestStore(workspace,'strategy-alert',request_id));if(!store)throw Object.assign(Error('A persistent named workspace alert ledger is required.'),{code:'WORKSPACE_REQUIRED'});return store;}
 function project(record,result){const {_private_diagnostic,...output}=result;return {...output,request_id:record.request_id,run_id:record.run_id,creation_provenance:{scope:'local_creation_record',document_id:record.source_proof.document_id,document_version:record.source_proof.document_version,source_hash:record.source_proof.source_hash,properties_fingerprint:createHash('sha256').update(record.source_proof.properties_fingerprint).digest('hex'),inputs_hash:record.source_proof.inputs_fingerprint,server_source_hash_verified:false},snapshot_automatically_updated:false};}
 
@@ -24,6 +26,7 @@ export async function createStrategyServerAlert(options){
   validateStrategyAlert(options);const {request_id,_deps}=options,inspect=_deps?.evaluateAsync||evaluateAsync,store=storeFor(request_id,_deps);
   const parameters={mode:options.mode,name:options.name,message:options.message,expiration:new Date(options.expiration).toISOString(),active:options.active,strategy_id:options.strategy_id??null},fingerprint=digest(parameters),previous=store.read();
   if(previous){
+    if(options.expected_snapshot_fingerprint&&strategyAlertSnapshotFingerprint(previous.source_proof)!==options.expected_snapshot_fingerprint)return {success:false,code:'STRATEGY_ALERT_SOURCE_CHANGED',mutation_dispatched:false};
     if(previous.fingerprint!==fingerprint)return {success:false,code:'STRATEGY_ALERT_REQUEST_CONFLICT',mutation_dispatched:false};
     if(previous.phase==='deleted')return {success:false,code:'STRATEGY_ALERT_DELETED',request_id,alert_id:previous.alert_id,mutation_dispatched:false,replay_safe:false};
     if(previous.phase==='rejected_known')return project(previous,{...previous.result,reused:true,mutation_dispatched:false});
@@ -34,6 +37,7 @@ export async function createStrategyServerAlert(options){
   if(store.list().some(entry=>['dispatching','unknown'].includes(entry.record.phase)))return {success:false,code:'STRATEGY_ALERT_PENDING',error:'An earlier creation outcome is unknown; reconcile its exact request ID before a new creation.',mutation_dispatched:false};
   const run_id=randomUUID(),request={...parameters,request_id,run_id,server_name:parameters.name+' [tv:'+run_id+']'};
   const prepared=await pageCall(inspect,'prepareStrategyAlert',request);if(!prepared.success)return prepared;
+  if(options.expected_snapshot_fingerprint&&strategyAlertSnapshotFingerprint(prepared.source_proof)!==options.expected_snapshot_fingerprint)return {success:false,code:'STRATEGY_ALERT_SOURCE_CHANGED',mutation_dispatched:false};
   const intent={schema:1,...request,strategy_id:prepared.strategy_id,fingerprint,phase:'dispatching',source_proof:prepared.source_proof,account_hash:prepared.account_hash,wire:prepared.wire,started_at:new Date().toISOString()};
   store.write(intent);
   try{const result=await pageCall(inspect,'createStrategyAlert',intent,true);store.write({...intent,phase:result.success?'created':result.known_no_create||result.mutation_dispatched===false?'rejected_known':'unknown',...(result.alert_id?{alert_id:result.alert_id}:{}),result});return project(intent,result);}

@@ -147,3 +147,33 @@ blindly retries. Deletion requires explicit human confirmation. Stable requests
 and pause-operation IDs reconcile their original steps rather than duplicate them.
 An existing plain creation ID may be reused and paused by this opt-in policy;
 reused_creation is reported.
+
+## Explicit settings update and strategy replacement
+
+`alert strategy-update --request-id OWNED --operation-id STABLE` changes any
+explicit name, message or expiration. Native modify-and-restart makes the exact
+alert active, including an alert previously paused. This activation is part of the
+command contract. It preserves the original strategy/document/inputs/context;
+source changes require replacement. Creation provenance and original wire remain
+private and preserved; fresh readback validates the updated settings. The native
+security check and SDK-generated client ID remain enabled. Only one modification
+request is sent; unknown responses reconcile the desired settings without resend.
+An expired alert requires an explicit new future expiration to restart.
+
+`alert strategy-replace-plan` reads an exact owned old alert and presents old/new
+request IDs and stage order without server changes. `alert strategy-replace`
+uses the same explicit parameters with a distinct replacement creation ID and
+stable workflow ID. `--policy gap` pauses old first, then creates and verifies the
+new current strategy snapshot. `--policy overlap` creates and verifies new first,
+then pauses old. The result includes exact old/new IDs, individual steps and the
+client confirmation time window. Neither policy is atomic: gap can miss signals,
+overlap can duplicate signals, and server transitions may predate confirmation.
+
+The old alert is retained paused, never automatically deleted or reactivated.
+Delete it explicitly with its original creation request ID after verifying the
+replacement. Partial failures retain each stage and its exact child request ID.
+Repeating the same workflow reconciles uncertain child requests, without duplicate
+creation or blind rollback. GUI-edited old settings are refused. A replacement
+must be observed active to complete; an expired/inactive replacement is incomplete.
+Messages remain private and are projected as hashes. External delivery stays out
+of scope for updates and replacement.

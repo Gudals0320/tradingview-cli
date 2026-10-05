@@ -3,11 +3,13 @@ import { alertCondition } from '../core/alerts.js';
 import { validateStrategyProperties } from '../strategy-properties.js';
 import { deepPeriod } from '../core/deep-backtest.js';
 import {validateStrategyAlert,validateStrategyAlertAction} from '../core/strategy-alerts.js';
+import {validateStrategyAlertUpdate,validateStrategyAlertReplacement} from '../core/strategy-alert-workflows.js';
 
 // A command without an entry accepts no positional arguments.
 export const POSITIONALS = new Map([
   ['alert strategy-create',[0,0]],['alert strategy-get',[0,0]],
   ['alert strategy-create-then-pause',[0,0]],
+  ['alert strategy-update',[0,0]],['alert strategy-replace-plan',[0,0]],['alert strategy-replace',[0,0]],
   ['alert strategy-fires',[0,0]],
   ['alert strategy-pause',[0,0]],['alert strategy-resume',[0,0]],['alert strategy-delete',[0,0]],
   ['workspace backtest-archive',[1,1]],
@@ -32,6 +34,8 @@ export const POSITIONALS = new Map([
 ]);
 
 export function validateArguments(command, values, positionals) {
+  if(command==='alert strategy-update')validateStrategyAlertUpdate({request_id:values['request-id'],operation_id:values['operation-id'],name:values.name,message:values.message,expiration:values.expiration});
+  if(['alert strategy-replace','alert strategy-replace-plan'].includes(command))validateStrategyAlertReplacement({request_id:values['request-id'],operation_id:values['operation-id'],replacement_request_id:values['replacement-request-id'],policy:values.policy,mode:values.mode,name:values.name,message:values.message,expiration:values.expiration});
   if(command==='alert strategy-fires'&&(!/^[-a-zA-Z0-9_]{1,100}$/.test(values['request-id']||'')||values.limit!==undefined&&(Number(values.limit)>50||Number(values.limit)<1)||values.before!==undefined&&(!Number.isSafeInteger(Number(values.before))||Number(values.before)<0)))throw Object.assign(Error('Pass exact request ID, limit 1..50 and a native fire-ID cursor.'),{code:'INVALID_STRATEGY_ALERT_LOG'});
   if(['alert strategy-pause','alert strategy-resume','alert strategy-delete'].includes(command))validateStrategyAlertAction({request_id:values['request-id'],operation_id:values['operation-id'],action:command.slice('alert strategy-'.length),after_operation_id:values['after-operation-id']});
   if(['alert strategy-create','alert strategy-create-then-pause'].includes(command))validateStrategyAlert({request_id:values['request-id'],mode:values.mode,name:values.name,message:values.message,expiration:values.expiration,active:!values.paused});

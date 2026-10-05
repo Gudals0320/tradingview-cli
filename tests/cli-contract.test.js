@@ -27,6 +27,17 @@ import {createHash} from 'node:crypto';
 
 const CLI = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
 
+it('real update and staged replacement preserve source snapshots, explicit plans and no-replay partial outcomes',async t=>{
+  for(const policy of ['gap','overlap']){const page=strategyAlertPage(),f=await fixture(t,e=>page.evaluate(e),{snapshotFactory:page.snapshot,epochFactory:page.epoch}),ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('workflow-entry');page.refreshReport();page.completeInputs();
+    const creation=['--workspace','contract','alert','strategy-create','--request-id','old','--mode','both','--name','QA','--message','private','--expiration','2099-01-01T00:00:00Z'];jsonResult(await f.run(creation));
+    page.loseActionResponse();const update=['--workspace','contract','alert','strategy-update','--request-id','old','--operation-id','update-1','--name','Renamed','--message','changed private'];const uncertain=jsonResult(await f.run(update),1);assert.equal(uncertain.code,'STRATEGY_ALERT_UPDATE_UNKNOWN');assert.equal(page.counts().actions,1);const adopted=jsonResult(await f.run(update));assert.equal(adopted.reused,true);assert.equal(page.counts().actions,1);assert.equal(JSON.stringify(adopted).includes('changed private'),false);
+    const args=['--workspace','contract','alert','strategy-replace-plan','--request-id','old','--operation-id','replace-1','--replacement-request-id','new','--policy',policy,'--mode','alerts','--name','Replacement','--message','new private','--expiration','2099-01-01T00:00:00Z'],before=snapshot(f.root),plan=jsonResult(await f.run(args));assert.equal(plan.plan.atomic,false);assert.deepEqual(snapshot(f.root),before);assert.equal(page.counts().posts,1);
+    // Fresh pause response remains lost, so the replacement must retain exact partial progress.
+    const command=args.map(v=>v==='strategy-replace-plan'?'strategy-replace':v),partial=jsonResult(await f.run(command),1);assert.equal(partial.code,'STRATEGY_ALERT_REPLACEMENT_INCOMPLETE');assert.equal(partial.automatic_rollback,false);const completed=jsonResult(await f.run(command));assert.equal(completed.old_alert_id,101);assert.equal(completed.new_alert_id,102);assert.equal(page.server.get(101).active,false);assert.equal(page.server.get(102).active,true);assert.equal(page.server.get(7).message,'private user message');assert.equal(page.counts().posts,2);assert.equal(page.counts().actions,2);
+    const catalog=jsonResult(await f.run(['help','--json','alert','strategy-replace'])).commands[0];assert.equal(catalog.invocation,'native');assert.equal(catalog.scope,'app-shared');assert.deepEqual(catalog.locks,['app','layout','workspace','document']);
+  }
+});
+
 it('real strategy alert entry verifies modes and inactive creation, hides private payloads and reuses exact IDs without duplicate sends',async t=>{
   for(const mode of ['fills','alerts','both']){
     const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});

@@ -12,6 +12,9 @@
 # tv --workspace research-a alert strategy-resume --request-id strategy-week-1 --operation-id restart-week-1
 # tv --workspace research-a alert strategy-fires --request-id strategy-week-1 --limit 50
 # tv --workspace research-a alert strategy-create-then-pause --request-id paused-week-1 --mode both --name 'Research QA paused' --message '{{strategy.order.alert_message}}' --expiration 2027-01-01T00:00:00Z
+# tv --workspace research-a alert strategy-update --request-id strategy-week-1 --operation-id rename-week-1 --name 'Research QA renamed'
+# tv --workspace research-a alert strategy-replace-plan --request-id strategy-week-1 --replacement-request-id strategy-week-2 --operation-id replace-week-1 --policy gap --mode both --name 'Research QA replacement' --message '{{strategy.order.alert_message}}' --expiration 2027-01-01T00:00:00Z
+# tv --workspace research-a alert strategy-replace --request-id strategy-week-1 --replacement-request-id strategy-week-2 --operation-id replace-week-1 --policy gap --mode both --name 'Research QA replacement' --message '{{strategy.order.alert_message}}' --expiration 2027-01-01T00:00:00Z
 $script:TvModulePath = $PSCommandPath
 function Invoke-TvApplication {
     param([string[]]$Arguments, [object[]]$InputValues = @())

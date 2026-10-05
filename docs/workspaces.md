@@ -263,3 +263,8 @@ resources and verifies the exact saved/applied snapshot before dispatch.
 `alert strategy-get` is a pure server observation with no private outcome writes.
 An unknown creation stays fenced against another creation; recovery does not
 authorize replay. [Strategy alert contract](strategy-alerts.md).
+Settings update takes app/layout/workspace resources and preserves the recorded
+strategy. Replacement takes those resources plus the current document, with an
+explicit gap/overlap policy and distinct old/new request IDs. Its read-only plan
+takes no mutation resources. Unknown child requests are reconciled by exact ID;
+old documents and unknown native outcomes cannot be adopted as a new snapshot.
