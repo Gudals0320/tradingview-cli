@@ -11,7 +11,7 @@ export function equityPage(expression='strategy.equity'){
   ]};
   p.source.reportData=()=>({value:()=>report});
   const meta=p.source.metaInfo;p.source.metaInfo=()=>({...meta(),plots:[{id:'plot_0',type:'line'}],inputs:[...meta().inputs,{id:'prop_cap',groupId:'strategy_props',internalID:'initial_capital',type:'float'}]});
-  const study=chart.getStudyById;chart.getStudyById=id=>{const existing=study(id);return {...existing,getInputValues:()=>[...existing.getInputValues(),{id:'prop_cap',value:1000}]};};
+  const study=chart.getStudyById;chart.getStudyById=id=>{const existing=study(id);return {...existing,getInputValues:()=>{const values=existing.getInputValues();return values.some(input=>input.id==='prop_cap')?values:[...values,{id:'prop_cap',value:1000}];}};};
   const bars={firstIndex:()=>0,lastIndex:()=>2,valueAt:i=>[times[i]/1000,100,110,90,100,1],rangeIterator:()=>times.map((t,index)=>({index,value:[t/1000,100,110,90,100,1]}))[Symbol.iterator]()};
   const series=chart._chartWidget.model().mainSeries();series.bars=()=>bars;series.symbolInfo=()=>({full_name:'FIXTURE:OWNED',currency_code:'USD',pointvalue:1});
   chart.getTimezone=()=> 'UTC';p.source.data=()=>({valueAt:i=>[times[i]/1000,values[i]]});p.source.offset=()=>0;

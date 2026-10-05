@@ -22,7 +22,9 @@ workspace artifact directory. Existing user alerts are never adopted by name alo
 only a previously recorded unique correlation and matching account/settings can
 identify an uncertain creation. No arbitrary alert ID is accepted by these commands.
 
-Expiration is a future ISO timestamp with an explicit offset. `--paused` creates
+New creation requires a future ISO timestamp with an explicit offset. The same
+recorded request can reconcile after expiration; its expiration and snapshot are
+preserved and no new POST is sent. `--paused` creates
 the alert initially inactive. Popup, sound, email, SMS and mobile notifications are
 disabled; webhook is explicitly null. There is no webhook configuration or external
 delivery claim. Native account/limit/server rejection codes remain distinct from
@@ -56,6 +58,11 @@ correlation, but only repeated `strategy-create` persists a reconciled creation.
 If native work remains pending after timeout, wait and use the exact existing
 workspace recovery contract before resuming. Never clear ownership or discard the
 creation intent to retry it.
+
+The read separately compares a verified current normal baseline with the local
+creation source/document/input/Properties/context proof. A changed baseline is
+stale; an unverified current chart returns snapshot_stale:null, not a claim of
+freshness. The server's settings remain the original snapshot in either case.
 
 Readback verifies the type, mode, study/input snapshot, symbol, interval, name,
 message, expiration and disabled notifications. Creation's active setting is

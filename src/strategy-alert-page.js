@@ -132,6 +132,13 @@ export async function observeStrategyAlertAction(window,request){
   return {success:false,code:'STRATEGY_ALERT_ACTION_UNCONFIRMED',alert_id:request.alert_id,desired_state_verified:false};
 }
 
+export async function compareStrategyAlertSnapshot(window,document,request){
+  const report=readStrategyReport(window,{});if(!report.success)return {snapshot_stale:null,current_snapshot:{verified:false,code:report.code}};
+  const proof=await verifyDeepSource(window,document,report.strategy_id);if(!proof.verified)return {snapshot_stale:null,current_snapshot:{verified:false,code:'STRATEGY_ALERT_CURRENT_SOURCE_UNVERIFIED'}};
+  const old=request.source_proof,changes={document:proof.document_id!==old.document_id||proof.document_version!==old.document_version,source:proof.source_hash!==old.source_hash,inputs:proof.inputs_fingerprint!==old.inputs_fingerprint,properties:proof.properties_fingerprint!==old.properties_fingerprint,context:JSON.stringify(proof.semantic_context)!==JSON.stringify(old.semantic_context)};
+  return {snapshot_stale:Object.values(changes).some(Boolean),current_snapshot:{verified:true,changes,source_hash:proof.source_hash,document_version:proof.document_version},snapshot_automatically_updated:false};
+}
+
 export async function mutateStrategyAlert(window,request){
   if(!['pause','resume','delete'].includes(request.action)||!request.alert_id)return {success:false,code:'INVALID_STRATEGY_ALERT_ACTION',mutation_dispatched:false};
   const before=await readStrategyAlert(window,request);if(!before.success)return {...before,mutation_dispatched:false};
@@ -154,4 +161,4 @@ export async function mutateStrategyAlert(window,request){
   const after=await observeStrategyAlertAction(window,request);return {...after,success:after.success&&after.desired_state_verified===true,code:after.desired_state_verified?undefined:after.code||'STRATEGY_ALERT_ACTION_UNCONFIRMED',performed:true,mutation_dispatched:true};
 }
 
-export const STRATEGY_ALERT_PAGE_CODE=DEEP_PAGE_CODE+'\n'+[strategyAlertToolkit,strategyAlertDto,ownedStrategyAlertTarget,prepareStrategyAlert,strategyAlertHash,strategyAlertFieldsMatch,readStrategyAlert,createStrategyAlert,observeStrategyAlertAction,mutateStrategyAlert].map(fn=>fn.toString()).join('\n');
+export const STRATEGY_ALERT_PAGE_CODE=DEEP_PAGE_CODE+'\n'+[strategyAlertToolkit,strategyAlertDto,ownedStrategyAlertTarget,prepareStrategyAlert,strategyAlertHash,strategyAlertFieldsMatch,readStrategyAlert,createStrategyAlert,observeStrategyAlertAction,compareStrategyAlertSnapshot,mutateStrategyAlert].map(fn=>fn.toString()).join('\n');

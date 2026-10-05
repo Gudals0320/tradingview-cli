@@ -4,13 +4,14 @@ import {currentWorkspaceSession} from '../session.js';
 import {nativeRequestStore} from '../native-request-store.js';
 import {STRATEGY_ALERT_PAGE_CODE} from '../strategy-alert-page.js';
 
-export function validateStrategyAlert(options){
+export function validateStrategyAlert(options,{require_future=false}={}){
   const error=message=>{throw Object.assign(Error(message),{code:'INVALID_STRATEGY_ALERT',details:{mutation_dispatched:false}});};
   if(!/^[-a-zA-Z0-9_]{1,100}$/.test(options.request_id||''))error('A stable request ID is required.');
   if(!['fills','alerts','both'].includes(options.mode))error('Mode must be fills, alerts or both.');
   if(typeof options.name!=='string'||!options.name.trim()||options.name.length>100)error('Name must be 1..100 characters.');
   if(typeof options.message!=='string'||options.message.length>4000)error('An explicit text/JSON message up to 4000 characters is required.');
-  if(typeof options.expiration!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?(?:Z|[+-]\d\d:\d\d)$/.test(options.expiration)||!Number.isFinite(Date.parse(options.expiration))||Date.parse(options.expiration)<=Date.now())error('Expiration must be a future explicit-offset ISO timestamp.');
+  if(typeof options.expiration!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?(?:Z|[+-]\d\d:\d\d)$/.test(options.expiration)||!Number.isFinite(Date.parse(options.expiration)))error('Expiration must be an explicit-offset ISO timestamp.');
+  if(require_future&&Date.parse(options.expiration)<=Date.now())error('A new creation requires a future expiration. Existing exact requests can still reconcile without dispatch.');
   const [year,month,day]=options.expiration.slice(0,10).split('-').map(Number);if(month<1||month>12||day<1||day>new Date(Date.UTC(year,month,0)).getUTCDate())error('Expiration calendar date is invalid.');
   if(typeof options.active!=='boolean')error('Active must be explicitly represented by the adapter.');
 }
@@ -29,6 +30,7 @@ export async function createStrategyServerAlert(options){
     const actual=await pageCall(inspect,'readStrategyAlert',previous);if(actual.success)store.write({...previous,phase:'created',alert_id:actual.alert_id,result:actual});
     return project(previous,{...actual,reused:true,mutation_dispatched:false});
   }
+  validateStrategyAlert(options,{require_future:true});
   if(store.list().some(entry=>['dispatching','unknown'].includes(entry.record.phase)))return {success:false,code:'STRATEGY_ALERT_PENDING',error:'An earlier creation outcome is unknown; reconcile its exact request ID before a new creation.',mutation_dispatched:false};
   const run_id=randomUUID(),request={...parameters,request_id,run_id,server_name:parameters.name+' [tv:'+run_id+']'};
   const prepared=await pageCall(inspect,'prepareStrategyAlert',request);if(!prepared.success)return prepared;
@@ -43,7 +45,8 @@ export async function getStrategyServerAlert({request_id,_deps}={}){
   const record=storeFor(request_id,_deps).read();if(!record)return {success:false,code:'STRATEGY_ALERT_NOT_OWNED',mutation_dispatched:false};
   if(record.phase==='deleted')return project(record,await pageCall(_deps?.evaluateAsync||evaluateAsync,'observeStrategyAlertAction',{...record,action:'delete'}));
   if(record.phase==='rejected_known')return project(record,{...record.result,mutation_dispatched:false});
-  return project(record,await pageCall(_deps?.evaluateAsync||evaluateAsync,'readStrategyAlert',record));
+  const inspect=_deps?.evaluateAsync||evaluateAsync,result=await pageCall(inspect,'readStrategyAlert',record);
+  return project(record,{...result,...(result.success?await pageCall(inspect,'compareStrategyAlertSnapshot',record):{})});
 }
 
 export async function operateStrategyServerAlert({request_id,operation_id,action,_deps}={}){

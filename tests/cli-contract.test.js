@@ -54,6 +54,13 @@ it('real strategy alert entry refuses foreign native targets and unexpected crea
     const result=jsonResult(await f.run(['--workspace','contract','alert','strategy-create','--request-id','foreign-target','--mode','fills','--name','QA','--message','private message','--expiration','2099-01-01T00:00:00Z']),1);assert.equal(result.mutation_dispatched,false);assert.ok(['STRATEGY_ALERT_TARGET_UNVERIFIED','STRATEGY_ALERT_NOT_DISPATCHED'].includes(result.code));assert.equal(page.counts().posts,0);assert.equal(page.server.size,1);
   }
 });
+it('real strategy alert reads flag a verified changed input/Properties baseline while preserving the server snapshot',async t=>{
+  const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('snapshot-alert-entry-v2');page.refreshReport();page.completeInputs();
+  const created=jsonResult(await f.run(['--workspace','contract','alert','strategy-create','--request-id','snapshot-alert','--mode','both','--name','QA','--message','private message','--expiration','2099-01-01T00:00:00Z'])),raw=JSON.stringify(page.server.get(created.alert_id));
+  jsonResult(await f.run(['--workspace','contract','strategy','set-properties','--values','{"commission_value":0.5}']));
+  const result=jsonResult(await f.run(['--workspace','contract','alert','strategy-get','--request-id','snapshot-alert']));assert.equal(result.snapshot_stale,true);assert.equal(result.current_snapshot.verified,true);assert.equal(result.current_snapshot.changes.inputs,true);assert.equal(result.current_snapshot.changes.properties,true);assert.equal(result.snapshot_automatically_updated,false);assert.equal(JSON.stringify(page.server.get(created.alert_id)),raw);assert.equal(page.counts().posts,1);
+});
 it('real owned strategy alert lifecycle verifies pause/resume/delete and never retries lost action responses',async t=>{
   const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
   const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('lifecycle-alert-entry-v2');page.refreshReport();page.completeInputs();
@@ -66,6 +73,15 @@ it('real owned strategy alert action reconciles the desired state after response
   const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('lost-lifecycle-entry-v2');page.refreshReport();page.completeInputs();
   jsonResult(await f.run(['--workspace','contract','alert','strategy-create','--request-id','owned-alert','--mode','fills','--name','QA','--message','private message','--expiration','2099-01-01T00:00:00Z']));page.loseActionResponse();
   const args=['--workspace','contract','alert','strategy-pause','--request-id','owned-alert','--operation-id','lost-pause'];const lost=jsonResult(await f.run(args),1);assert.equal(lost.code,'STRATEGY_ALERT_ACTION_UNKNOWN');assert.equal(page.counts().actions,1);const read=jsonResult(await f.run(args));assert.equal(read.reused,true);assert.equal(read.desired_state_verified,true);assert.equal(page.counts().actions,1);
+});
+it('real strategy alert creation reconciles the unchanged request after its expiration without another POST',async t=>{
+  const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('expired-reconcile-entry-v2');page.refreshReport();page.completeInputs();page.loseResponse();
+  const expiration=new Date(Date.now()+4000).toISOString(),args=['--workspace','contract','alert','strategy-create','--request-id','expired-reconcile','--mode','fills','--name','QA','--message','private message','--expiration',expiration],unknown=jsonResult(await f.run(args),1);assert.equal(unknown.code,'STRATEGY_ALERT_OUTCOME_UNKNOWN');assert.equal(page.counts().posts,1);
+  const path=join(workspaceArtifactDirectory(ws,f.options),'strategy-alert-request-'+createHash('sha256').update('expired-reconcile').digest('hex')+'.json'),before=JSON.parse(readFileSync(path,'utf8'));
+  await new Promise(resolve=>setTimeout(resolve,Math.max(0,Date.parse(expiration)-Date.now()+50)));
+  const result=jsonResult(await f.run(args));assert.equal(result.reused,true);assert.equal(result.run_id,unknown.run_id);assert.equal(result.alert_id,101);assert.equal(page.counts().posts,1);const after=JSON.parse(readFileSync(path,'utf8'));assert.equal(after.phase,'created');assert.equal(after.run_id,before.run_id);assert.equal(after.expiration,before.expiration);assert.deepEqual(after.wire,before.wire);
+  jsonError(await f.run(args.map(value=>value==='expired-reconcile'?'new-expired-request':value)),/new creation requires a future/,'INVALID_STRATEGY_ALERT');assert.equal(page.counts().posts,1);
 });
 it('real strategy alert entry reconciles a lost server response without SDK or CLI create retries',async t=>{
   const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
