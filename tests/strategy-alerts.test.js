@@ -1,10 +1,15 @@
 import {it} from 'node:test';
 import assert from 'node:assert/strict';
-import {createStrategyServerAlert,getStrategyServerAlert,operateStrategyServerAlert,getStrategyAlertFires,createStrategyAlertThenPause} from '../src/core/strategy-alerts.js';
+import {createStrategyServerAlert,getStrategyServerAlert,operateStrategyServerAlert,getStrategyAlertFires,createStrategyAlertThenPause,validateStrategyAlertAction} from '../src/core/strategy-alerts.js';
 import {strategyAlertPage} from './fixtures/strategy-alert-page.mjs';
 
 const memoryStore=()=>{let row=null;return {read:()=>row,write:value=>{row=structuredClone(value);},list:()=>row?[{record:row}]:[]};};
 const options=(p,store,extra={})=>({request_id:'owned-alert',mode:'both',name:'QA',message:'{"event":"{{strategy.order.alert_message}}"}',expiration:'2099-01-01T00:00:00Z',active:true,...extra,_deps:{store,evaluateAsync:p.evaluate}});
+it('recovery operation IDs must be distinct valid pause IDs and cannot authorize resume/delete',()=>{
+  const input={request_id:'owned',operation_id:'new-pause',action:'pause',after_operation_id:'old-pause'};
+  assert.doesNotThrow(()=>validateStrategyAlertAction(input));
+  for(const changed of [{after_operation_id:'new-pause'},{after_operation_id:'invalid id'},{action:'resume'},{action:'delete'}])assert.throws(()=>validateStrategyAlertAction({...input,...changed}),{code:'INVALID_STRATEGY_ALERT_ACTION'});
+});
 it('native strategy alerts preserve three modes, placeholders and paused creation with exact fresh readback',async()=>{
   for(const mode of ['fills','alerts','both'])for(const active of [false,true]){
     const p=strategyAlertPage(),store=memoryStore(),input=options(p,store,{mode,active});const result=await createStrategyServerAlert(input);
@@ -138,6 +143,18 @@ it('explicit create-then-pause reports both steps and measured non-atomic active
 });
 it('explicit create-then-pause failure/unknown leaves an ACTIVE warning and exact no-replay next commands',async()=>{
   for(const lost of [false,true]){const p=strategyAlertPage(),store=memoryStore(),input=options(p,store),operationStore=memoryStore(),pauseCreationStore=memoryStore();if(lost)p.loseActionResponse();else p.rest.stopAlerts=async()=>{throw Error('native preflight failure');};
-    const result=await createStrategyAlertThenPause({...input,_deps:{...input._deps,operationStore,pauseCreationStore}});assert.equal(result.success,false);assert.equal(result.steps.create.success,true);assert.equal(result.active,true);assert.equal(result.active_state,'ACTIVE_UNTIL_INACTIVE_VERIFIED');assert.equal(result.automatic_delete,false);assert.equal(result.deletion_requires_explicit_confirmation,true);assert.ok(result.next_commands[1].includes('--operation-id initial-pause-'));assert.equal(p.counts().posts,1);assert.equal(p.server.size,2);
+    const result=await createStrategyAlertThenPause({...input,_deps:{...input._deps,operationStore,pauseCreationStore}});assert.equal(result.success,false);assert.equal(result.steps.create.success,true);assert.equal(result.active,lost?false:true);assert.equal(result.active_state,'ACTIVE_UNTIL_INACTIVE_VERIFIED');assert.equal(result.automatic_delete,false);assert.equal(result.deletion_requires_explicit_confirmation,true);assert.ok(result.next_commands[1].includes('-recovery-1'));assert.ok(result.next_commands[1].includes('--after-operation-id'));assert.equal(p.counts().posts,1);assert.equal(p.server.size,2);
   }
+});
+it('two-step unknown pause recovery uses a new explicit ID after fresh ACTIVE state and never replays the original',async()=>{
+  const p=strategyAlertPage(),store=memoryStore(),input=options(p,store),pauseCreationStore=memoryStore(),records=new Map(),operationId='initial-pause-'+(await import('node:crypto')).createHash('sha256').update(JSON.stringify(input.request_id)).digest('hex').slice(0,40);
+  const operationStore={read:()=>records.get(operationId)||null,write:r=>records.set(r.operation_id,structuredClone(r)),list:()=>[...records.values()].map(record=>({record}))},fetch=p.window.fetch;p.window.fetch=(url,options)=>new URL(url).pathname==='/stop_alerts'?Promise.reject(Error('lost before commit')):fetch(url,options);
+  const opts={...input,_deps:{...input._deps,operationStore,pauseCreationStore}},failed=await createStrategyAlertThenPause(opts);assert.equal(failed.active,true);assert.equal(failed.steps.pause.code,'STRATEGY_ALERT_ACTION_UNKNOWN');const original=JSON.stringify(records.get(operationId));
+  const recoveryId=pauseCreationStore.read().recovery_operation_id,newStore={read:()=>records.get(recoveryId)||null,write:r=>records.set(r.operation_id,structuredClone(r)),list:operationStore.list};p.window.fetch=fetch;
+  const fresh=await getStrategyServerAlert({request_id:input.request_id,_deps:input._deps});assert.equal(fresh.active,true);const recovered=await operateStrategyServerAlert({request_id:input.request_id,operation_id:recoveryId,after_operation_id:operationId,action:'pause',_deps:{...input._deps,operationStore:newStore}});assert.equal(recovered.success,true);assert.equal(recovered.active,false);assert.equal(p.counts().actions,1);assert.equal(JSON.stringify(records.get(operationId)),original);assert.equal(p.counts().posts,1);
+  const conflict=await operateStrategyServerAlert({request_id:input.request_id,operation_id:recoveryId,after_operation_id:'different-parent',action:'pause',_deps:{...input._deps,operationStore:newStore}});assert.equal(conflict.code,'STRATEGY_ALERT_OPERATION_CONFLICT');assert.equal(p.counts().actions,1);
+});
+it('unknown pause plus failed fresh read returns active null, never an unverified true',async()=>{
+  const p=strategyAlertPage(),store=memoryStore(),input=options(p,store),operationStore=memoryStore(),pauseCreationStore=memoryStore(),stop=p.rest.stopAlerts;p.loseActionResponse();p.rest.stopAlerts=async payload=>{try{return await stop(payload);}finally{p.rest.getAlerts=async()=>{throw Error('private read error');};}};
+  const result=await createStrategyAlertThenPause({...input,_deps:{...input._deps,operationStore,pauseCreationStore}});assert.equal(result.success,false);assert.equal(result.active,null);assert.equal(result.active_state,'ACTIVE_UNTIL_INACTIVE_VERIFIED');assert.equal(p.counts().posts,1);
 });

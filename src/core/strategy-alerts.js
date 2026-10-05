@@ -49,17 +49,26 @@ export async function getStrategyServerAlert({request_id,_deps}={}){
   return project(record,{...result,...(result.success?await pageCall(inspect,'compareStrategyAlertSnapshot',record):{})});
 }
 
-export async function operateStrategyServerAlert({request_id,operation_id,action,_deps}={}){
-  if(!/^[-a-zA-Z0-9_]{1,100}$/.test(operation_id||'')||!['pause','resume','delete'].includes(action))throw Object.assign(Error('Pass a stable operation ID and pause/resume/delete action.'),{code:'INVALID_STRATEGY_ALERT_ACTION'});
+export function validateStrategyAlertAction({request_id,operation_id,action,after_operation_id}){
+  const valid=id=>/^[-a-zA-Z0-9_]{1,100}$/.test(id||'');
+  if(!valid(request_id)||!valid(operation_id)||!['pause','resume','delete'].includes(action)||after_operation_id!==undefined&&(action!=='pause'||!valid(after_operation_id)||after_operation_id===operation_id))throw Object.assign(Error('Pass exact creation and stable operation IDs; recovery requires a distinct new pause ID.'),{code:'INVALID_STRATEGY_ALERT_ACTION'});
+}
+export async function operateStrategyServerAlert({request_id,operation_id,action,after_operation_id,_deps}={}){
+  validateStrategyAlertAction({request_id,operation_id,action,after_operation_id});
   const creation=storeFor(request_id,_deps),record=creation.read();if(!record||!['created','deleted'].includes(record.phase)||!record.alert_id)return {success:false,code:'STRATEGY_ALERT_NOT_OWNED',mutation_dispatched:false};
   if(record.phase==='deleted'&&action!=='delete')return {success:false,code:'STRATEGY_ALERT_DELETED',alert_id:record.alert_id,mutation_dispatched:false};
   const workspace=currentWorkspaceSession()?.workspace,store=_deps?.operationStore||(workspace&&nativeRequestStore(workspace,'strategy-alert-operation',operation_id));if(!store)throw Object.assign(Error('Persistent operation ledger required.'),{code:'WORKSPACE_REQUIRED'});
   const inspect=_deps?.evaluateAsync||evaluateAsync,fingerprint=digest({request_id,alert_id:record.alert_id,action}),previous=store.read();
-  if(previous&&previous.fingerprint!==fingerprint)return {success:false,code:'STRATEGY_ALERT_OPERATION_CONFLICT',mutation_dispatched:false};
+  if(previous&&(previous.fingerprint!==fingerprint||(previous.explicit_new_pause_after??null)!==(after_operation_id??null)))return {success:false,code:'STRATEGY_ALERT_OPERATION_CONFLICT',mutation_dispatched:false};
   const request={...record,action,operation_id};
   if(previous){const result=await pageCall(inspect,'observeStrategyAlertAction',request),verified=result.success&&result.desired_state_verified===true;if(verified){store.write({...previous,phase:'verified',reconciliation:result});if(action==='delete'&&record.phase!=='deleted')creation.write({...record,phase:'deleted',deletion:{operation_id,verified_at:new Date().toISOString(),original_creation_preserved:true}});}return project(record,{...result,success:verified,code:verified?undefined:result.code||'STRATEGY_ALERT_ACTION_UNCONFIRMED',operation_id,reused:true,mutation_dispatched:false});}
-  if(store.list().some(entry=>['dispatching','unknown'].includes(entry.record.phase)&&entry.record.alert_id===record.alert_id))return {success:false,code:'STRATEGY_ALERT_ACTION_UNKNOWN',mutation_dispatched:false,replay_safe:false};
-  const intent={schema:1,operation_id,fingerprint,request_id,alert_id:record.alert_id,action,phase:'dispatching',started_at:new Date().toISOString()};store.write(intent);
+  const unresolved=store.list().filter(entry=>['dispatching','unknown'].includes(entry.record.phase)&&entry.record.alert_id===record.alert_id);
+  if(unresolved.length){
+    if(action!=='pause'||!after_operation_id||unresolved.length!==1||unresolved[0].record.operation_id!==after_operation_id||unresolved[0].record.action!=='pause')return {success:false,code:'STRATEGY_ALERT_ACTION_UNKNOWN',mutation_dispatched:false,replay_safe:false};
+    const fresh=await pageCall(inspect,'readStrategyAlert',record);if(!fresh.success)return {...fresh,mutation_dispatched:false};
+    if(fresh.active!==true)return project(record,{...fresh,desired_state_verified:true,performed:false,mutation_dispatched:false});
+  }
+  const intent={schema:1,operation_id,fingerprint,request_id,alert_id:record.alert_id,action,phase:'dispatching',started_at:new Date().toISOString(),...(after_operation_id?{explicit_new_pause_after:after_operation_id,original_outcome_preserved:true}:{})};store.write(intent);
   try{const result=await pageCall(inspect,record.phase==='deleted'?'observeStrategyAlertAction':'mutateStrategyAlert',request,record.phase!=='deleted');store.write({...intent,phase:result.success?'verified':result.known_no_mutation||result.mutation_dispatched===false?'rejected_known':'unknown',result});if(result.success&&action==='delete')creation.write({...record,phase:'deleted',deletion:{operation_id,verified_at:new Date().toISOString(),original_creation_preserved:true}});return project(record,{...result,operation_id});}
   catch(error){store.write({...intent,phase:'unknown',error_code:error.code||'STRATEGY_ALERT_ACTION_UNKNOWN'});throw error;}
 }
@@ -84,5 +93,7 @@ export async function createStrategyAlertThenPause(options){
   const pause=await operateStrategyServerAlert({request_id,operation_id:record.pause_operation_id,action:'pause',_deps});
   record={...record,pause_result:pause,...(pause.success&&!record.pause_confirmed_at?{pause_confirmed_at:new Date().toISOString()}:{}),phase:pause.success?'paused_verified':'pause_unconfirmed'};store.write(record);
   const windowMs=record.pause_confirmed_at?Date.parse(record.pause_confirmed_at)-Date.parse(record.create_confirmed_at):null;
-  return {success:pause.success,code:pause.success?undefined:'STRATEGY_ALERT_CREATED_PAUSE_UNCONFIRMED',request_id,alert_id:create.alert_id,policy:'create_active_then_pause',atomic:false,steps:{create,pause},active:pause.success?false:true,active_state:pause.success?'inactive_verified':'ACTIVE_UNTIL_INACTIVE_VERIFIED',transient_active_possible:true,could_fire_during_active_window:true,active_window:{create_confirmed_at:record.create_confirmed_at,pause_confirmed_at:record.pause_confirmed_at??null,milliseconds:windowMs,scope:'client confirmation times; creation may predate first confirmation'},automatic_delete:false,replayed:false,...(!pause.success?{next_commands:['tv --workspace WORKSPACE alert strategy-get --request-id '+request_id,'tv --workspace WORKSPACE alert strategy-pause --request-id '+request_id+' --operation-id '+record.pause_operation_id],deletion_requires_explicit_confirmation:true}:{})};
+  const fresh=pause.success?null:await getStrategyServerAlert({request_id,_deps}),active=pause.success?false:fresh?.success?fresh.active:null;
+  if(!pause.success&&!record.recovery_operation_id){record={...record,recovery_attempt:1,recovery_operation_id:record.pause_operation_id+'-recovery-1'};store.write(record);}
+  return {success:pause.success,code:pause.success?undefined:'STRATEGY_ALERT_CREATED_PAUSE_UNCONFIRMED',request_id,alert_id:create.alert_id,policy:'create_active_then_pause',atomic:false,reused_creation:create.reused===true,steps:{create,pause},active,active_state:pause.success?'inactive_verified':'ACTIVE_UNTIL_INACTIVE_VERIFIED',transient_active_possible:true,could_fire_during_active_window:true,active_window:{create_confirmed_at:record.create_confirmed_at,pause_confirmed_at:record.pause_confirmed_at??null,milliseconds:windowMs,scope:'client confirmation times; creation may predate first confirmation'},automatic_delete:false,replayed:false,...(!pause.success?{next_commands:['tv --workspace WORKSPACE alert strategy-get --request-id '+request_id,'tv --workspace WORKSPACE alert strategy-pause --request-id '+request_id+' --operation-id '+record.recovery_operation_id+' --after-operation-id '+record.pause_operation_id],next_pause_condition:'Only if fresh get still shows active; this explicit NEW operation sends a new pause and never replays the original.',deletion_requires_explicit_confirmation:true}:{})};
 }

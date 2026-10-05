@@ -137,6 +137,13 @@ exact owned ID and verifies inactivity. It is not atomic initial paused creation
 The result includes both steps and measured create-confirmed to pause-confirmed
 times; the alert could fire during that window and creation may predate the first
 confirmation. A failed or unknown pause returns failure, an ACTIVE-until-verified
-warning, the exact alert ID and next get/pause commands. It never auto-deletes or
+warning, the exact alert ID and next get/pause commands. The active field is null
+when fresh state is unverified, true only after a fresh active observation, and
+false only after verified inactivity. Guidance first reads state, then explicitly
+uses a new persisted recovery operation ID with --after-operation-id if still
+active. That deliberate new pause preserves the original unknown outcome; it does
+not replay the original operation. It never auto-deletes or
 blindly retries. Deletion requires explicit human confirmation. Stable requests
 and pause-operation IDs reconcile their original steps rather than duplicate them.
+An existing plain creation ID may be reused and paused by this opt-in policy;
+reused_creation is reported.
