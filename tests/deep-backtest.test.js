@@ -33,6 +33,12 @@ it('source changes during asynchronous hashing reject before any Deep dispatch',
     const proof=await call(p,'verifyDeepSource','owned-study');assert.equal(proof.verified,false);assert.equal(p.dispatches(),0);
   }
 });
+it('source proof rejects unaccepted full inputs and a Properties baseline changed between independent reads',async()=>{
+  const stale=deepPage();stale.externalFee(0.09);assert.equal((await call(stale,'verifyDeepSource','owned-study')).verified,false);assert.equal(stale.dispatches(),0);
+  const p=deepPage(),store=memoryStore();
+  const properties=async()=>{const old=await getProperties({_deps:{evaluate:p.evaluate}});p.externalFee(0.09);p.pending();p.completeInputs();compilationState(p.window);return old;};
+  const result=await runDeep({from:'2024-01-01T00:00:00Z',to:'2024-01-02T00:00:00Z',request_id:'changed-properties-baseline',_deps:{properties,evaluateAsync:p.evaluate,store}});assert.equal(result.code,'DEEP_SOURCE_UNVERIFIED');assert.equal(result.mutation_dispatched,false);assert.equal(p.dispatches(),0);assert.equal(store.read(),null);
+});
 it('a stale native manager kernel cannot borrow the current owned compile proof',async()=>{
   const p=deepPage();p.manager._activeStrategyInputs.value=()=>({studyName:'foreign',inputs:{text:'other',pineId:'foreign',pineVersion:9,in_cycle:99},dependencies:[]});
   const result=await start(p);assert.equal(result.success,false);assert.equal(result.code,'DEEP_KERNEL_UNVERIFIED');assert.equal(result.mutation_dispatched,false);assert.equal(p.dispatches(),0);
@@ -143,6 +149,16 @@ it('source-stale unknown native runs cannot be reset or silently removed',async(
   const p=deepPage();await start(p);p.setEditorSource('external draft',true);p.manager.activeStrategyStatus.set(null);
   const store=memoryStore();store.write({request_id:'exact-request',run_id:'exact-run',phase:'unknown'});
   const result=await resetNormal({_deps:{store,evaluateAsync:p.evaluate}});assert.equal(result.success,false);assert.equal(result.code,'DEEP_RUN_UNSETTLED');assert.equal(store.read().phase,'unknown');assert.equal(p.window.__tvCliDeepRun.run_id,'exact-run');
+});
+it('normal reset never disconnects GUI/unrecorded work or borrows an old zero-history proof for a new provider/socket',async()=>{
+  for(const kind of ['unrecorded','provider','socket','counter']){const p=deepPage(),store=memoryStore();
+    if(kind!=='unrecorded'){const original=p.manager._sendRequest;p.manager._sendRequest=function(method,args){const result=original.call(this,method,args);if(method==='history_create_session')this._sessionid='foreign';return result;};await assert.rejects(()=>start(p),/DEEP_REQUEST_CHANGED/);}
+    else{p.facade._isDeepBacktesting=true;p.manager.activeStrategyStatus.set({type:1});}
+    if(kind==='provider'){const other={...p.facade,_deepBacktestingManager:{...p.manager}};p.window.__deepFacade=other;p.evaluate('document.__deepRoot.__reactFiber$deep.memoizedProps.value=window.__deepFacade');}
+    if(kind==='socket')p.manager._wsConnection._socket={};if(kind==='counter')p.manager._requestId++;
+    let changes=0;const history=p.history.handleSetIsDeepHistoryMode,reset=p.facade.resetDeepBacktestingReportData;p.history.handleSetIsDeepHistoryMode=(...args)=>{changes++;return history(...args);};p.facade.resetDeepBacktestingReportData=(...args)=>{changes++;return reset(...args);};
+    const before=p.manager.activeStrategyStatus.value(),result=await resetNormal({_deps:{store,evaluateAsync:p.evaluate}});assert.equal(result.success,false,kind);assert.equal(result.code,'DEEP_RUN_UNSETTLED',kind);assert.equal(result.mutation_dispatched,false,kind);assert.equal(changes,0,kind);assert.equal(p.manager.activeStrategyStatus.value(),before,kind);
+  }
 });
 it('an exact native rejection is observable even when setting initial null emits no report-change event',async()=>{
   const p=deepPage();await start(p);await p.error();const status=await call(p,'inspectDeepRun','exact-run');assert.equal(status.phase,'server_error');assert.equal(status.code,'DEEP_SERVER_ERROR');assert.equal(status.success,false);assert.equal(p.window.__tvCliDeepRun.report_cycle,0);

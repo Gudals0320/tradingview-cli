@@ -23,7 +23,7 @@ export async function runDeep({from,to,timezone,request_id,strategy_id,_deps}={}
   if(!properties.success||properties.report_verified!==true||!properties.source_hash)return {success:false,code:'DEEP_SOURCE_UNVERIFIED',error:'Compile the owned source and verify its normal baseline before explicit Deep dispatch.',mutation_dispatched:false};
   const inspect=_deps?.evaluateAsync||evaluateAsync,workspace=currentWorkspaceSession()?.workspace;
   const sourceProof=await inspect(`(async()=>{${DEEP_PAGE_CODE};return verifyDeepSource(window,document,${JSON.stringify(properties.strategy_id)});})()`);
-  if(!sourceProof.verified||sourceProof.source_hash!==properties.source_hash)return {success:false,code:'DEEP_SOURCE_UNVERIFIED',error:'Current saved/applied source and native inputs have no matching compile proof.',mutation_dispatched:false};
+  if(!sourceProof.verified||sourceProof.source_hash!==properties.source_hash||createHash('sha256').update(sourceProof.properties_fingerprint||'').digest('hex')!==properties.effective_properties.fingerprint)return {success:false,code:'DEEP_SOURCE_UNVERIFIED',error:'Current saved/applied source, complete inputs and Properties have no matching compile proof.',mutation_dispatched:false};
   const fingerprint=createHash('sha256').update(JSON.stringify({period:period.period,strategy_id:properties.strategy_id,source_proof:sourceProof,properties:properties.effective_properties.fingerprint})).digest('hex');
   const request={...period,request_id,strategy_id:properties.strategy_id,source_proof:sourceProof,properties_hash:properties.effective_properties.fingerprint,fingerprint,run_id:randomUUID()};
   const store=_deps?.store||(workspace?nativeRequestStore(workspace,'deep',request_id):null);
@@ -88,6 +88,7 @@ export async function resetNormal({_deps}={}){
   }
   return inspect(`(()=>{${DEEP_PAGE_CODE};const run=window.__tvCliDeepRun;if(run){const status=inspectDeepSettlement(window,run.run_id);if(!status.settled)return {success:false,code:'DEEP_RUN_UNSETTLED',error:'Wait/reconcile the exact native job; normal reset does not abandon unknown outcomes.'};}
     const {facade,history}=findDeepReportProviders(document);if(!facade||!history||typeof facade.resetDeepBacktestingReportData!=='function')return {success:false,code:'DEEP_NATIVE_PATH_UNAVAILABLE',error:'Open the owned report with its native explicit reset capability.'};
+    const admission=deepResetAdmission(window,facade,run);if(!admission.success)return admission;if(admission.already_normal)return {success:true,mode:'normal',performed:false,results_invalidated:false};
     const noHistory=run&&inspectDeepSettlement(window,run.run_id).no_history_dispatch_verified===true;
     history.handleSetIsDeepHistoryMode(false);facade.resetDeepBacktestingReportData();run?.dispose?.();
     if(noHistory){const manager=facade._deepBacktestingManager,toolkit=nativeDeepToolkit(window);manager._sendRequest=originalDeepSender(manager,toolkit?.consumer_source,true);}

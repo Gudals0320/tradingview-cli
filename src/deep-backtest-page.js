@@ -11,6 +11,8 @@ export async function verifyDeepSource(window,document,strategyId){
   const identity=controller.getScriptIdVersion(),pine=item.inputs.find(i=>i.id==='pineId')?.value,version=item.inputs.find(i=>i.id==='pineVersion')?.value;
   if(!identity?.scriptIdPart||pine!==identity.scriptIdPart||String(version)!==String(identity.version))return denied();
   const context=readChartContext(window),chart=window.TradingViewApi.activeChart?.()||window.TradingViewApi._activeChartWidgetWV.value();
+  const properties_fingerprint=effectiveStrategyProperties(window,item.id)?.fingerprint??null;
+  if(epoch.inputs_fingerprint!==JSON.stringify(item.inputs)||epoch.effective_properties_fingerprint!==properties_fingerprint||epoch.calculation?.active||epoch.calculation?.completed?.cycle>epoch.accepted_cycle||context.symbol!==epoch.context?.symbol||context.resolution!==epoch.context?.resolution||context.chart_type!==epoch.context?.chart_type)return denied();
   const semantic_context={symbol:context.symbol,resolution:context.resolution,chart_type:context.chart_type,wire:ownedDeepContext(window),symbol_definition:chart.symbolExt?.()||null,session:chart.symbolExt?.()?.session||null,timezone:chart.getTimezone?.()||null};
   const source=canonicalPineSource(editor.editor.getValue()),inputs=JSON.stringify(item.inputs),compiled=compiledIdentity(item.inputs),generation=window.__tvCliWorkspace?.nonce||null;
   const epochKey=JSON.stringify({token:epoch.token,phase:epoch.phase,source_hash:epoch.source_hash,report_verified:epoch.report_verified,compiled_identity:epoch.compiled_identity,inputs_fingerprint:epoch.inputs_fingerprint,accepted_cycle:epoch.accepted_cycle,cycle:epoch.calculation?.cycle});
@@ -20,8 +22,8 @@ export async function verifyDeepSource(window,document,strategyId){
   const afterChart=window.TradingViewApi.activeChart?.()||window.TradingViewApi._activeChartWidgetWV.value(),afterContext=readChartContext(window);
   const afterSemantic={symbol:afterContext.symbol,resolution:afterContext.resolution,chart_type:afterContext.chart_type,wire:ownedDeepContext(window),symbol_definition:afterChart.symbolExt?.()||null,session:afterChart.symbolExt?.()?.session||null,timezone:afterChart.getTimezone?.()||null};
   const afterEpochKey=JSON.stringify({token:afterEpoch?.token,phase:afterEpoch?.phase,source_hash:afterEpoch?.source_hash,report_verified:afterEpoch?.report_verified,compiled_identity:afterEpoch?.compiled_identity,inputs_fingerprint:afterEpoch?.inputs_fingerprint,accepted_cycle:afterEpoch?.accepted_cycle,cycle:afterEpoch?.calculation?.cycle});
-  if(afterController!==controller||afterEditor?.editor!==editor.editor||afterChart!==chart||afterEpoch!==epoch||epochKey!==afterEpochKey||afterController?.isModified?.()!==false||afterController?.isDraft?.()!==false||JSON.stringify(afterController?.getScriptIdVersion())!==JSON.stringify(identity)||canonicalPineSource(afterEditor?.editor.getValue()||'')!==source||JSON.stringify(after?.inputs)!==inputs||generation!==(window.__tvCliWorkspace?.nonce||null)||JSON.stringify(afterSemantic)!==JSON.stringify(semantic_context)||source_hash!==epoch.source_hash)return denied();
-  return {verified:true,source_hash,document_id:identity.scriptIdPart,document_version:String(identity.version),inputs_fingerprint,compiled_fingerprint,semantic_context,page_generation:generation,compile_token:epoch.token};
+  if(afterController!==controller||afterEditor?.editor!==editor.editor||afterChart!==chart||afterEpoch!==epoch||epochKey!==afterEpochKey||afterController?.isModified?.()!==false||afterController?.isDraft?.()!==false||JSON.stringify(afterController?.getScriptIdVersion())!==JSON.stringify(identity)||canonicalPineSource(afterEditor?.editor.getValue()||'')!==source||JSON.stringify(after?.inputs)!==inputs||effectiveStrategyProperties(window,item.id)?.fingerprint!==properties_fingerprint||generation!==(window.__tvCliWorkspace?.nonce||null)||JSON.stringify(afterSemantic)!==JSON.stringify(semantic_context)||source_hash!==epoch.source_hash)return denied();
+  return {verified:true,source_hash,document_id:identity.scriptIdPart,document_version:String(identity.version),inputs_fingerprint,compiled_fingerprint,properties_fingerprint,semantic_context,page_generation:generation,compile_token:epoch.token};
 }
 
 /** Read cached modules already imported by the observed native Deep facade. */
@@ -110,6 +112,7 @@ export function installDeepAttribution(manager,run,toolkit){
     // This Desktop's WSBackendConnection has on() but no off(). Install one
     // bounded dispatcher per connection and detach this run's receiver on dispose.
     const socket=connection._socket||connection;
+    if(!run.setup_socket){run.setup_connection=connection;run.setup_socket=socket;}
     if(connection.__tvCliDeepResponseRouter?.socket!==socket){const router={socket};if(connection.on('message',raw=>{if((connection._socket||connection)===socket&&manager._wsConnection===connection)hooks.active?.response(raw,connection,socket);})===false)throw Error('DEEP_NATIVE_PATH_UNAVAILABLE: Native listener was not admitted.');connection.__tvCliDeepResponseRouter=router;}
   };
   const active={attach,response,changed:raw_report=>{const report=manager.activeStrategyReportData?.value?.();run.cycle_report=report;run.cycle_report_json=JSON.stringify(report??null);cycles.push({cycle:run.report_cycle,raw_report});bind();}};
@@ -141,7 +144,7 @@ export function deepCurrentIdentity(window,document,strategyId){
 
 export function sendVerifiedDeepFrame(window,document,manager,run,method,args,originalSend){
   if(!['history_create_session','switch_timezone','request_history_data'].includes(method))return originalSend.call(manager,method,args);
-  const reject=message=>{if(!run.history_send_attempted)run.pre_wire_failure={code:'DEEP_REQUEST_CHANGED',error:message};throw Error('DEEP_REQUEST_CHANGED: '+message);};
+  const reject=message=>{if(!run.history_send_attempted&&!run.pre_wire_failure){run.pre_wire_failure={code:'DEEP_REQUEST_CHANGED',error:message};run.failure_connection=manager._wsConnection;run.failure_socket=manager._wsConnection?._socket;run.failure_request_counter=manager._requestId;}throw Error('DEEP_REQUEST_CHANGED: '+message);};
   if(run.pre_wire_failure)return reject(run.pre_wire_failure.error);
   const connection=manager._wsConnection,socket=connection?._socket;
   if(window.__tvCliDeepRun!==run||!(connection instanceof run.Connection)||!socket||connection.isConnected?.()!==true||typeof connection.send!=='function')return reject('Exact current connected native transport required; no queued history request.');
@@ -206,6 +209,22 @@ export function inspectDeepSettlement(window,runId){
   const settled=[2,3].includes(status?.type)&&run.cycle_proof?.cycle===run.report_cycle&&run.cycle_proof.kind===kind;
   return {known:true,settled,phase:status?.type===2?'ready':status?.type===3?'server_error':'pending',result_adopted:false,
     ...(settled&&status.type===2?{retained_report:manager.activeStrategyReportData.value()}: {})};
+}
+
+export function deepResetAdmission(window,facade,run){
+  const denied=()=>({success:false,code:'DEEP_RUN_UNSETTLED',error:'The current native provider/job lacks exact owned settlement; normal reset cannot disconnect or clear unrecorded work.',mutation_dispatched:false});
+  const manager=facade._deepBacktestingManager,status=manager.activeStrategyStatus?.value?.(),busy=[0,1].includes(status?.type)||manager._isConnected===true||manager._wsConnection?.isConnected?.()===true||manager._wsConnection?.isConnecting?.()===true;
+  if(!run)return !busy&&!facade._isDeepBacktesting?{success:true,already_normal:true}:denied();
+  if(facade!==run.facade||facade._activeStrategy?.value?.()?.id!==run.strategy_id)return denied();
+  let generation;try{generation=JSON.parse(run.identity).page_generation;}catch{return denied();}
+  if(generation!==(window.__tvCliWorkspace?.nonce??null))return denied();
+  const settlement=inspectDeepSettlement(window,run.run_id);if(!settlement.settled)return denied();
+  if(settlement.no_history_dispatch_verified){
+    const connection=run.failure_connection||run.connection||run.setup_connection,socket=run.failure_socket||run.socket||run.setup_socket;
+    const counter=run.failure_request_counter;
+    if(!connection||!socket||manager._wsConnection!==connection||connection._socket!==socket||manager._fromDate!==run.from_ms||manager._toDate!==run.to_ms||(Number.isInteger(counter)?counter!==manager._requestId:![run.request_before,run.request_before+1].includes(manager._requestId)))return denied();
+  }else if(busy)return denied();
+  return {success:true,already_normal:false};
 }
 
 export async function startDeepRun(window,document,request){
@@ -284,4 +303,4 @@ export async function deepReportSnapshot(window,document,runId){
   return {success:true,status,snapshot:run.snapshot};
 }
 
-export const DEEP_PAGE_CODE=STRATEGY_PAGE_CODE+'\n'+[canonicalPineSource,findPineController,findPineEditor,verifyDeepSource,nativeDeepToolkit,nativeKernelMatchesChart,ownedDeepContext,originalDeepSender,installDeepAttribution,findDeepReportProviders,deepCurrentIdentity,sendVerifiedDeepFrame,inspectDeepRun,inspectDeepSettlement,startDeepRun,deepReportSnapshot].map(fn=>fn.toString()).join('\n');
+export const DEEP_PAGE_CODE=STRATEGY_PAGE_CODE+'\n'+[canonicalPineSource,findPineController,findPineEditor,verifyDeepSource,nativeDeepToolkit,nativeKernelMatchesChart,ownedDeepContext,originalDeepSender,installDeepAttribution,findDeepReportProviders,deepCurrentIdentity,sendVerifiedDeepFrame,inspectDeepRun,inspectDeepSettlement,deepResetAdmission,startDeepRun,deepReportSnapshot].map(fn=>fn.toString()).join('\n');

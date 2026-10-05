@@ -39,6 +39,12 @@ be ready. Server errors, finite wait timeout and unknown outcomes are distinct.
 Timeout is not cancellation. Reads never mount panels, select dates or execute
 calculations. Normal reset requires exact native settlement and preserves
 uncertain persistent intents; it never implicitly cancels or abandons a job.
+Normal reset separately checks the current visible native provider and actual
+pending/connected/connecting state, even without a CLI run or private intent.
+An old known-zero marker cannot authorize clearing a new provider/socket/job.
+Its failure-time connection/socket/counter/range and current owned generation
+must still match. Already-normal idle state returns a no-op; unrecorded Deep work
+remains protected.
 
 Source verification pins saved/applied document version, canonical editor hash,
 verified compilation token/protected identity, full input fingerprint, effective
