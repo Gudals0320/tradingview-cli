@@ -3,6 +3,7 @@
 # tv workspace pine-prepare research-a --create 'Research A Strategy' --file strategy.pine --request-id research-a-document --generation EXACT_GENERATION --mount
 # tv --workspace research-a strategy set-properties --values '{"commission_type":"percent","commission_value":0.1}' --timeout 30000
 # tv --workspace research-a backtest run --mode deep --from 2018-01-01T00:00:00Z --to 2018-01-07T00:00:00Z --timezone UTC --request-id historical-week-1
+# tv workspace backtest-archive research-a --request-id historical-week-1 --run-id EXACT_RUN_ID --acknowledge-no-adoption
 $script:TvModulePath = $PSCommandPath
 function Invoke-TvApplication {
     param([string[]]$Arguments, [object[]]$InputValues = @())

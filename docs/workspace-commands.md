@@ -33,3 +33,10 @@ layout/workspace/document ownership. `backtest status/wait/results` are pure
 observations and retain workspace admission/source checks. Pending native Deep
 jobs prevent unrelated mutations/release/reconnect; unknown persistent intents
 cannot be erased by normal reset. [Deep contract](deep-backtesting.md).
+`workspace backtest-archive NAME` is an explicit offline private-record retirement
+with exact request/run IDs and no-adoption acknowledgement. It preserves evidence,
+does not cancel or alter Desktop work, and prevents a superseded/unknown private
+fence from permanently blocking a new explicit request. Actual native pending
+jobs and workspace operation ownership still protect mutations/release.
+
+

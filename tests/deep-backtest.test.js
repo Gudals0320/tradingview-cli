@@ -5,11 +5,17 @@ import { DEEP_PAGE_CODE,originalDeepSender } from '../src/deep-backtest-page.js'
 import { deepPeriod,deepResults,runDeep,waitDeep,resetNormal } from '../src/core/deep-backtest.js';
 import { getProperties } from '../src/core/strategy-properties.js';
 import { deepPage } from './fixtures/deep-page.mjs';
+import {noteDeepSupersession} from '../src/deep-record-archive.js';
 import { compilationState,invalidateEditedSource,prepareInputChange } from '../src/strategy-state.js';
 
 const call=(p,name,...args)=>p.evaluate(`(async()=>{${DEEP_PAGE_CODE};return ${name}(window,${name==='inspectDeepSettlement'?'':'document,'}${args.map(a=>JSON.stringify(a)).join(',')});})()`);
 async function start(p){const proof=await call(p,'verifyDeepSource','owned-study');assert.equal(proof.verified,true);const request={run_id:'exact-run',request_id:'exact-request',fingerprint:'fp',strategy_id:'owned-study',source_proof:proof,from_ms:1704067200000,to_ms:1704153600000,period:{from:'2024-01-01T00:00:00Z',to:'2024-01-02T00:00:00Z',timezone:'UTC'},properties_hash:'props-hash'};return call(p,'startDeepRun',request);}
 const memoryStore=()=>{let row=null;return {read:()=>row,write:value=>{row=structuredClone(value);},list:()=>row?[{file:'private',record:row}]:[],update:(_,value)=>{row=structuredClone(value);}};};
+it('private supersession write failure preserves the admitted read result and keeps the unknown record ineligible',()=>{
+  const record={request_id:'r',run_id:'id',phase:'unknown'},result={success:false,code:'DEEP_RUN_SUPERSEDED',request_id:'r',run_id:'id',result_adopted:false,mutation_dispatched:false,supersession_proof:{kind:'observed_native_replacement'},provenance:{workspace_id:'w'}};
+  const observed=noteDeepSupersession('name',result,{load:()=>({id:'w'}),resolve:()=> 'file',store:{read:()=>record,write:()=>{throw Object.assign(Error('blocked'),{code:'EACCES'});}}});
+  assert.equal(observed.code,result.code);assert.equal(observed.success,false);assert.equal(observed.supersession_recorded,false);assert.equal(observed.metadata_warning.code,'EACCES');assert.deepEqual(record,{request_id:'r',run_id:'id',phase:'unknown'});
+});
 it('only a recognized zero-history CLI closure can unwind to the exact cached native class sender',()=>{
   class NativeManager{_sendRequest(){return 'native';}}const manager=new NativeManager();
   const legacy=Function('return function(method,args){run.history_send_completed=true;return originalSend.call(this,method,args);} ')();manager._sendRequest=legacy;
@@ -157,7 +163,7 @@ it('normal reset never disconnects GUI/unrecorded work or borrows an old zero-hi
     if(kind==='provider'){const other={...p.facade,_deepBacktestingManager:{...p.manager}};p.window.__deepFacade=other;p.evaluate('document.__deepRoot.__reactFiber$deep.memoizedProps.value=window.__deepFacade');}
     if(kind==='socket')p.manager._wsConnection._socket={};if(kind==='counter')p.manager._requestId++;
     let changes=0;const history=p.history.handleSetIsDeepHistoryMode,reset=p.facade.resetDeepBacktestingReportData;p.history.handleSetIsDeepHistoryMode=(...args)=>{changes++;return history(...args);};p.facade.resetDeepBacktestingReportData=(...args)=>{changes++;return reset(...args);};
-    const before=p.manager.activeStrategyStatus.value(),result=await resetNormal({_deps:{store,evaluateAsync:p.evaluate}});assert.equal(result.success,false,kind);assert.equal(result.code,'DEEP_RUN_UNSETTLED',kind);assert.equal(result.mutation_dispatched,false,kind);assert.equal(changes,0,kind);assert.equal(p.manager.activeStrategyStatus.value(),before,kind);
+    const before=p.manager.activeStrategyStatus.value(),result=await resetNormal({_deps:{store,evaluateAsync:p.evaluate}});assert.equal(result.success,false,kind);assert.equal(result.code,kind==='unrecorded'?'DEEP_RUN_UNSETTLED':'DEEP_RUN_SUPERSEDED',kind);assert.equal(result.mutation_dispatched,false,kind);assert.equal(changes,0,kind);assert.equal(p.manager.activeStrategyStatus.value(),before,kind);
   }
 });
 it('completed owned history permits normal reset for actual disconnected state and an identical retained connection',async()=>{
@@ -172,7 +178,7 @@ it('completed owned history never authorizes clearing a foreign completed range,
     if(kind==='report'){const data=p.manager.activeStrategyReportData;data.set({...data.value(),performance:{all:{netProfit:999,totalTrades:1}}});}
     if(kind==='connection'){p.manager._wsConnection._socket={};p.manager._wsConnection.connected=true;}
     let mutations=0;p.history.handleSetIsDeepHistoryMode=()=>{mutations++;};p.facade.resetDeepBacktestingReportData=()=>{mutations++;};
-    const result=await resetNormal({_deps:{store,evaluateAsync:p.evaluate}});assert.equal(result.success,false,kind);assert.equal(result.code,'DEEP_RUN_UNSETTLED',kind);assert.equal(result.mutation_dispatched,false,kind);assert.equal(mutations,0,kind);
+    const result=await resetNormal({_deps:{store,evaluateAsync:p.evaluate}});assert.equal(result.success,false,kind);assert.equal(result.code,kind==='range'?'DEEP_RUN_SUPERSEDED':'DEEP_RUN_UNSETTLED',kind);assert.equal(result.mutation_dispatched,false,kind);assert.equal(mutations,0,kind);
   }
 });
 it('after owned completion the native GUI can run again, while its response is never adopted by the old monitor',async()=>{
@@ -180,7 +186,8 @@ it('after owned completion the native GUI can run again, while its response is n
   p.manager.requestData(1704240000000,1704326400000);assert.equal(p.dispatches(),2);await p.complete(999,1);
   const result=await call(p,'deepReportSnapshot','exact-run');assert.equal(result.success,false);assert.equal(result.snapshot,undefined);
   let changes=0;p.history.handleSetIsDeepHistoryMode=()=>{changes++;};p.facade.resetDeepBacktestingReportData=()=>{changes++;};
-  const normal=await resetNormal({_deps:{store:memoryStore(),evaluateAsync:p.evaluate}});assert.equal(normal.success,false);assert.equal(normal.mutation_dispatched,false);assert.equal(changes,0);
+  const status=await call(p,'inspectDeepRun','exact-run');assert.equal(status.code,'DEEP_RUN_SUPERSEDED');assert.match(status.next_action,/backtest-archive/);
+  const normal=await resetNormal({_deps:{store:memoryStore(),evaluateAsync:p.evaluate}});assert.equal(normal.code,'DEEP_RUN_SUPERSEDED');assert.equal(normal.success,false);assert.equal(normal.mutation_dispatched,false);assert.equal(changes,0);
 });
 it('an exact native rejection is observable even when setting initial null emits no report-change event',async()=>{
   const p=deepPage();await start(p);await p.error();const status=await call(p,'inspectDeepRun','exact-run');assert.equal(status.phase,'server_error');assert.equal(status.code,'DEEP_SERVER_ERROR');assert.equal(status.success,false);assert.equal(p.window.__tvCliDeepRun.report_cycle,0);
@@ -193,4 +200,5 @@ it('unknown persistent dispatch is observed, never resent, and wait timeout is n
   const repeated=await runDeep(options);assert.equal(repeated.reused,true);assert.equal(p.dispatches(),1);
   let clock=0;const timeout=await waitDeep({run_id:repeated.run_id,timeout:200,_deps:{evaluateAsync:p.evaluate,now:()=>clock,sleep:async ms=>{clock+=ms;}}});assert.equal(timeout.code,'DEEP_WAIT_TIMEOUT');assert.equal(timeout.cancelled,false);assert.equal(p.dispatches(),1);
 });
+
 

@@ -5,6 +5,7 @@ import { deepPeriod } from '../core/deep-backtest.js';
 
 // A command without an entry accepts no positional arguments.
 export const POSITIONALS = new Map([
+  ['workspace backtest-archive',[1,1]],
   ['workspace pine-prepare',[1,1]],
   ['workspace reconnect', [1, 1]], ['workspace attach', [1, 1]], ['workspace detach', [1, 1]],
   ['workspace reset',[1,1]],
@@ -26,6 +27,7 @@ export const POSITIONALS = new Map([
 ]);
 
 export function validateArguments(command, values, positionals) {
+  if(command==='workspace backtest-archive'&&(!values['request-id']||!values['run-id']||!values['acknowledge-no-adoption']))throw Object.assign(new Error('Exact request/run IDs and --acknowledge-no-adoption are required.'),{code:'DEEP_ARCHIVE_CONFIRMATION_REQUIRED'});
   if(command==='backtest run'){deepPeriod(values);if(values.mode!=='deep'||!values['request-id']||!/^[-a-zA-Z0-9_]{1,100}$/.test(values['request-id']))throw Object.assign(new Error('Pass --mode deep and a stable --request-id.'),{code:'INVALID_DEEP_REQUEST'});}
   if(command==='strategy set-properties')validateStrategyProperties(JSON.parse(values.values||'null'));
   const [min, max] = POSITIONALS.get(command) || [0, 0];

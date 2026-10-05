@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import CDP from 'chrome-remote-interface';
 import { acquireSession, sessionPaths, sessionStatus } from '../src/session.js';
-import { reserveWorkspace, acquireWorkspace, noteWorkspaceState, workspaceStatus, loadWorkspace } from '../src/workspace-store.js';
+import { reserveWorkspace, acquireWorkspace, noteWorkspaceState, workspaceStatus, loadWorkspace,workspaceArtifactDirectory } from '../src/workspace-store.js';
 import { registerWorkspaceName, recordCreatedLayout } from '../src/workspace-registry.js';
 import { sourceHash } from '../src/session.js';
 import { runInNewContext } from 'node:vm';
@@ -21,6 +21,7 @@ import { resourceLockStatus } from '../src/resource-lock.js';
 import { preparationPage } from './fixtures/preparation-page.mjs';
 import { propertiesPage } from './fixtures/properties-page.mjs';
 import { deepPage } from './fixtures/deep-page.mjs';
+import {createHash} from 'node:crypto';
 
 const CLI = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
 
@@ -74,17 +75,35 @@ it('real normal reset refuses unrecorded loading and old zero-history proof borr
       jsonError(await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00Z','--to','2024-01-02T00:00:00Z','--request-id','old-zero']),/DEEP_REQUEST_CHANGED/);
       page.window.__deepFacade={...page.facade,_deepBacktestingManager:{...page.manager}};page.evaluate('document.__deepRoot.__reactFiber$deep.memoizedProps.value=window.__deepFacade');
     }else{page.facade._isDeepBacktesting=true;page.manager.activeStrategyStatus.set({type:1});}
-    const denied=jsonResult(await f.run(['--workspace','contract','backtest','normal']),1);assert.equal(denied.code,'DEEP_RUN_UNSETTLED',kind);assert.equal(denied.mutation_dispatched,false,kind);assert.equal(page.manager.activeStrategyStatus.value().type,1,kind);assert.equal(page.facade._isDeepBacktesting,true,kind);assert.equal(page.dispatches(),0,kind);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null,kind);
+    const denied=jsonResult(await f.run(['--workspace','contract','backtest','normal']),1);assert.equal(denied.code,kind==='provider'?'DEEP_RUN_SUPERSEDED':'DEEP_RUN_UNSETTLED',kind);assert.equal(denied.mutation_dispatched,false,kind);assert.equal(page.manager.activeStrategyStatus.value().type,1,kind);assert.equal(page.facade._isDeepBacktesting,true,kind);assert.equal(page.dispatches(),0,kind);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null,kind);
   }
 });
 it('real normal reset permits exact completed history and refuses a later foreign completed GUI report',async t=>{
   for(const foreign of [false,true]){const page=deepPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
     const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('completed-history-normal-v2');
     const accepted=jsonResult(await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00Z','--to','2024-01-02T00:00:00Z','--request-id','owned-history']));await page.complete();
-    if(foreign){page.manager.requestData(1704240000000,1704326400000);await page.complete(999,1);const denied=jsonResult(await f.run(['--workspace','contract','backtest','normal']),1);assert.equal(denied.code,'DEEP_RUN_UNSETTLED');assert.equal(denied.mutation_dispatched,false);assert.equal(page.manager.activeStrategyStatus.value().type,2);assert.equal(page.facade._isDeepBacktesting,true);assert.equal(page.manager.activeStrategyReportData.value().performance.all.netProfit,999);}
+    if(foreign){page.manager.requestData(1704240000000,1704326400000);await page.complete(999,1);const denied=jsonResult(await f.run(['--workspace','contract','backtest','normal']),1);assert.equal(denied.code,'DEEP_RUN_SUPERSEDED');assert.equal(denied.mutation_dispatched,false);assert.equal(page.manager.activeStrategyStatus.value().type,2);assert.equal(page.facade._isDeepBacktesting,true);assert.equal(page.manager.activeStrategyReportData.value().performance.all.netProfit,999);}
     else{page.manager._wsConnection.connected=true;const reset=jsonResult(await f.run(['--workspace','contract','backtest','normal']));assert.equal(reset.mode,'normal');assert.equal(page.manager.activeStrategyStatus.value(),null);assert.ok(accepted.run_id);}
     assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
   }
+});
+it('superseded runs have an explicit offline record archive, preserving evidence without touching GUI work or trapping new requests',async t=>{
+  const page=deepPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('superseded-archive-v2');
+  const accepted=jsonResult(await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00Z','--to','2024-01-02T00:00:00Z','--request-id','old-owned']));
+  const pendingPath=join(workspaceArtifactDirectory(ws,f.options),'deep-request-'+createHash('sha256').update('old-owned').digest('hex')+'.json'),pendingBytes=readFileSync(pendingPath,'hex');
+  jsonError(await f.run(['workspace','backtest-archive','contract','--request-id','old-owned','--run-id',accepted.run_id,'--acknowledge-no-adoption']),/pending\/unknown/,'DEEP_ARCHIVE_OUTCOME_UNKNOWN');assert.equal(readFileSync(pendingPath,'hex'),pendingBytes);
+  jsonError(await f.run(['workspace','backtest-archive','contract','--request-id','old-owned','--run-id','wrong-id','--acknowledge-no-adoption']),/identity does not match/,'DEEP_ARCHIVE_ID_MISMATCH');assert.equal(readFileSync(pendingPath,'hex'),pendingBytes);
+  await page.complete();
+  page.manager.requestData(1704240000000,1704326400000);await page.complete(999,1);
+  const status=jsonResult(await f.run(['--workspace','contract','backtest','status','--run-id',accepted.run_id]),1);assert.equal(status.code,'DEEP_RUN_SUPERSEDED');assert.equal(status.result_adopted,false);
+  const recordPath=join(workspaceArtifactDirectory(ws,f.options),'deep-request-'+createHash('sha256').update('old-owned').digest('hex')+'.json'),store={read:()=>JSON.parse(readFileSync(recordPath,'utf8'))},before=store.read(),requests=f.requests.length;
+  const archive=['workspace','backtest-archive','contract','--request-id','old-owned','--run-id',accepted.run_id,'--acknowledge-no-adoption'];
+  jsonError(await f.run(archive.slice(0,-1)),/acknowledge-no-adoption/,'DEEP_ARCHIVE_CONFIRMATION_REQUIRED');assert.deepEqual(store.read(),before);
+  const archived=jsonResult(await f.run(archive));assert.equal(archived.native_state_changed,false);assert.equal(archived.record_preserved,true);assert.equal(archived.result_adopted,false);assert.equal(f.requests.length,requests);assert.equal(page.manager.activeStrategyReportData.value().performance.all.netProfit,999);
+  const preserved=store.read();assert.equal(preserved.phase,'archived_unadopted');assert.deepEqual(preserved.source_proof,before.source_proof);assert.deepEqual(preserved.result,before.result);
+  assert.equal(jsonResult(await f.run(archive)).reused,true);
+  const next=jsonResult(await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-05T00:00:00Z','--to','2024-01-06T00:00:00Z','--request-id','new-owned']));assert.equal(next.phase,'pending');assert.notEqual(next.run_id,accepted.run_id);assert.equal(page.dispatches(),3);
 });
 
 it('real typed Properties CLI rejects invalid patches and untyped bypass before mutation, then verifies one matching cycle',async t=>{
@@ -656,4 +675,5 @@ it('catalog HTTP-only inventory behavior reaches the endpoint even while its lea
     assert.deepEqual(snapshot(f.root), before);
   } finally { lease.release(); }
 });
+
 

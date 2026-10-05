@@ -29,6 +29,7 @@ export async function runDeep({from,to,timezone,request_id,strategy_id,_deps}={}
   const store=_deps?.store||(workspace?nativeRequestStore(workspace,'deep',request_id):null);
   if(!store)throw Object.assign(new Error('Deep dispatch requires a persistent named workspace intent.'),{code:'WORKSPACE_REQUIRED'});
   const previous=store.read();
+  if(previous?.phase==='archived_unadopted')return {success:false,code:'DEEP_RUN_ARCHIVED',error:'This preserved request record was explicitly retired without result adoption; use a new request ID.',run_id:previous.run_id,request_id:previous.request_id,mutation_dispatched:false,intent_preserved:true};
   if(previous&&previous.fingerprint!==fingerprint)return {success:false,code:'DEEP_REQUEST_CONFLICT',error:'This request ID already describes another source/settings/period.',mutation_dispatched:false};
   if(previous?.phase==='rejected_known')return {...(previous.no_history_dispatch_proof||previous.result||{success:false,code:'DEEP_NOT_DISPATCHED',error:'This request was rejected before history dispatch.'}),run_id:previous.run_id,request_id:previous.request_id,reused:true,mutation_dispatched:false};
   if(previous&&previous.phase!=='rejected_known'){
@@ -37,7 +38,7 @@ export async function runDeep({from,to,timezone,request_id,strategy_id,_deps}={}
     if(actual.run_id===previous.run_id&&actual.phase){return {...actual,reused:true};}
     return {success:false,code:'DEEP_RUN_UNKNOWN',error:'Recorded native outcome cannot be inspected in this page/generation; preserve intent, do not resend.',request_id,run_id:previous.run_id,intent_preserved:true,replay_safe:false,mutation_dispatched:false};
   }
-  for(const entry of store.list().filter(e=>e.record.request_id!==request_id&&!['settled','rejected_known'].includes(e.record.phase))){
+  for(const entry of store.list().filter(e=>e.record.request_id!==request_id&&!['settled','rejected_known','archived_unadopted'].includes(e.record.phase))){
     const settlement=await inspect(`(()=>{${DEEP_PAGE_CODE};return inspectDeepSettlement(window,${JSON.stringify(entry.record.run_id)});})()`);
     if(!settlement.settled)return {success:false,code:'DEEP_RUN_PENDING',error:'Another recorded native Deep outcome is pending or unknown; reconcile that exact run before a new dispatch.',run_id:entry.record.run_id,intent_preserved:true,mutation_dispatched:false};
     store.update(entry,{...entry.record,phase:'settled',settlement,settled_at:new Date().toISOString()});
@@ -82,11 +83,11 @@ export async function deepResults({run_id,offset=0,limit=100,report_revision,_de
 export async function resetNormal({_deps}={}){
   const inspect=_deps?.evaluateAsync||evaluateAsync,workspace=currentWorkspaceSession()?.workspace,store=_deps?.store||(workspace?nativeRequestStore(workspace,'deep','normal-reset'):null);
   if(!store)return {success:false,code:'WORKSPACE_REQUIRED',error:'Normal reset requires the persistent workspace request ledger.'};
-  for(const entry of store.list().filter(e=>!['settled','rejected_known'].includes(e.record.phase))){const settlement=await inspect(`(()=>{${DEEP_PAGE_CODE};return inspectDeepSettlement(window,${JSON.stringify(entry.record.run_id)});})()`);
-    if(!settlement.settled)return {success:false,code:'DEEP_RUN_UNSETTLED',error:'An exact persistent native run is pending or unknown; normal reset cannot abandon it.',run_id:entry.record.run_id,intent_preserved:true,mutation_dispatched:false};
+  for(const entry of store.list().filter(e=>!['settled','rejected_known','archived_unadopted'].includes(e.record.phase))){const settlement=await inspect(`(()=>{${DEEP_PAGE_CODE};return inspectDeepSettlement(window,${JSON.stringify(entry.record.run_id)});})()`);
+    if(!settlement.settled)return settlement.code==='DEEP_RUN_SUPERSEDED'?settlement:{success:false,code:'DEEP_RUN_UNSETTLED',error:'An exact persistent native run is pending or unknown; normal reset cannot abandon it.',run_id:entry.record.run_id,intent_preserved:true,mutation_dispatched:false};
     store.update(entry,{...entry.record,phase:'settled',settlement});
   }
-  return inspect(`(()=>{${DEEP_PAGE_CODE};const run=window.__tvCliDeepRun;if(run){const status=inspectDeepSettlement(window,run.run_id);if(!status.settled)return {success:false,code:'DEEP_RUN_UNSETTLED',error:'Wait/reconcile the exact native job; normal reset does not abandon unknown outcomes.',mutation_dispatched:false};}
+  return inspect(`(()=>{${DEEP_PAGE_CODE};const run=window.__tvCliDeepRun;if(run){const status=inspectDeepSettlement(window,run.run_id);if(!status.settled)return status.code==='DEEP_RUN_SUPERSEDED'?status:{success:false,code:'DEEP_RUN_UNSETTLED',error:'Inspect the exact pending/unknown native job; normal reset does not abandon it.',mutation_dispatched:false};}
     const {facade,history}=findDeepReportProviders(document);if(!facade||!history||typeof facade.resetDeepBacktestingReportData!=='function')return {success:false,code:'DEEP_NATIVE_PATH_UNAVAILABLE',error:'Open the owned report with its native explicit reset capability.'};
     const admission=deepResetAdmission(window,facade,run);if(!admission.success)return admission;if(admission.already_normal)return {success:true,mode:'normal',performed:false,results_invalidated:false};
     const noHistory=run&&inspectDeepSettlement(window,run.run_id).no_history_dispatch_verified===true;

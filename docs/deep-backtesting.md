@@ -52,6 +52,34 @@ report refuse. Exact terminal attribution releases only the temporary send gate,
 so later GUI jobs can run; response monitoring continues to reject their results
 for the earlier run.
 
+A later GUI/native request or provider can supersede a CLI run. Status and normal
+reset return DEEP_RUN_SUPERSEDED with zero Desktop mutation and no result adoption;
+waiting cannot restore the old request. Finish/clear current GUI work in the GUI.
+After final workspace owner/generation admission and cleanup, a supersession
+observation may update only the separate private request metadata. It does not
+alter recovery journals or admission state. If that metadata write fails, the
+original read result/code is preserved with supersession_recorded:false; archive
+still requires an already persisted eligible outcome. The catalog documents this
+metadata side effect separately from read-only Desktop access.
+To retire only the old private fence, explicitly archive its exact IDs:
+
+```powershell
+tv workspace backtest-archive research-a --request-id historical-week-1 --run-id EXACT_RUN_ID --acknowledge-no-adoption
+```
+
+Archive is allowed only for `settled`, `rejected_known`, or an admitted recorded
+`superseded` observation. Genuine pending/unknown outcomes are refused with
+DEEP_ARCHIVE_OUTCOME_UNKNOWN and unchanged record bytes; exact superseded/settled
+evidence is required first. Preserved B/C unknown QA records are not eligible for
+automatic archive. Native work is not cancelled and the GUI report is untouched.
+Archive preserves the original source proof, outcome/incomplete evidence and IDs
+with an archived_unadopted phase. It does not connect to Desktop, cancel/clear a
+job, adopt a result, release the workspace, or close a tab. The same request ID
+cannot be replayed. New explicit request IDs exclude archived records from their
+private fence, but actual GUI/native pending work is still refused. Other
+workspace mutations/release retain their existing native-idle and ownership
+checks. Do not archive unknown records automatically.
+
 Source verification pins saved/applied document version, canonical editor hash,
 verified compilation token/protected identity, full input fingerprint, effective
 Properties, semantic symbol/session/timezone/chart type and page generation.

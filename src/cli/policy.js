@@ -91,7 +91,7 @@ for (const name of [...LEGACY_COMMANDS]) {
 }
 for (const name of PREPARATION_COMMANDS) WORKSPACE_COMMANDS.delete(name);
 WORKSPACE_COMMANDS.add('stream ohlcv');LEGACY_COMMANDS.delete('stream ohlcv');APP_COMMANDS.delete('stream ohlcv');PURE_READ_COMMANDS.add('stream ohlcv');MIXED_COMMANDS.delete('stream ohlcv');MIXED_RULES.delete('stream ohlcv');
-for (const name of ['workspace list', 'workspace import', 'workspace show','workspace locks','workspace lock-clear']) OFFLINE_COMMANDS.add(name);
+for (const name of ['workspace list', 'workspace import', 'workspace show','workspace locks','workspace lock-clear','workspace backtest-archive']) OFFLINE_COMMANDS.add(name);
 for (const name of ['workspace reconnect', 'workspace attach', 'workspace detach','workspace reset']) ADMIN_COMMANDS.add(name);
 for (const name of PURE_READ_COMMANDS) if (WORKSPACE_COMMANDS.has(name)) WORKSPACE_READS.add(name);
 for (const name of ['alert list','watchlist get','watchlist raw','ui find']) WORKSPACE_READS.add(name);
@@ -106,6 +106,7 @@ export const PINE_COMMANDS = new Set(['pine get', 'pine set', 'pine compile', 'p
 export const FOREGROUND_COMMANDS = new Set([...APP_COMMANDS].filter(name => name.startsWith('ui ') || ['tab close', 'tab switch', 'layout switch'].includes(name)));
 export function workspaceRequired(command) { return commandScope(command) === 'workspace' || FOREGROUND_COMMANDS.has(command) || command === 'stream ohlcv' || command.startsWith('watchlist ') || command.startsWith('alert '); }
 export function resourceKinds(command, values = {}, positionals = []) {
+  if(command==='workspace backtest-archive')return ['workspace'];
   if(command==='workspace pine-prepare')return ['app','layout','workspace','document'];
   const scope = commandScope(command);
   if (pureRead(command, values, positionals)) return [];

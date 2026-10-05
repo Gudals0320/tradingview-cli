@@ -12,6 +12,7 @@ import { acquireResources } from '../resource-lock.js';
 import { resolve } from 'node:path';
 import { validateArguments } from './arguments.js';
 import { projectOutput } from './output.js';
+import {noteDeepSupersession} from '../deep-record-archive.js';
 
 /** @type {Map<string, { description: string, options?: object, handler: Function, subcommands?: Map<string, object> }>} */
 const commands = new Map();
@@ -218,6 +219,7 @@ async function execute(handler, values, positionals, offline = false, readOnly =
     handleError(primaryError);
     return;
   }
+  if(result?.code==='DEEP_RUN_SUPERSEDED'){try{result=noteDeepSupersession(values.workspaceReference,result);}catch(error){handleError(error);return;}}
   if (result !== undefined) {
     if (cleanupWarnings.length) result = { ...result, cleanup_warnings: cleanupWarnings };
     console.log(JSON.stringify(projectOutput(result), null, command === 'help' && values.brief ? undefined : 2));

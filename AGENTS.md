@@ -115,6 +115,11 @@ tv session status
 tv session recover --run-id EXACT_RUN
 ```
 
+`workspace backtest-archive` retires only settled, known-rejected or proven
+superseded private Deep records, with exact IDs and explicit no-adoption consent.
+Genuine unknown/pending outcomes are refused. Never auto-archive unknown B/C QA
+records, cancel a native job, or treat archive as result adoption or GUI cleanup.
+
 Recovery validates recorded resources/panes, not unrelated targets. Whole-layout
 effects retain broad validation. Reconnect requires saved layout/document identity
 and exact generation, invalidates old IDs/proofs, and cannot overwrite foreign drafts.

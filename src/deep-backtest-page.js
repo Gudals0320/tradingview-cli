@@ -180,9 +180,17 @@ export function sendVerifiedDeepFrame(window,document,manager,run,method,args,or
   return result;
 }
 
+export function deepSuperseded(run,reason){
+  return {success:false,code:'DEEP_RUN_SUPERSEDED',error:reason,run_id:run.run_id,request_id:run.request_id,phase:'superseded',result_adopted:false,mutation_dispatched:false,intent_preserved:true,
+    supersession_proof:{kind:'observed_native_replacement',reason,recorded_request_before:run.request_before,current_request_counter:run.facade._deepBacktestingManager._requestId,recorded_bounds:{from_ms:run.from_ms,to_ms:run.to_ms},current_bounds:{from_ms:run.facade._deepBacktestingManager._fromDate,to_ms:run.facade._deepBacktestingManager._toDate}},
+    next_action:'Later GUI/native activity owns the visible state; the CLI will not reset it. Finish or clear that work in the GUI, then explicitly retire only the private record with workspace backtest-archive and exact request/run IDs plus --acknowledge-no-adoption. The record is preserved and the Desktop is unchanged.'};
+}
+
 export function inspectDeepRun(window,document,runId){
   const run=window.__tvCliDeepRun;
   if(!run||runId&&run.run_id!==runId)return {success:false,code:'DEEP_RUN_UNKNOWN',error:'This page has no exact native Deep run; preserve private intent and never fall back to chart results.'};
+  const currentManager=run.facade._deepBacktestingManager,currentProvider=findDeepReportProviders(document).facade;
+  if(currentProvider&&currentProvider!==run.facade||currentManager._requestId>run.request_before+1||currentManager._fromDate!==run.from_ms||currentManager._toDate!==run.to_ms)return deepSuperseded(run,'Native provider, request counter or calculation period was superseded by unrecorded activity.');
   if(run.pre_wire_failure&&!run.history_send_attempted)return {success:false,...run.pre_wire_failure,phase:'rejected_known',run_id:run.run_id,request_id:run.request_id,server_request_dispatched:false,mutation_dispatched:false,no_history_dispatch_verified:true,intent_preserved:true};
   if(run.history_send_attempted&&!run.history_send_completed)return {success:false,code:'DEEP_TRANSPORT_UNCONFIRMED',error:'Transport send was attempted but admission/completion is unknown; preserve intent and do not replay.',phase:'unknown',run_id:run.run_id,request_id:run.request_id,server_request_dispatched:false,native_send_attempted:true,intent_preserved:true};
   if(deepCurrentIdentity(window,document,run.strategy_id)!==run.identity)return {success:false,code:'DEEP_RESULT_STALE',error:'Source, inputs, Properties, context or generation changed; explicitly run a new request.',run_id:run.run_id,mode:'deep',result_adopted:false};
@@ -205,6 +213,7 @@ export function inspectDeepSettlement(window,runId){
   const run=window.__tvCliDeepRun;if(!run||run.run_id!==runId)return {known:false,settled:false};
   if(run.pre_wire_failure&&!run.history_send_attempted)return {known:true,settled:true,phase:'rejected_known',no_history_dispatch_verified:true,result_adopted:false};
   const manager=run.facade._deepBacktestingManager,status=manager.activeStrategyStatus?.value?.();
+  if(manager._requestId>run.request_before+1||manager._fromDate!==run.from_ms||manager._toDate!==run.to_ms)return {known:false,settled:false,...deepSuperseded(run,'A later native request owns this manager; waiting will not restore the earlier run.')};
   if(!run.history_send_completed||manager._requestId!==run.request_before+1||manager._fromDate!==run.from_ms||manager._toDate!==run.to_ms||!run.sent||run.sent.kernel!==run.kernel)return {known:false,settled:false};
   const kind=status?.type===2?'ready':status?.type===3?'server_error':'pending';
   const settled=[2,3].includes(status?.type)&&run.cycle_proof?.cycle===run.report_cycle&&run.cycle_proof.kind===kind;
@@ -216,15 +225,15 @@ export function deepResetAdmission(window,facade,run){
   const denied=()=>({success:false,code:'DEEP_RUN_UNSETTLED',error:'The current native provider/job lacks exact owned settlement; normal reset cannot disconnect or clear unrecorded work.',mutation_dispatched:false});
   const manager=facade._deepBacktestingManager,status=manager.activeStrategyStatus?.value?.(),busy=[0,1].includes(status?.type)||manager._isConnected===true||manager._wsConnection?.isConnected?.()===true||manager._wsConnection?.isConnecting?.()===true;
   if(!run)return !busy&&!facade._isDeepBacktesting?{success:true,already_normal:true}:denied();
-  if(facade!==run.facade||facade._activeStrategy?.value?.()?.id!==run.strategy_id)return denied();
+  if(facade!==run.facade||facade._activeStrategy?.value?.()?.id!==run.strategy_id)return deepSuperseded(run,'The visible report provider/strategy belongs to later native activity.');
   let generation;try{generation=JSON.parse(run.identity).page_generation;}catch{return denied();}
   if(generation!==(window.__tvCliWorkspace?.nonce??null))return denied();
-  const settlement=inspectDeepSettlement(window,run.run_id);if(!settlement.settled)return denied();
+  const settlement=inspectDeepSettlement(window,run.run_id);if(!settlement.settled)return settlement.code==='DEEP_RUN_SUPERSEDED'?settlement:denied();
   if(manager._fromDate!==run.from_ms||manager._toDate!==run.to_ms)return denied();
   if(settlement.no_history_dispatch_verified){
     const connection=run.failure_connection||run.connection||run.setup_connection,socket=run.failure_socket||run.socket||run.setup_socket;
     const counter=run.failure_request_counter;
-    if(!connection||!socket||manager._wsConnection!==connection||connection._socket!==socket||manager._fromDate!==run.from_ms||manager._toDate!==run.to_ms||(Number.isInteger(counter)?counter!==manager._requestId:![run.request_before,run.request_before+1].includes(manager._requestId)))return denied();
+    if(!connection||!socket||manager._wsConnection!==connection||connection._socket!==socket||manager._fromDate!==run.from_ms||manager._toDate!==run.to_ms||(Number.isInteger(counter)?counter!==manager._requestId:![run.request_before,run.request_before+1].includes(manager._requestId)))return deepSuperseded(run,'The connection/socket/counter of the earlier zero-history preparation was replaced.');
   }else{
     const report=manager.activeStrategyReportData?.value?.();
     if(report!==run.cycle_report||JSON.stringify(report??null)!==run.cycle_report_json||[0,1].includes(status?.type)||manager._wsConnection?.isConnecting?.()===true)return denied();
@@ -319,4 +328,4 @@ export async function deepReportSnapshot(window,document,runId){
   return {success:true,status,snapshot:run.snapshot};
 }
 
-export const DEEP_PAGE_CODE=STRATEGY_PAGE_CODE+'\n'+[canonicalPineSource,findPineController,findPineEditor,verifyDeepSource,nativeDeepToolkit,nativeKernelMatchesChart,ownedDeepContext,originalDeepSender,installDeepAttribution,findDeepReportProviders,deepCurrentIdentity,sendVerifiedDeepFrame,inspectDeepRun,inspectDeepSettlement,deepResetAdmission,startDeepRun,deepReportSnapshot].map(fn=>fn.toString()).join('\n');
+export const DEEP_PAGE_CODE=STRATEGY_PAGE_CODE+'\n'+[canonicalPineSource,findPineController,findPineEditor,verifyDeepSource,nativeDeepToolkit,nativeKernelMatchesChart,ownedDeepContext,originalDeepSender,installDeepAttribution,findDeepReportProviders,deepCurrentIdentity,sendVerifiedDeepFrame,deepSuperseded,inspectDeepRun,inspectDeepSettlement,deepResetAdmission,startDeepRun,deepReportSnapshot].map(fn=>fn.toString()).join('\n');
