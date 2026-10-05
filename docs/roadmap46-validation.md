@@ -398,3 +398,78 @@ results; repeatedly passing fixtures do not replace the native acceptance above.
 | #51 | Distinct normal/Deep provider, UTC whole-day attributed results, native UI/ledger and boundary/zero cases | Subday/non-UTC unsupported; maximum account size not measured; large fixture costs labeled separately |
 | #52 | Exact direct equity plot, dense loaded CSV, closed/final arithmetic and open PnL | No FX/partial/pyramided/ambiguous same-bar allocation or Deep fallback |
 | #53 | Native UI values/units, closed/open/zero/breakeven, context changes and structured bounded smoke | UI repaint and loaded coverage are explicit; no external delivery or real broker fill claim |
+
+## M1: transaction timestamps versus actual List of trades
+
+On 2026-10-05 KST, clean code 943f214 was used in the existing dedicated A2
+workspace: saved QA source version 2, normal/Candles, 2 minutes, Cycle 14 and the
+recorded original Properties. The actual TV Strategy Tester **List of trades**
+was opened and its rendered rows captured, rather than substituting metrics or
+period membership. Four closed trades were matched to the CLI ledger's final
+12-row page. A separate minimal Case=open calculation supplied one open trade;
+the original Cycle 14 inputs and overview were restored afterwards. Saved source,
+Properties, document/layout/generation and the 26 user alerts were preserved.
+
+Chart timezone was read as **Asia/Seoul**, offset **32,400,000 ms / UTC+09:00**,
+title `(UTC+9) 서울`. The comparison screen used that same timezone: its Korean
+dates/times matched the UTC ledger instants plus nine hours. Screen precision was
+**minutes**, without seconds or milliseconds. No export timezone was assumed;
+this comparison used the actual list screen, not an export.
+
+Matching used the privately retained workspace/document/generation/source/study
+identity, UI trade number versus native ordinal, side, quantity, entry price and
+closed exit price. Dates alone were not used to select a trade. Matching receipts
+and stable entry-identity hashes stay in ignored private results; the public
+samples below are anonymous synthetic QA rows, not personal IDs.
+
+Native e.tm/x.tm were numeric **Unix milliseconds** in these samples. Expected
+UTC was `new Date(raw_ms).toISOString()` (equivalently raw_ms/1000 Unix seconds).
+Every CLI timestamp parsed back to its original raw_ms with **0 ms difference**.
+For UI comparison only, expected displayed time was the instant floored to its
+minute and formatted in Asia/Seoul; all actual displayed minutes matched with
+**0 ms minute-bucket difference**. CLI values were not rounded to UI precision.
+All dates in this table are 2026-10-05; entry/exit pairs are in that order.
+
+| Sample | Raw entry / exit tm (ms) | CLI UTC entry / exit | TV displayed entry / exit (Asia/Seoul) | Result |
+| --- | --- | --- | --- | --- |
+| C1, recent closed | 1791192020801 / 1791192872221 | 09:20:20.801Z / 09:34:32.221Z | 18:20 / 18:34 | Raw→CLI 0 ms; expected/actual UI minute identical |
+| C2, historical closed | 1791190440000 / 1791191280000 | 08:54:00.000Z / 09:08:00.000Z | 17:54 / 18:08 | Raw→CLI and UTC-normalized UI difference both 0 ms |
+| C3, historical closed | 1791188760000 / 1791189600000 | 08:26:00.000Z / 08:40:00.000Z | 17:26 / 17:40 | Raw→CLI and UTC-normalized UI difference both 0 ms |
+| C4, historical closed | 1791187080000 / 1791187920000 | 07:58:00.000Z / 08:12:00.000Z | 16:58 / 17:12 | Raw→CLI and UTC-normalized UI difference both 0 ms |
+| O1, open entry | 1791193080000 / no actual exit | 09:38:00.000Z / exit_time=null | 18:38 / `오픈` (Open) | Entry difference 0 ms; no displayed exit date/time; exit price `—` |
+
+C1 retains 20.801 s entry and 32.221 s exit precision within the displayed
+minutes. Those are UI precision differences, not unexplained timestamp drift or
+a widened comparison tolerance. Three historical samples were exact minute
+instants, giving six independently matched entry/exit times; C1 adds two precise
+realtime instants and O1 adds the open entry.
+
+O1 had open=true, exit_time/exit_bar=null, native empty exit comment, one ledger
+row and **zero closed trades**. Its x.tm was a changing valuation mark:
+
+| Observation | Raw mark tm (ms) | CLI mark_time (UTC) | Raw→CLI difference | List of trades |
+| --- | --- | --- | --- | --- |
+| First | 1791193198031 | 2026-10-05T09:39:58.031Z | 0 ms | Open; no exit timestamp or mark timestamp |
+| Second, same private entry identity | 1791193310516 | 2026-10-05T09:41:50.516Z | 0 ms | Still Open; same entry; no exit timestamp or mark timestamp |
+
+The screen exposes **no mark timestamp**, so mark_time is verified against its
+native raw millisecond field, not claimed independently equal to a nonexistent
+UI time. The two observations distinguish that advancing mark from an actual
+exit, while the actual list confirms absence of a closed trade. No mismatch or
+new code defect was found; this closes the transaction-time evidence gap with a
+documentation-only change.
+
+Reproduction uses the existing QA Case=cycle to collect the last ledger page,
+opens List of trades on the selected owned tab, matches the private row identity
+and prices/quantity, and compares raw/UTC/local-minute fields. Case=open then
+repeats the same entry matching and observes the Open row twice before restoring
+the original input. Private audit files retain the CLI JSON, actual DOM row text,
+timezone object, raw fields, expected/actual values and assertions.
+
+Two acceptance limits remain explicit: a **Deep-specific live process-kill test
+was not run**; write-ahead intents, unknown/no-resend and dead-owner behavior are
+covered by the existing fixtures and are distinct from live native completion.
+An **alert quota rejection was not observed live**; native quota classifications
+have fixture evidence. Actual native create/input/guard rejections and successful
+account use must not be described as a live quota-exhaustion test. No additional
+fault injection, stress repetition or account-limit experiment was added for M1.
