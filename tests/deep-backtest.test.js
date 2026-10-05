@@ -11,9 +11,9 @@ import { compilationState,invalidateEditedSource,prepareInputChange } from '../s
 const call=(p,name,...args)=>p.evaluate(`(async()=>{${DEEP_PAGE_CODE};return ${name}(window,${name==='inspectDeepSettlement'?'':'document,'}${args.map(a=>JSON.stringify(a)).join(',')});})()`);
 async function start(p){const proof=await call(p,'verifyDeepSource','owned-study');assert.equal(proof.verified,true);const request={run_id:'exact-run',request_id:'exact-request',fingerprint:'fp',strategy_id:'owned-study',source_proof:proof,from_ms:1704067200000,to_ms:1704153600000,period:{from:'2024-01-01T00:00:00Z',to:'2024-01-02T00:00:00Z',timezone:'UTC'},properties_hash:'props-hash'};return call(p,'startDeepRun',request);}
 const memoryStore=()=>{let row=null;return {read:()=>row,write:value=>{row=structuredClone(value);},list:()=>row?[{file:'private',record:row}]:[],update:(_,value)=>{row=structuredClone(value);}};};
-it('private supersession write failure preserves the admitted read result and keeps the record ineligible',()=>{
+it('private supersession write failure preserves the admitted read result and keeps the record ineligible',async()=>{
   const record={request_id:'r',run_id:'id',phase:'accepted'},result={success:false,code:'DEEP_RUN_SUPERSEDED',request_id:'r',run_id:'id',result_adopted:false,mutation_dispatched:false,previous_outcome:{kind:'attributed_terminal',phase:'ready',run_id:'id',request_id:'r',history_send_completed:true,cycle_proof:{kind:'ready',session:'s',request_number:0,cycle:1}},supersession_proof:{kind:'observed_native_replacement'},provenance:{workspace_id:'w'}};
-  const observed=noteDeepSupersession('name',result,{load:()=>({id:'w'}),resolve:()=> 'file',store:{read:()=>record,write:()=>{throw Object.assign(Error('blocked'),{code:'EACCES'});}}});
+  const observed=await noteDeepSupersession('name',result,{load:()=>({id:'w'}),resolve:()=> 'file',acquire:async()=>({release(){}}),store:{read:()=>record,write:()=>{throw Object.assign(Error('blocked'),{code:'EACCES'});}}});
   assert.equal(observed.code,result.code);assert.equal(observed.success,false);assert.equal(observed.supersession_recorded,false);assert.equal(observed.metadata_warning.code,'EACCES');assert.deepEqual(record,{request_id:'r',run_id:'id',phase:'accepted'});
 });
 it('GUI replacement cannot turn an unknown transport or pending run into an archive-eligible outcome',async()=>{
@@ -23,9 +23,16 @@ it('GUI replacement cannot turn an unknown transport or pending run into an arch
     p.manager._requestId++;p.manager._fromDate+=86400000;
     const result=await call(p,'inspectDeepRun','exact-run');assert.equal(result.code,'DEEP_RUN_SUPERSEDED');assert.equal(result.archive_eligible,false);assert.equal(result.previous_outcome,null);
     const record={phase:kind,run_id:result.run_id,request_id:result.request_id},before=JSON.stringify(record);let writes=0;
-    const noted=noteDeepSupersession('name',{...result,provenance:{workspace_id:'w'}},{load:()=>({id:'w'}),resolve:()=> 'file',store:{read:()=>record,write:()=>{writes++;}}});
+    const noted=await noteDeepSupersession('name',{...result,provenance:{workspace_id:'w'}},{load:()=>({id:'w'}),resolve:()=> 'file',store:{read:()=>record,write:()=>{writes++;}}});
     assert.equal(noted.supersession_recorded,false);assert.equal(noted.archive_eligible,false);assert.equal(writes,0);assert.equal(JSON.stringify(record),before);
   }
+});
+it('supersession metadata re-reads after the archive mutex and cannot resurrect an archived record',async()=>{
+  const p=deepPage();await start(p);await p.complete();p.manager._requestId++;p.manager._fromDate+=86400000;
+  const result={...await call(p,'inspectDeepRun','exact-run'),provenance:{workspace_id:'w'}};
+  let record={request_id:result.request_id,run_id:result.run_id,phase:'accepted'},held=false,writes=0,released=0;
+  const observed=await noteDeepSupersession('name',result,{load:()=>({id:'w'}),resolve:()=> 'file',acquire:async(resources)=>{assert.deepEqual(resources,['workspace:w']);record={...record,phase:'archived_unadopted',archive:{acknowledged_no_adoption:true}};held=true;return {release(){held=false;released++;}};},store:{read:()=>{assert.equal(held,true);return record;},write:()=>{writes++;}}});
+  assert.equal(observed.record_archived,true);assert.equal(observed.supersession_recorded,false);assert.equal(writes,0);assert.equal(record.phase,'archived_unadopted');assert.equal(released,1);
 });
 it('an exact terminal receipt remains immutable when later GUI activity replaces its report',async()=>{
   const p=deepPage();await start(p);await p.complete();const receipt=p.window.__tvCliDeepRun.terminal_outcome,bytes=JSON.stringify(receipt);

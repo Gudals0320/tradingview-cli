@@ -67,6 +67,10 @@ alter recovery journals or admission state. If that metadata write fails, the
 original read result/code is preserved with supersession_recorded:false; archive
 still requires an already persisted eligible outcome. The catalog documents this
 metadata side effect separately from read-only Desktop access.
+Metadata persistence takes the same workspace resource mutex as explicit archive,
+then re-reads the record. Busy metadata writes fail closed without delaying the
+observation or changing its code. An archived record cannot be resurrected by a
+later status observation.
 To retire only the old private fence, explicitly archive its exact IDs:
 
 ```powershell

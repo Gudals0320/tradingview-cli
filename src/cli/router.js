@@ -221,7 +221,7 @@ async function execute(handler, values, positionals, offline = false, readOnly =
     handleError(primaryError);
     return;
   }
-  if(result?.code==='DEEP_RUN_SUPERSEDED'){try{result=noteDeepSupersession(values.workspaceReference,result);}catch(error){handleError(error);return;}}
+  if(result?.code==='DEEP_RUN_SUPERSEDED'){try{result=await noteDeepSupersession(values.workspaceReference,result);}catch(error){handleError(error);return;}}
   if(command==='data equity'&&values.export){try{result=writeEquityExport(result,values.export);}catch(error){handleError(error);return;}}
   if (result !== undefined) {
     if (cleanupWarnings.length) result = { ...result, cleanup_warnings: cleanupWarnings };

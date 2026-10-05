@@ -27,15 +27,20 @@ export async function archiveDeepRecord(name,{request_id,run_id,acknowledge_no_a
 }
 
 /** Persist only a fully admitted observation; called by the router after cleanup. */
-export function noteDeepSupersession(reference,result,_deps){
+export async function noteDeepSupersession(reference,result,_deps){
   if(result?.code!=='DEEP_RUN_SUPERSEDED'||!result.supersession_proof||!result.provenance?.workspace_id)return result;
+  if(!result.previous_outcome)return {...result,archive_eligible:false,supersession_recorded:false};
   try{
     const workspace=(_deps?.load||loadWorkspace)((_deps?.resolve||resolveWorkspace)(reference));if(workspace.id!==result.provenance.workspace_id)throw Object.assign(new Error('Workspace identity changed before recording supersession.'),{code:'WORKSPACE_OWNERSHIP_LOST'});
+    const resource=await (_deps?.acquire||acquireResources)(['workspace:'+workspace.id],{command:'deep supersession metadata',workspace_id:workspace.id,timeout:0});
+    try{
     const store=_deps?.store||nativeRequestStore(workspace,'deep',result.request_id),record=store.read();
-    if(!record||record.run_id!==result.run_id||record.phase==='archived_unadopted')return result;
+    if(!record||record.run_id!==result.run_id||record.request_id!==result.request_id)return {...result,archive_eligible:false,supersession_recorded:false};
+    if(record.phase==='archived_unadopted')return {...result,archive_eligible:false,supersession_recorded:false,record_archived:true};
     if(!knownPreviousOutcome(record,result.previous_outcome))return {...result,archive_eligible:false,supersession_recorded:false};
     store.write({...record,phase:'superseded',previous_outcome:result.previous_outcome,supersession_proof:{...result.supersession_proof,previous_phase:record.supersession_proof?.previous_phase??record.phase,observed_at:new Date().toISOString(),result_adopted:false,native_state_changed:false}});
     return {...result,supersession_recorded:true};
-  }catch(error){return {...result,supersession_recorded:false,metadata_warning:{code:error.code||'DEEP_SUPERSESSION_WRITE_FAILED',error:'Private supersession evidence was not recorded; archive requires an already persisted eligible outcome.'}};}
+    }finally{resource.release();}
+  }catch(error){return {...result,archive_eligible:false,supersession_recorded:false,metadata_warning:{code:error.code||'DEEP_SUPERSESSION_WRITE_FAILED',error:'Private supersession evidence was not recorded; archive requires an already persisted eligible outcome.'}};}
 }
 

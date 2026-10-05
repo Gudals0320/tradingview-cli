@@ -17,7 +17,7 @@ import { runInNewContext } from 'node:vm';
 import { WORKSPACE_PAGE_CODE } from '../src/workspace-page.js';
 import { beginCompilation } from '../src/strategy-state.js';
 import { reportPage } from './fixtures/report-page.mjs';
-import { resourceLockStatus } from '../src/resource-lock.js';
+import { resourceLockStatus,acquireResources } from '../src/resource-lock.js';
 import { preparationPage } from './fixtures/preparation-page.mjs';
 import { propertiesPage } from './fixtures/properties-page.mjs';
 import { deepPage } from './fixtures/deep-page.mjs';
@@ -128,6 +128,17 @@ it('real CLI keeps unknown and pending Deep record bytes after GUI replacement a
     const status=jsonResult(await f.run(['--workspace','contract','backtest','status','--run-id',record.run_id]),1);assert.equal(status.code,'DEEP_RUN_SUPERSEDED');assert.equal(status.archive_eligible,false);assert.equal(status.supersession_recorded,false);assert.equal(readFileSync(path,'hex'),before);
     jsonError(await f.run(['workspace','backtest-archive','contract','--request-id','unresolved','--run-id',record.run_id,'--acknowledge-no-adoption']),/pending\/unknown/,'DEEP_ARCHIVE_OUTCOME_UNKNOWN');assert.equal(readFileSync(path,'hex'),before);
   }
+});
+it('real supersession metadata honors the archive mutex and never resurrects an archived record',async t=>{
+  const page=deepPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('archive-mutex-v2');
+  const accepted=jsonResult(await f.run(['--workspace','contract','backtest','run','--mode','deep','--from','2024-01-01T00:00:00Z','--to','2024-01-02T00:00:00Z','--request-id','archive-mutex']));await page.complete();page.manager.requestData(1704240000000,1704326400000);await page.complete(999,1);
+  const path=join(workspaceArtifactDirectory(ws,f.options),'deep-request-'+createHash('sha256').update('archive-mutex').digest('hex')+'.json'),before=readFileSync(path,'hex'),args=['--workspace','contract','backtest','status','--run-id',accepted.run_id];
+  const mutex=await acquireResources(['workspace:'+ws.id],{...f.options,command:'archive mutex owner'});
+  try{const status=jsonResult(await f.run(args),1);assert.equal(status.code,'DEEP_RUN_SUPERSEDED');assert.equal(status.supersession_recorded,false);assert.equal(status.archive_eligible,false);assert.equal(status.metadata_warning.code,'LOCK_TIMEOUT');assert.equal(readFileSync(path,'hex'),before);}finally{mutex.release();}
+  assert.equal(jsonResult(await f.run(args),1).supersession_recorded,true);
+  jsonResult(await f.run(['workspace','backtest-archive','contract','--request-id','archive-mutex','--run-id',accepted.run_id,'--acknowledge-no-adoption']));const archived=readFileSync(path,'hex');
+  const later=jsonResult(await f.run(args),1);assert.equal(later.record_archived,true);assert.equal(later.supersession_recorded,false);assert.equal(readFileSync(path,'hex'),archived);assert.equal(page.manager.activeStrategyReportData.value().performance.all.netProfit,999);
 });
 it('superseded runs have an explicit offline record archive, preserving evidence without touching GUI work or trapping new requests',async t=>{
   const page=deepPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
