@@ -38,6 +38,22 @@ it('real strategy alert entry verifies modes and inactive creation, hides privat
     const catalog=jsonResult(await f.run(['help','--json','alert','strategy-create'])).commands[0];assert.equal(catalog.scope,'app-shared');assert.equal(catalog.invocation,'native');assert.deepEqual(catalog.locks,['app','layout','workspace','document']);assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
   }
 });
+it('real strategy alert entry refuses foreign native targets and unexpected create endpoints with zero POST',async t=>{
+  const changes=[
+    p=>{const state=p.exports.getEditorStateForAlertFromStudy;p.exports.getEditorStateForAlertFromStudy=()=>({...state(),studyId:'ForeignScript'});},
+    ...['symbol','session','currency-id'].map(key=>p=>{const state=p.exports.getEditorStateForAlertFromStudy;p.exports.getEditorStateForAlertFromStudy=()=>{const s=state();return {...s,symbol:{...s.symbol,[key]:'FOREIGN'}};};}),
+    p=>{p.mainSeries.interval=()=> '240';},
+    p=>{p.source._getStudyIdWithLatestVersion=()=> 'ForeignScript';},
+    p=>{p.rest.createAlert=payload=>p.rest.request('alternate_create',payload);},
+    p=>{p.rest.createAlert=payload=>p.rest._fetch('https://pricealerts.tradingview.com/list_alerts',{method:'GET',credentials:'include',body:JSON.stringify({payload})});},
+    p=>{p.rest.createAlert=payload=>p.rest._fetch('https://pricealerts.tradingview.com/create_alert',{method:'POST',credentials:'include',headers:{'X-Unknown':'value'},body:JSON.stringify({payload})});},
+    p=>{p.rest.createAlert=()=>p.rest._fetch('https://pricealerts.tradingview.com/create_alert',{method:'POST',credentials:'include',body:'malformed'});},
+  ];
+  for(const change of changes){const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+    const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('foreign-alert-entry-v2');page.refreshReport();page.completeInputs();change(page);
+    const result=jsonResult(await f.run(['--workspace','contract','alert','strategy-create','--request-id','foreign-target','--mode','fills','--name','QA','--message','private message','--expiration','2099-01-01T00:00:00Z']),1);assert.equal(result.mutation_dispatched,false);assert.ok(['STRATEGY_ALERT_TARGET_UNVERIFIED','STRATEGY_ALERT_NOT_DISPATCHED'].includes(result.code));assert.equal(page.counts().posts,0);assert.equal(page.server.size,1);
+  }
+});
 it('real strategy alert entry reconciles a lost server response without SDK or CLI create retries',async t=>{
   const page=strategyAlertPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
   const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('lost-alert-entry-v2');page.refreshReport();page.completeInputs();page.loseResponse();

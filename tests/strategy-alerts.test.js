@@ -14,8 +14,22 @@ it('native strategy alerts preserve three modes, placeholders and paused creatio
   }
 });
 it('source/account/generation changes during native security preflight cannot dispatch the strategy snapshot',async()=>{
-  for(const change of [p=>p.externalFee(0.5),p=>{p.user.id=456;},p=>{p.window.__tvCliWorkspace.nonce='foreign-generation';}]){
+  for(const change of [p=>p.externalFee(0.5),p=>{p.user.id=456;},p=>{p.window.__tvCliWorkspace.nonce='foreign-generation';},p=>{p.source._getStudyIdWithLatestVersion=()=> 'ForeignScript';}]){
     const p=strategyAlertPage(),store=memoryStore();p.beforeSend(()=>change(p));const result=await createStrategyServerAlert(options(p,store));assert.equal(result.success,false);assert.equal(result.mutation_dispatched,false);assert.equal(p.counts().posts,0);assert.equal(store.read().phase,'rejected_known');assert.equal(Object.keys(p.window.__tvCliNativeOperations||{}).length,0);
+  }
+});
+it('unsupported method/path/body/headers cannot reach native fetch or the SDK retry fallback',async()=>{
+  const variants=[
+    {path:'unknown_mutation',method:'GET'},
+    {path:'list_alerts',method:'GET'},
+    {path:'get_alerts',method:'DELETE'},
+    {path:'create_alert',method:'GET'},
+    {path:'create_alert',method:'POST',headers:{'X-Unknown':'value'}},
+    {path:'create_alert',method:'POST',credentials:'same-origin'},
+    {path:'create_alert',method:'POST',badBody:true},
+  ];
+  for(const variant of variants){const p=strategyAlertPage(),store=memoryStore();p.rest.createAlert=payload=>p.rest._fetch('https://pricealerts.tradingview.com/'+variant.path,{method:variant.method,credentials:variant.credentials||'include',body:variant.badBody?'malformed':JSON.stringify({payload}),...(variant.headers?{headers:variant.headers}:{})});
+    const result=await createStrategyServerAlert(options(p,store));assert.equal(result.code,'STRATEGY_ALERT_NOT_DISPATCHED');assert.equal(result.mutation_dispatched,false);assert.equal(p.counts().posts,0);assert.equal(p.counts().reads,0);assert.equal(store.read().phase,'rejected_known');
   }
 });
 it('lost create response sends once despite native retry defaults and exact request reconciliation never creates again',async()=>{
@@ -39,4 +53,23 @@ it('exact native server rejection is known and sanitized while a response withou
 it('ambiguous correlation after a lost response cannot adopt either copied server alert',async()=>{
   const p=strategyAlertPage(),store=memoryStore(),input=options(p,store);p.loseResponse();await createStrategyServerAlert(input);const raw=p.server.get(101);p.server.set(102,{...structuredClone(raw),alert_id:102});
   const result=await createStrategyServerAlert(input);assert.equal(result.code,'STRATEGY_ALERT_AMBIGUOUS');assert.equal(result.success,false);assert.equal(store.read().phase,'unknown');assert.equal(p.counts().posts,1);
+});
+it('an unlinked SDK or unexpected mutation endpoint cannot evade the scoped native transport',async()=>{
+  const unlinked=strategyAlertPage(),unlinkedStore=memoryStore();unlinked.collection._restRequestsHandler._restApi={};const unavailable=await createStrategyServerAlert(options(unlinked,unlinkedStore));assert.equal(unavailable.code,'STRATEGY_ALERT_NATIVE_UNSUPPORTED');assert.equal(unlinked.counts().posts,0);assert.equal(unlinked.counts().securityChecks,0);
+  const changed=strategyAlertPage(),store=memoryStore();changed.rest.createAlert=payload=>changed.rest.request('alternate_create',payload);const blocked=await createStrategyServerAlert(options(changed,store));assert.equal(blocked.code,'STRATEGY_ALERT_NOT_DISPATCHED');assert.equal(changed.counts().posts,0);assert.equal(store.read().phase,'rejected_known');
+});
+it('foreign SDK engine/symbol/session/currency or source interval cannot borrow an owned source proof',async()=>{
+  const changes=[
+    p=>{const state=p.exports.getEditorStateForAlertFromStudy;p.exports.getEditorStateForAlertFromStudy=()=>({...state(),studyId:'ForeignScript'});},
+    ...['symbol','session','currency-id'].map(key=>p=>{const state=p.exports.getEditorStateForAlertFromStudy;p.exports.getEditorStateForAlertFromStudy=()=>{const s=state();return {...s,symbol:{...s.symbol,[key]:'FOREIGN'}};};}),
+    p=>{p.mainSeries.interval=()=> '240';},
+    p=>{p.source._getStudyIdWithLatestVersion=()=> 'ForeignScript';},
+    p=>{const raw=p.source.stateForAlert;p.source.stateForAlert=()=>({...raw(),fullId:'ForeignScript$owned-document'});const state=p.exports.getEditorStateForAlertFromStudy;p.exports.getEditorStateForAlertFromStudy=()=>({...state(),studyId:'ForeignScript'});},
+  ];
+  for(const change of changes){const p=strategyAlertPage(),store=memoryStore();change(p);const result=await createStrategyServerAlert(options(p,store));assert.equal(result.code,'STRATEGY_ALERT_TARGET_UNVERIFIED');assert.equal(result.mutation_dispatched,false);assert.equal(p.counts().posts,0);assert.equal(p.counts().securityChecks,0);assert.equal(store.read(),null);}
+});
+it('repeated cached factory definitions retain one exact SDK getter and one native fetch dependency',async()=>{
+  const p=strategyAlertPage(),chunks=p.window.webpackChunktradingview,factory=chunks[0][1].alerts;
+  const repeated=Function('return '+String(factory).replace('{','{"use strict";'))();chunks.push([['repeated'],{alerts:repeated}]);
+  const result=await createStrategyServerAlert(options(p,memoryStore()));assert.equal(result.success,true);assert.equal(p.counts().posts,1);
 });

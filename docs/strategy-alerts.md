@@ -3,6 +3,9 @@
 `alert strategy-create` creates a server alert for the exact saved/applied strategy
 in the named workspace. It requires a verified normal baseline, full inputs and
 effective Properties, a matching saved document/version, and the current account.
+SDK-derived targets are independently checked against the owned source's raw
+state, metadata fullId/latest engine, and exact main series symbol/session/currency
+and interval. These authorities are pinned again at the final request boundary.
 The native modes are `fills`, `alerts` and `both`. The latter two require native
 alert() capability. Dependency-bearing inputs and unsupported interval mappings
 fail before dispatch. The Desktop's native permission/security checks remain on.
@@ -28,12 +31,24 @@ unknown transport/readback outcomes. Server messages are not printed as errors.
 Before native transport, the full owned identity/account and generated wire fields
 are checked again. The native request builder supplies its authenticated URL and
 payload, while a scoped one-attempt transport prevents the SDK's create retry from
-duplicating an uncertain request. Native operation tracking retains unfinished work
-after CDP timeout. A private intent is written before dispatch. Its stable request
+duplicating an uncertain request. The exact native collection/REST instance link
+is required, and generated wire objects are normalized through their actual JSON
+serialization before comparison. Native operation tracking retains unfinished
+work after CDP timeout. A private intent is written before dispatch. Its stable request
 ID is never blindly sent again: repetitions inspect the original server snapshot.
 Changed parameters conflict. An unrelated new creation is refused while an earlier
 creation intent is unknown. Exact fresh readback can reconcile a lost response.
 An absent list result does not prove that creation failed or permit replay.
+
+The supported native builder supplies POST, a string JSON payload, include
+credentials, and optional signal/referrer fields without explicit headers. Other
+option/body shapes and backend overrides refuse before transport. The exact
+one-shot fetch imported by that native builder preserves its header/default
+handling; the SDK retry composer is excluded only for the owned creation.
+Unknown paths/methods never fall back to that retry composer. After the create
+response, only exact native read paths/methods and shapes can pass through for
+readback. Repeated cached factories must resolve to the same REST getter and fetch
+dependency; their source text need not be byte-identical.
 
 `strategy-get` performs a fresh native server read and never changes alerts or
 private outcomes. It can inspect an uncertain creation through its private
