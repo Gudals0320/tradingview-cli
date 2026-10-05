@@ -119,3 +119,9 @@ it('fire pagination refuses outside/equal cursors, ascending/duplicate IDs and i
   const p=strategyAlertPage(),store=memoryStore(),input=options(p,store),created=await createStrategyServerAlert(input),row=id=>({fire_id:id,alert_id:created.alert_id,fire_time:'2024-02-28T00:00:00Z',message:'private'});
   for(const rows of [[row(6)],[row(5)],[row(1),row(2)],[row(2),row(2)],[{...row(3),fire_time:'2024-02-30T00:00:00Z'}]]){p.rest.listFires=async()=>rows;const result=await getStrategyAlertFires({request_id:input.request_id,before:5,_deps:input._deps});assert.equal(result.success,false);assert.equal(result.code,'STRATEGY_ALERT_LOG_UNVERIFIED');assert.equal(result.data,undefined);}
 });
+it('server-added symbol fields must match the independently pinned wire symbol and all input values remain exact',async()=>{
+  const p=strategyAlertPage(),store=memoryStore(),input=options(p,store),created=await createStrategyServerAlert(input),raw=p.server.get(created.alert_id);raw.symbol='='+JSON.stringify({symbol:'FIXTURE:OWNED',adjustment:'splits'});
+  const matched=await getStrategyServerAlert({request_id:input.request_id,_deps:input._deps});assert.equal(matched.success,true);assert.equal(matched.server_added_symbol_fields.adjustment,'splits');assert.equal(p.counts().posts,1);
+  raw.symbol='='+JSON.stringify({symbol:'FIXTURE:OWNED',adjustment:'dividends'});assert.equal((await getStrategyServerAlert({request_id:input.request_id,_deps:input._deps})).code,'STRATEGY_ALERT_READBACK_UNVERIFIED');
+  raw.symbol='='+JSON.stringify({symbol:'FIXTURE:OWNED',unexpected:'value'});assert.equal((await getStrategyServerAlert({request_id:input.request_id,_deps:input._deps})).code,'STRATEGY_ALERT_READBACK_UNVERIFIED');
+});

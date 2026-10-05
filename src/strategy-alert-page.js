@@ -72,12 +72,15 @@ export async function readStrategyAlert(window,request){
   const candidates=raw.filter(alert=>request.alert_id?String(alert.alert_id)===String(request.alert_id):alert.name===request.wire.name);
   if(candidates.length!==1)return {success:false,code:candidates.length?'STRATEGY_ALERT_AMBIGUOUS':'STRATEGY_ALERT_OUTCOME_UNKNOWN',replay_safe:false,mutation_dispatched:false};
   let actual,wire;try{actual=toolkit.convertApiAlert(candidates[0]);wire=JSON.parse(JSON.stringify(toolkit.convertEditableAlertState(actual,session.sendLegacyExpiration)));}catch{return {success:false,code:'STRATEGY_ALERT_READBACK_UNVERIFIED'};}
-  if(actual.type!=='strategy'||!strategyAlertFieldsMatch(wire,request.wire)||typeof actual.active!=='boolean')return {success:false,code:'STRATEGY_ALERT_READBACK_UNVERIFIED',alert_id:actual.alertId,result_adopted:false};
+  let requestedSymbol,actualSymbol,ownedWireSymbol;try{requestedSymbol=toolkit.decodeExtendedSymbol(request.wire.symbol);actualSymbol=toolkit.decodeExtendedSymbol(wire.symbol);ownedWireSymbol=toolkit.decodeExtendedSymbol(request.source_proof.semantic_context.wire.symbol);}catch{return {success:false,code:'STRATEGY_ALERT_READBACK_UNVERIFIED',result_adopted:false};}
+  const symbolValid=strategyAlertFieldsMatch(actualSymbol,requestedSymbol)&&Object.keys(actualSymbol).every(key=>Object.hasOwn(requestedSymbol,key)||Object.hasOwn(ownedWireSymbol,key)&&strategyAlertFieldsMatch(actualSymbol[key],ownedWireSymbol[key]));
+  const expectedFields={...request.wire};delete expectedFields.symbol;
+  if(actual.type!=='strategy'||!symbolValid||!strategyAlertFieldsMatch(wire,expectedFields)||typeof actual.active!=='boolean')return {success:false,code:'STRATEGY_ALERT_READBACK_UNVERIFIED',alert_id:actual.alertId,result_adopted:false};
   const expectedInputs=request.wire.conditions[0].series[0].inputs,actualInputs=wire.conditions?.[0]?.series?.[0]?.inputs;
   if(!actualInputs||Object.keys(actualInputs).length!==Object.keys(expectedInputs).length)return {success:false,code:'STRATEGY_ALERT_READBACK_UNVERIFIED',result_adopted:false};
   const message_hash=await strategyAlertHash(window,actual.message);
   if(session.user.value()?.id!==userId)return {success:false,code:'STRATEGY_ALERT_ACCOUNT_CHANGED'};
-  return {success:true,alert_id:actual.alertId,active:actual.active,server_state_changed:actual.active!==request.active,type:actual.type,mode:request.mode,name:actual.name,expiration:wire.expiration??wire.expiration_policy?.time??null,message_hash,message_body:'omitted',readback:'fresh_native_rest',settings_verified:true,webhook:null,external_notifications:false,snapshot_automatically_updated:false,server_event_observed:false};
+  return {success:true,alert_id:actual.alertId,active:actual.active,server_state_changed:actual.active!==request.active,type:actual.type,mode:request.mode,name:actual.name,expiration:wire.expiration??wire.expiration_policy?.time??null,message_hash,message_body:'omitted',readback:'fresh_native_rest',settings_verified:true,server_added_symbol_fields:Object.fromEntries(Object.entries(actualSymbol).filter(([key])=>!Object.hasOwn(requestedSymbol,key))),symbol_extras_verified_against:'pinned_owned_main_series_wire_symbol',webhook:null,external_notifications:false,snapshot_automatically_updated:false,server_event_observed:false};
 }
 
 /** Intercept the native request builder, preserve security checks, send once. */

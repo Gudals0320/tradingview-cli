@@ -6,6 +6,7 @@ export function strategyAlertPage(){
   let serial=100,posts=0,reads=0,securityChecks=0,actions=0,lost=false,lostAction=false,beforeSend=null,afterSend=null,rejection=null;
   const scalarInputs=()=>Object.fromEntries(p.chart.getStudyById('owned-study').getInputValues().map(i=>[i.id,i.value]));
   const mainSeries=p.chart._chartWidget.model().mainSeries();mainSeries.interval=()=> '60';mainSeries.getAlertSymbolString=()=> '='+JSON.stringify({symbol:'FIXTURE:OWNED'});p.source.series=()=>mainSeries;
+  mainSeries.getSymbolString=()=> '='+JSON.stringify({adjustment:'splits',symbol:'FIXTURE:OWNED'});
   p.source.stateForAlert=()=>({fullId:'StrategyScript@fixture$owned-document',scriptIdPart:'owned-document',scriptVersion:'1',hasAlertFunction:true,inputs:scalarInputs()});
   class StudyMetaInfo{static cutDollarHash(id){return id.split('$')[0];}static getStudyIdWithLatestVersion(meta){return this.cutDollarHash(meta.fullId)+'!';}}
   const originalMeta=p.source.metaInfo;p.source.metaInfo=()=>({...originalMeta(),id:'StrategyScript@fixture$owned-document',fullId:'StrategyScript@fixture$owned-document'});p.source._getStudyIdWithLatestVersion=()=>StudyMetaInfo.getStudyIdWithLatestVersion(p.source.metaInfo());

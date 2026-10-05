@@ -67,6 +67,11 @@ freshness. The server's settings remain the original snapshot in either case.
 Readback verifies the type, mode, study/input snapshot, symbol, interval, name,
 message, expiration and disabled notifications. Creation's active setting is
 verified immediately; later reads report the current active state independently.
+Server-added symbol attributes must independently match the main-series wire
+symbol pinned in the original creation proof. They are explicitly returned as
+server_added_symbol_fields; unknown or differing extras refuse readback. Serialized
+symbol object key order is not an identity. Requested keys and all input values
+remain exact.
 Source hash and effective Properties provenance are explicitly local creation
 evidence, not a claim that the server returned a Pine source hash. Creation success
 means server configuration/readback, not a real-time event or broker execution.
