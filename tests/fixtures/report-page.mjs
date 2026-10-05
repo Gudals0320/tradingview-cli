@@ -29,7 +29,7 @@ export function reportPage() {
     compile(text = 'compiled-new') {
       call('startWorkspacePage', owner, 'fixture-compile', { compile: true });
       window.__tvCliCompilation?.dispose?.(); delete window.__tvCliCompilation; delete window.__tvCliVerifiedStrategies;
-      beginCompilation(window, 'fixture-token', sourceHash('owned'), true, null, 'owned-document');
+      beginCompilation(window, 'fixture-token', sourceHash(editorSource), true, null, 'owned-document');
       if (!sources.includes(source)) sources = [source, ...sources];
       inputs = inputs.map(input => input.id === 'text' ? { ...input, value: text } : input);
       report = { ...report }; reports.fire(); call('finishWorkspacePage', owner, 'fixture-compile');

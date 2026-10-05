@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync,existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,9 +21,25 @@ import { resourceLockStatus } from '../src/resource-lock.js';
 import { preparationPage } from './fixtures/preparation-page.mjs';
 import { propertiesPage } from './fixtures/properties-page.mjs';
 import { deepPage } from './fixtures/deep-page.mjs';
+import { equityPage } from './fixtures/equity-page.mjs';
 import {createHash} from 'node:crypto';
 
 const CLI = fileURLToPath(new URL('../src/cli/index.js', import.meta.url));
+
+it('real equity entry returns verified finite native plot pages and refuses fake plots, changed revisions and Deep fallback',async t=>{
+  const page=equityPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);page.compile('equity-entry-v2');page.refreshReport();page.completeInputs();
+  const args=['--workspace','contract','data','equity','--plot-id','plot_0','--limit','1'];
+  const first=jsonResult(await f.run(args));assert.equal(first.total_points,3);assert.equal(first.data.length,1);assert.equal(first.semantic_proof.verified,true);assert.equal(first.effective_properties.fingerprint.length,64);
+  const second=jsonResult(await f.run([...args,'--offset','1','--report-revision',first.report_revision]));assert.equal(second.report_revision,first.report_revision);assert.equal(second.data[0].equity,1030);
+  const catalog=jsonResult(await f.run(['--workspace','contract','data','equity','--list-plots']));assert.equal(catalog.plot_values_verified,false);assert.equal(catalog.plots[0].plot_id,'plot_0');
+  const csv=join(f.root,'equity.csv'),exported=jsonResult(await f.run([...args,'--export',csv]));assert.equal(exported.export.rows,3);assert.equal(exported.export.report_revision,first.report_revision);assert.equal(exported._export_rows,undefined);assert.equal(readFileSync(csv,'utf8').trim().split(/\r?\n/).length,4);
+  const previous=readFileSync(csv,'utf8');jsonError(await f.run([...args,'--export',csv]),/already exists/,'EQUITY_EXPORT_EXISTS');assert.equal(readFileSync(csv,'utf8'),previous);
+  const wrong=jsonResult(await f.run(['--workspace','contract','data','equity','--plot-id','plot_9']),1);assert.equal(wrong.code,'EQUITY_PLOT_UNVERIFIED');
+  const rejectedCsv=join(f.root,'rejected.csv');jsonResult(await f.run(['--workspace','contract','data','equity','--plot-id','plot_9','--export',rejectedCsv]),1);assert.equal(existsSync(rejectedCsv),false);
+  const deep=jsonResult(await f.run(['--workspace','contract','data','equity','--plot-id','plot_0','--mode','deep']),1);assert.equal(deep.code,'EQUITY_DEEP_UNSUPPORTED');assert.equal(deep.data,undefined);
+  assert.equal(workspaceStatus(ws.file,f.options).interrupted,null);
+});
 
 it('real Deep CLI pins native source and response identity, pages one revision and rejects later foreign reports',async t=>{
   const page=deepPage(),f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
@@ -675,5 +691,4 @@ it('catalog HTTP-only inventory behavior reaches the endpoint even while its lea
     assert.deepEqual(snapshot(f.root), before);
   } finally { lease.release(); }
 });
-
 

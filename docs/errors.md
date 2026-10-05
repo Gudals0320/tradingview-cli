@@ -94,6 +94,11 @@ an unknown native operation.
 | REPORT_UNVERIFIED / REPORT_INVALIDATED | Compile owned source or perform verified input change; never adopt prior metrics. |
 | REPORT_PENDING / REPORT_TIMEOUT / STRATEGY_CALCULATION_PENDING | Wait for existing calculation; normal waiting does not imply cancellation/manual recovery. |
 | REPORT_CHANGED | Discard pages and restart offset0 with new revision. |
+| EQUITY_UNAVAILABLE | Select an explicit verified native strategy.equity plot; untyped arrays, buy-and-hold and closed cumulative PnL are not substitutes. |
+| EQUITY_SOURCE_UNVERIFIED / EQUITY_PLOT_UNVERIFIED | Saved/applied/full-input proof or direct expression/native mapping is missing. Inspect --list-plots and explicitly compile the owned source. |
+| EQUITY_DATA_INCOMPLETE / EQUITY_SEMANTICS_UNVERIFIED | Rows or currency/quantity/point-value/commission/checkpoint audit are incomplete; no points are adopted or interpolated. |
+| EQUITY_DEEP_UNSUPPORTED | No verified native Deep per-bar plot path; no normal fallback. |
+| EQUITY_EXPORT_EXISTS / EQUITY_EXPORT_WRITE_FAILED / EQUITY_EXPORT_UNVERIFIED | Choose a new destination. Export follows final ownership validation and reports partial-file possibility on I/O failure. |
 | STUDY_NOT_FOUND / WORKSPACE_STUDY_MISMATCH | Read current owned IDs; IDs do not survive reconnect. |
 | STUDY_NOT_FOUND for strategy-id | Requested ID is absent (including removed/another-page ID), even if calculation is pending. Re-read the safe owned current_strategy_id using the exact state/wait hint; no fallback to another strategy. A same-page nonowned strategy yields WORKSPACE_STUDY_MISMATCH. |
 | REPORT_AMBIGUOUS | More than one matching strategy; select the owned current ID rather than waiting. Runtime errors remain distinct even when the report is incomplete. |

@@ -17,3 +17,7 @@ if mode == "breakeven"
 if barstate.isrealtime and barstate.isnew
     alert('{"qa":"roadmap46","kind":"pine-event"}', alert.freq_once_per_bar)
 plot(ta.sma(close, cycle))
+plot(strategy.equity, title="QA equity", display=display.data_window)
+plot(strategy.initial_capital + strategy.netprofit, title="QA realized capital", display=display.data_window)
+plot(strategy.netprofit, title="QA net PnL", display=display.data_window)
+plot(strategy.openprofit, title="QA open PnL", display=display.data_window)

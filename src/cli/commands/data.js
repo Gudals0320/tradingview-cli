@@ -82,9 +82,9 @@ register('data', {
       handler: (opts) => core.getTradeLedger({ offset: Number(opts.offset || 0), limit: Number(opts.limit || 100), strategy_id: opts['strategy-id'], report_revision: opts['report-revision'] }),
     }],
     ['equity', {
-      description: 'Get verified owned equity; reconcile dead owners and refresh absent IDs; unsupported data is EQUITY_UNAVAILABLE',
-      options: { 'strategy-id': { type: 'string', description: 'Exact current-session strategy study ID' } },
-      handler: (opts) => core.getEquity({ strategy_id: opts['strategy-id'] }),
+      description: 'Collect finite pages from an explicit verified native strategy.equity plot; direct expression and native PnL checks required',
+      options: { 'strategy-id': { type: 'string', description: 'Exact current-session strategy study ID' },'plot-id':{type:'string',description:'Explicit plot_N for an existing direct plot(strategy.equity); no source injection'},offset:{type:'string',description:'First loaded bar ordinal (default 0)'},limit:{type:'string',description:'Page size 1..500 (default 100)'},'report-revision':{type:'string',description:'Equity revision from the first page'},mode:{type:'string',description:'normal only; Deep is explicitly unsupported'},'list-plots':{type:'boolean',description:'List exact native plot IDs and auxiliary source candidates; no curve values'},export:{type:'string',description:'Export the full validated loaded snapshot as CSV to a new file after ownership verification'} },
+      handler: (opts) => core.getEquity({ strategy_id: opts['strategy-id'],plot_id:opts['plot-id'],offset:Number(opts.offset||0),limit:Number(opts.limit||100),report_revision:opts['report-revision'],mode:opts.mode||'normal',list_plots:opts['list-plots'],export_all:Boolean(opts.export) }),
     }],
     ['depth', {
       description: 'Experimental current DOM/depth panel snapshot; no historical order book',
@@ -99,3 +99,4 @@ register('data', {
     }],
   ]),
 });
+

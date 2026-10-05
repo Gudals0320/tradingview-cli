@@ -39,4 +39,8 @@ does not cancel or alter Desktop work, and prevents a superseded/unknown private
 fence from permanently blocking a new explicit request. Actual native pending
 jobs and workspace operation ownership still protect mutations/release.
 
-
+`data equity --plot-id ID` remains an owned pure observation. It verifies an
+explicit existing native strategy.equity plot, finite loaded bars and native
+fill/cost/final PnL audit. `--list-plots` is metadata only. CSV `--export` writes
+the full validated loaded snapshot after final ownership validation and refuses
+existing destinations. [Equity contract](strategy-equity.md).

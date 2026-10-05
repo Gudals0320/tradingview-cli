@@ -8,6 +8,7 @@ import { waitForChartReady } from '../wait.js';
 import { reportExpression, STRATEGY_PAGE_CODE } from '../strategy-state.js';
 import { createHash } from 'node:crypto';
 import { projectStrategyProperties } from '../strategy-properties.js';
+import { EQUITY_PAGE_CODE } from '../equity-plot-page.js';
 
 const MAX_OHLCV_BARS = 500;
 const MAX_TRADES = 20;
@@ -254,17 +255,17 @@ export async function getTradeLedger({ offset = 0, limit = 100, strategy_id, rep
   return { ...page, ...(page.effective_properties?{effective_properties:projectStrategyProperties(page.effective_properties)}:{}),report_revision: revision };
 }
 
-export async function getEquity({ strategy_id, _deps } = {}) {
+export async function getEquity({ strategy_id,plot_id,offset=0,limit=100,report_revision,mode='normal',list_plots=false,export_all=false,_deps } = {}) {
+  if(!Number.isSafeInteger(offset)||offset<0||!Number.isInteger(limit)||limit<1||limit>500||!Number.isSafeInteger(offset+limit))throw Object.assign(new Error('Require safe offset >= 0 and limit 1..500.'),{code:'INVALID_EQUITY_REQUEST'});
+  if(mode!=='normal')return {success:false,code:'EQUITY_DEEP_UNSUPPORTED',error:'No verified native per-bar Deep equity plot path is available; no normal fallback.'};
+  if(list_plots&&plot_id||export_all&&!plot_id||list_plots&&export_all)throw Object.assign(new Error('list-plots and plot-id/export are separate modes; exporting requires an explicit plot-id.'),{code:'INVALID_EQUITY_REQUEST'});
+  if(plot_id||list_plots){const result=await (_deps?.evaluateAsync||_deps?.evaluate||evaluateAsync)(`(async()=>{${EQUITY_PAGE_CODE};return readEquityPlot(window,document,${JSON.stringify({strategy_id,plot_id,offset,limit,report_revision,list_plots,export_all})});})()`);return result.success?{...result,...(result.effective_properties?{effective_properties:projectStrategyProperties(result.effective_properties)}:{})}:result;}
   const inspect = _deps?.evaluate || evaluate;
   return inspect(`(() => { ${STRATEGY_PAGE_CODE};
     const summary = readStrategyReport(window, ${JSON.stringify({ strategy_id })});
     if (!summary.success) return summary;
-    const report = pageStrategies(window).find(item => item.id === summary.strategy_id).report;
-    const curve = report.equity || report.equityChart;
-    if (Array.isArray(curve)) return {success:true,data:curve,data_points:curve.length,source:'internal_api',strategy_id:summary.strategy_id};
     return {success:false,code:'EQUITY_UNAVAILABLE',data:[],data_points:0,
-      buy_hold_points:Array.isArray(report.buyHold)?report.buyHold.length:0,
-      error:'Per-bar equity is unavailable in this Desktop build; buy-and-hold is not strategy equity.'};
+      error:'Select an explicit native plot of strategy.equity; an untyped report array does not verify per-bar equity.'};
   })()`);
 }
 

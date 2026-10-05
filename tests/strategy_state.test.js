@@ -161,7 +161,7 @@ describe('Strategy report identity and metadata', () => {
     assert.equal(orders.trades[0].order_seq, 10); assert.equal(orders.trades.at(-1).time_index, 29);
     assert.equal((await getEquity({ _deps })).code, 'EQUITY_UNAVAILABLE');
     report.equity = [[1704067200, 10000]];
-    assert.equal((await getEquity({ _deps })).data_points, 1);
+    assert.equal((await getEquity({ _deps })).code, 'EQUITY_UNAVAILABLE');
   });
 
   it('rejects overlapping input changes and rebases a completed A-B-A sequence before the next setter', () => {

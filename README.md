@@ -99,6 +99,10 @@ tv workspace show research-a
 변경을 거부합니다. [필드·통화·호환성 계약](docs/strategy-properties.md)을 확인하세요.
 
 개발 브랜치의 `backtest run --mode deep`은 별도 native Deep 작업을 명시 실행합니다.
+개발 브랜치의 `data equity --list-plots`로 native plot ID를 확인하고,
+`data equity --plot-id plot_1`으로 사용자가 이미 추가한 `strategy.equity` plot을
+검증해 수집할 수 있습니다. source 자동 삽입은 하지 않으며, 순손익·수량·통화·수수료
+대조가 불충분하면 미검증으로 거부합니다. [equity 계약](docs/strategy-equity.md).
 status/wait/results는 순수 관측이며 일반 `data strategy`를 딥 결과로 대신 반환하지
 않습니다. [기간·timezone·응답 귀속·불명 작업 계약](docs/deep-backtesting.md)은 현재
 실환경 인수 검증 중입니다. 설치된 정식 2.2.0의 지원 목록과 구분하세요.
@@ -150,8 +154,8 @@ tv --workspace research-a data ledger --offset 100 --limit 100 --report-revision
 
 원장 페이지 간 revision이 바뀌면 `REPORT_CHANGED`로 거부하며 offset 0부터 다시
 수집해야 합니다. 데이터/히스토리는 실제 로드된 봉과 계정 권한 범위입니다. Deep
-Backtesting과 서버 전체 히스토리 완전성을 보장하지 않습니다. `data equity`는 해당
-Desktop 내부 배열이 제공될 때만 성공하며 buy-and-hold로 대체하지 않습니다.
+Backtesting과 서버 전체 히스토리 완전성을 보장하지 않습니다. `data equity`는 명시적인
+native plot과 수량·통화·수수료 대조를 검증해야 성공하며, 로드된 봉의 범위만 수집합니다.
 
 ## 병렬 작업과 관찰
 

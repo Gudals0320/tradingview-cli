@@ -87,6 +87,8 @@ tv --workspace agent-research backtest run --mode deep --from 2018-01-01T00:00:0
 tv --workspace agent-research backtest wait --run-id EXACT_RUN_ID --timeout 30000
 tv --workspace agent-research backtest results --run-id EXACT_RUN_ID --offset 0 --limit 100
 tv --workspace agent-research data ledger --offset 0 --limit 100
+tv --workspace agent-research data equity --list-plots
+tv --workspace agent-research data equity --plot-id plot_1 --limit 100
 ```
 
 Analyze is heuristic, not syntax validation. Check compiles on the server without

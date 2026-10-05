@@ -12,6 +12,7 @@ import { acquireResources } from '../resource-lock.js';
 import { resolve } from 'node:path';
 import { validateArguments } from './arguments.js';
 import { projectOutput } from './output.js';
+import {prepareEquityExport,writeEquityExport} from '../equity-export.js';
 import {noteDeepSupersession} from '../deep-record-archive.js';
 
 /** @type {Map<string, { description: string, options?: object, handler: Function, subcommands?: Map<string, object> }>} */
@@ -170,6 +171,7 @@ async function execute(handler, values, positionals, offline = false, readOnly =
   let lease, resourceLease, result, primaryError, retainRecovery = false;
   const cleanupWarnings = [];
   try {
+    if(command==='data equity'&&values.export)values.export=prepareEquityExport(values.export);
     const action = async () => {
       const scope = commandScope(command);
       readOnly = pureRead(command, values, positionals);
@@ -220,6 +222,7 @@ async function execute(handler, values, positionals, offline = false, readOnly =
     return;
   }
   if(result?.code==='DEEP_RUN_SUPERSEDED'){try{result=noteDeepSupersession(values.workspaceReference,result);}catch(error){handleError(error);return;}}
+  if(command==='data equity'&&values.export){try{result=writeEquityExport(result,values.export);}catch(error){handleError(error);return;}}
   if (result !== undefined) {
     if (cleanupWarnings.length) result = { ...result, cleanup_warnings: cleanupWarnings };
     console.log(JSON.stringify(projectOutput(result), null, command === 'help' && values.brief ? undefined : 2));
