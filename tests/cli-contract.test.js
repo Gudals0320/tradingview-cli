@@ -331,9 +331,9 @@ it('real unknown open provides an exact new open request, which recovers without
 // Exercise the real entry point, parser, router and filesystem ownership code.
 // An isolated HTTP endpoint counts unexpected Desktop access; no real Desktop,
 // external API, user target, or user workspace is used by these tests.
-async function fixture(t, pageResult, { pine = 'owned-document', snapshotFactory, epochFactory, createdByCli = false } = {}) {
+async function fixture(t, pageResult, { pine = 'owned-document', snapshotFactory, epochFactory, createdByCli = false,cdpTimeoutMs=1000 } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'tv-cli-contract-'));
-  const requests = [], sockets = new Set();
+  const requests = [], sockets = new Set(),ownedChildren=new Map();
   let connections = 0;
   const protocol = pageResult ? await CDP.Protocol({ local: true }) : null;
   let targets;
@@ -364,6 +364,10 @@ async function fixture(t, pageResult, { pine = 'owned-document', snapshotFactory
     socket.on('close', () => sockets.delete(socket));
   });
   t.after(async () => {
+    // Assertion failure must not leave a fixture owner waiting on stdin and pin
+    // the entire test process. Reap only children created by this fixture.
+    for(const child of ownedChildren.keys())if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');
+    await Promise.all([...ownedChildren.values()]);
     for (const socket of ws?.clients || []) socket.terminate();
     if (ws) await new Promise(resolve => ws.close(resolve));
     for (const socket of sockets) socket.destroy();
@@ -374,7 +378,7 @@ async function fixture(t, pageResult, { pine = 'owned-document', snapshotFactory
   await once(server, 'listening');
   const options = { host: '127.0.0.1', port: server.address().port, directory: join(root, 'tradingview-cli-sessions') };
   const env = { ...process.env, TEMP: root, TMP: root, TMPDIR: root, TV_STATE_DIR: options.directory,
-    TV_CDP_HOST: options.host, TV_CDP_PORT: String(options.port), TV_CDP_TIMEOUT_MS: '1000' };
+    TV_CDP_HOST: options.host, TV_CDP_PORT: String(options.port), TV_CDP_TIMEOUT_MS: String(cdpTimeoutMs) };
   delete env.TV_CDP_TARGET;
   delete env.TV_WORKSPACE;
   if (pageResult) {
@@ -399,7 +403,7 @@ async function fixture(t, pageResult, { pine = 'owned-document', snapshotFactory
       child.stdin.end(input);
     });
   }
-  return { root, options, requests, run, set targets(value) { targets = value; }, get connections() { return connections; } };
+  return { root, options, requests, run,trackChild:(child,stopped)=>ownedChildren.set(child,stopped), set targets(value) { targets = value; }, get connections() { return connections; } };
 }
 
 it('real ledger entry keeps open valuation separate from a closed exit and preserves raw native timestamps',async t=>{
@@ -583,9 +587,9 @@ it('BOM file and stdin fail at the real entry point before any Desktop access or
   }
 });
 
-async function reportFixture(t, onExpression) {
+async function reportFixture(t, onExpression,options={}) {
   const page = reportPage();
-  const f = await fixture(t, async expression => { const value = await page.evaluate(expression); await onExpression?.(expression); return value; }, { snapshotFactory: page.snapshot, epochFactory: page.epoch });
+  const f = await fixture(t, async expression => { const value = await page.evaluate(expression); await onExpression?.(expression); return value; }, { ...options,snapshotFactory: page.snapshot, epochFactory: page.epoch });
   page.bind(loadWorkspace(join(f.root, 'contract.json'), f.options)); page.compile();
   return { ...f, page };
 }
@@ -600,6 +604,7 @@ async function operationOwner(f, { resources = false, deferred = false } = {}) {
     process.stdin.once('data',()=>{lease.finish({success:true,result:{success:true}});resources?.release();process.stdin.pause();});`;
   const child = spawn(process.execPath, ['--input-type=module', '-e', script], { stdio: ['pipe', 'pipe', 'pipe'] });
   const stopped = once(child, 'close'); let buffer = '', stderr = '';
+  f.trackChild(child,stopped);
   child.stderr.on('data', chunk => stderr += chunk);
   const ready = new Promise((resolve, reject) => {
     child.once('error', reject); child.once('close', () => { if (!buffer.includes('\n')) reject(new Error(stderr)); });
@@ -607,6 +612,9 @@ async function operationOwner(f, { resources = false, deferred = false } = {}) {
   });
   let identity;
   const observed = ready.then(value => { identity = value; return value; });
+  // A deferred owner can be reaped before readiness after an earlier assertion.
+  // Awaiting the original promise still exposes any unexpected startup failure.
+  observed.catch(()=>{});
   if (!deferred) await observed;
   return { child, ready: observed, get identity() { return identity; }, async kill() { child.kill('SIGKILL'); await stopped; }, async finish() { child.stdin.end('finish'); await stopped; } };
 }
@@ -653,9 +661,13 @@ it('real wait follows FIFO A-to-B live leases, discards transition samples and w
       assert.notEqual(a.identity.id, b.identity.id);
       assert.equal(workspaceStatus(join(f.root, 'contract.json'), f.options).operation.id, b.identity.id); transitionSeen = true;
     } else if (samples === 2) await b.finish();
-  });
+  },{cdpTimeoutMs:10000});
   a = await operationOwner(f, { resources: true }); b = await operationOwner(f, { resources: true, deferred: true });
-  for (let i = 0; i < 100 && resourceLockStatus(f.options).queue.length !== 1; i++) await new Promise(resolve => setTimeout(resolve, 20));
+  // This is an owner-transition test, not a one-second CDP deadline test. Its
+  // mock deliberately waits for two real OS processes before replying.
+  const queueDeadline=Date.now()+10000;
+  while(resourceLockStatus(f.options).queue.length!==1&&Date.now()<queueDeadline)await new Promise(resolve=>setTimeout(resolve,20));
+  assert.equal(resourceLockStatus(f.options).queue.length,1,'B must be queued before sampling A');
   const result = jsonResult(await f.run(['--workspace', 'contract', 'workspace', 'wait', '--timeout', '10000']));
   assert.equal(result.phase, 'ready'); assert.ok(samples >= 3); assert.equal(queueSeen, true); assert.equal(transitionSeen, true);
   const status = workspaceStatus(join(f.root, 'contract.json'), f.options);

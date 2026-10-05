@@ -473,3 +473,34 @@ An **alert quota rejection was not observed live**; native quota classifications
 have fixture evidence. Actual native create/input/guard rejections and successful
 account use must not be described as a live quota-exhaustion test. No additional
 fault injection, stress repetition or account-limit experiment was added for M1.
+
+## Main CI owner-fixture failure after merge
+
+The exact-head PR CI passed before merge b866179. Its first main CI run
+[37292816361](https://github.com/Gudals0320/tradingview-cli/actions/runs/37292816361)
+was cancelled at the 10-minute job limit and is preserved as a failed acceptance
+attempt, not counted as green. The log named the FIFO A-to-B real-owner wait test
+as failed; the CLI contract file then remained alive without completing its final
+diagnostics. This is separate from the earlier unidentified bf04 failure.
+
+The FIFO mock awaits A process exit and B readiness before replying to
+Runtime.evaluate, but the fixture gave that response 1,000 ms while its logical
+workspace wait allowed 10,000 ms. A bounded isolated copy with a 1,250 ms handoff
+deterministically returned CDP_TIMEOUT (1 versus expected exit 0). Its explicit
+test-worker cleanup produced failure diagnostics and exited promptly. The original
+CI assertion detail was not emitted before cancellation; it is not invented from
+the reconstructed trace.
+
+The minimal correction only changes this test fixture: its response budget now
+matches the existing 10-second wait, queued B readiness is explicitly required,
+and every owner child created by the fixture is reaped on teardown even after an
+assertion fails. Deferred readiness rejection remains visible to an awaiter while
+intentional teardown avoids an unhandled rejected promise. The 1,250 ms handoff
+then passed with all FIFO, transition-discard, exact B completion and empty-lock
+assertions retained. A separate forced assertion with two live fixture owners
+exited promptly with diagnostics through the fixture cleanup.
+
+Production CDP/lock/workspace behavior, its timeouts and the GitHub job timeout
+are unchanged. No native Desktop/QA process is terminated by these isolated
+fixtures. No claim is made that rerunning alone repaired the first main run, and
+the issues remain open until the correction is reviewed and integrated CI passes.
