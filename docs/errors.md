@@ -72,6 +72,7 @@ an unknown native operation.
 | STRATEGY_PROPERTIES_TIMEOUT | Finite wait expired after dispatch; not cancellation. Inspect/wait for native completion before another change. |
 | INVALID_DEEP_PERIOD / INVALID_DEEP_REQUEST | Invalid explicit period/precision/timezone/request ID; no native dispatch. |
 | DEEP_TIMEZONE_UNSUPPORTED | Only native calculation UTC/Etc/UTC is verified; explicit other zones are refused before dispatch. ISO input offsets still normalize to UTC instants. |
+| DEEP_PERIOD_PRECISION_UNSUPPORTED | Current native path supports whole UTC days: both normalized from/to must be UTC midnight. Nonmidnight/DST-local subday intervals refuse before dispatch without correction. |
 | DEEP_SOURCE_UNVERIFIED / DEEP_KERNEL_UNVERIFIED | Current saved/applied/compiled/full-input proof or native payload mapping is missing; compile and inspect the exact owned strategy. |
 | DEEP_NATIVE_PATH_UNAVAILABLE | Native report provider/decoder/monitor shape is unsupported; reads never mount or create it. |
 | DEEP_CONTEXT_UNVERIFIED | Native extended symbol/session/currency or resolution differs from the owned main series; no history frame is sent. |

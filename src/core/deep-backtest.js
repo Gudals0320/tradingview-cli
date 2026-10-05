@@ -13,6 +13,7 @@ export function deepPeriod({from,to,timezone='UTC'}){
   for(const timestamp of [from,to]){const [year,month,day]=timestamp.slice(0,10).split('-').map(Number);if(day<1||day>new Date(Date.UTC(year,month,0)).getUTCDate())error('Invalid calendar date; normalized impossible dates are refused.');}
   try{new Intl.DateTimeFormat('en',{timeZone:timezone});}catch{error('Unknown calculation timezone.');}
   if(!['UTC','Etc/UTC'].includes(timezone))throw Object.assign(new Error('Only native UTC calculation is verified; non-UTC native sessions can shift the requested period.'),{code:'DEEP_TIMEZONE_UNSUPPORTED',details:{mutation_dispatched:false,requested_timezone:timezone,supported_calculation_timezone:'Etc/UTC'}});
+  if(start%86400000||end%86400000)throw Object.assign(new Error('This native path supports whole UTC calendar days only; normalized from/to must both be UTC midnight. No floor, ceil or period correction is performed.'),{code:'DEEP_PERIOD_PRECISION_UNSUPPORTED',details:{mutation_dispatched:false,normalized_from:new Date(start).toISOString(),normalized_to:new Date(end).toISOString(),supported_boundary:'UTC 00:00:00'}});
   return {from_ms:start,to_ms:end,period:{original_from:from,original_to:to,from:new Date(start).toISOString(),to:new Date(end).toISOString(),timezone,calculation_timezone:'Etc/UTC',bounds:'native from_to seconds; actual coverage is separate',native_from_seconds:Math.floor(start/1000),native_to_seconds:Math.floor(end/1000)}};
 }
 

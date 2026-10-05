@@ -99,6 +99,8 @@ tv workspace show research-a
 변경을 거부합니다. [필드·통화·호환성 계약](docs/strategy-properties.md)을 확인하세요.
 
 개발 브랜치의 `backtest run --mode deep`은 별도 native Deep 작업을 명시 실행합니다.
+현재 검증된 native 계산은 UTC이며, from/to를 UTC 시각으로 정규화한 두 경계가 모두
+자정인 whole-day 구간만 지원합니다. 다른 시간대 계산·subday 구간은 전송 전에 거부합니다.
 개발 브랜치의 `data equity --list-plots`로 native plot ID를 확인하고,
 `data equity --plot-id plot_1`으로 사용자가 이미 추가한 `strategy.equity` plot을
 검증해 수집할 수 있습니다. source 자동 삽입은 하지 않으며, 순손익·수량·통화·수수료

@@ -17,14 +17,19 @@ tv --workspace research-a backtest normal
 ```
 
 Periods require real ISO-8601 timestamps with explicit UTC offset and whole-second
-precision. Empty floored periods and impossible dates refuse before dispatch.
+precision, with both normalized bounds at UTC 00:00:00. Only whole UTC calendar
+days are verified for this current native path. Nonmidnight bounds fail
+DEEP_PERIOD_PRECISION_UNSUPPORTED before dispatch; no floor/ceil, extra day or
+period correction is applied. Empty periods and impossible dates refuse.
 Native calculation supports `UTC`/`Etc/UTC` only, both pinning `Etc/UTC`.
 An explicit different native calculation timezone fails DEEP_TIMEZONE_UNSUPPORTED
 before Desktop access or dispatch. A strongly attributed Seoul trial shifted the
 computed dates by one day and is retained as failed evidence. No date correction
 or chart-result fallback is applied. Explicit ISO input offsets still normalize
-to UTC instants: DST offsets in from/to may therefore describe a 23/25-hour
-interval, independently of native calculation timezone. Naive datetimes, invalid
+to UTC instants independently of native calculation timezone. An offset input
+normalizing to UTC midnight is supported. A DST-local 23/25-hour day with non-UTC
+midnight normalized bounds is unsupported. This is an observed path limitation,
+not a permanent claim about all future Desktop versions. Naive datetimes, invalid
 dates, empty/subsecond intervals and unsupported calculation zones refuse at
 input validation. The original chart/display timezone stays unchanged.
 Requested/normalized absolute bounds, actual transmitted timezone/bounds,

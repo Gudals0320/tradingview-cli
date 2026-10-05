@@ -26,7 +26,8 @@ it('only a recognized zero-history CLI closure can unwind to the exact cached na
 
 it('Deep periods require explicit offsets, real calendar dates and nonempty whole-second native bounds',()=>{
   for(const args of [{from:'2024-01-01',to:'2024-01-02'},{from:'2024-02-30T00:00:00Z',to:'2024-03-02T00:00:00Z'},{from:'2024-01-01T00:00:00.100Z',to:'2024-01-01T00:00:00.900Z'},{from:'2024-01-02T00:00:00Z',to:'2024-01-01T00:00:00Z'}])assert.throws(()=>deepPeriod(args),e=>e.code==='INVALID_DEEP_PERIOD'&&e.details.mutation_dispatched===false);
-  const result=deepPeriod({from:'2024-03-10T00:00:00-05:00',to:'2024-03-11T00:00:00-04:00',timezone:'UTC'});assert.equal(result.to_ms-result.from_ms,23*3600000);assert.equal(result.period.from,'2024-03-10T05:00:00.000Z');assert.equal(result.period.calculation_timezone,'Etc/UTC');
+  assert.throws(()=>deepPeriod({from:'2024-03-10T00:00:00-05:00',to:'2024-03-11T00:00:00-04:00',timezone:'UTC'}),e=>e.code==='DEEP_PERIOD_PRECISION_UNSUPPORTED'&&e.details.mutation_dispatched===false);
+  const result=deepPeriod({from:'2024-03-09T19:00:00-05:00',to:'2024-03-10T20:00:00-04:00',timezone:'UTC'});assert.equal(result.to_ms-result.from_ms,24*3600000);assert.equal(result.period.from,'2024-03-10T00:00:00.000Z');assert.equal(result.period.calculation_timezone,'Etc/UTC');
   assert.throws(()=>deepPeriod({from:'2024-01-01T00:00:00Z',to:'2024-01-02T00:00:00Z',timezone:'Asia/Seoul'}),e=>e.code==='DEEP_TIMEZONE_UNSUPPORTED'&&e.details.mutation_dispatched===false);
 });
 it('Deep response identity is bound to each decoded report cycle and never adopts a later foreign report',async()=>{
@@ -200,5 +201,6 @@ it('unknown persistent dispatch is observed, never resent, and wait timeout is n
   const repeated=await runDeep(options);assert.equal(repeated.reused,true);assert.equal(p.dispatches(),1);
   let clock=0;const timeout=await waitDeep({run_id:repeated.run_id,timeout:200,_deps:{evaluateAsync:p.evaluate,now:()=>clock,sleep:async ms=>{clock+=ms;}}});assert.equal(timeout.code,'DEEP_WAIT_TIMEOUT');assert.equal(timeout.cancelled,false);assert.equal(p.dispatches(),1);
 });
+
 
 

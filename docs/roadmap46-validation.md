@@ -161,3 +161,90 @@ cycle 2 active and only cycle 1 completed. The report-before-Completed-status
 ordering is covered by the subsequent monitor correction, including negatives
 for status-only old reports and changed input/ABA identity. The candidate archive
 is unchanged. This attempt is failed preparation and is not Deep live acceptance.
+
+## Accepted Deep and equity candidate evidence
+
+- The exact a2b75c1 and 44e7d985 Git archives calculated the UTC week
+  2018-01-01 to 2018-01-07 on A. Requested/computed bounds, source hash, target,
+  page generation and request attribution matched. Closed trades 14, ledger rows
+  15 (including one open trade), net PnL 33.25998 and open PnL 1.69 gave native
+  total PnL 34.94998. UI total PnL 34.95, 10/14 profitable trades (71.43%), profit
+  factor 4.932 and drawdown 8.84 matched their respective native fields. Net PnL
+  and total PnL are distinct fields. A second a2b page had the identical revision.
+  Reviewer independently projected stored receipts and verified the arithmetic;
+  direct Desktop observation was by Executor.
+- Exact 44e7d985 Seoul native calculation reached an attributed terminal report,
+  but actual dates were 2017-12-31 to 2018-01-06 for requested Jan 1 to Jan 7.
+  Outside trade evidence caused DEEP_PERIOD_MISMATCH; no metrics/ledger were
+  adopted. Native UTC-only support subsequently rejects other calculation zones
+  before dispatch. The failed raw experiment remains preserved.
+- Exact a7e41f9 completed owned history had native status 2, manager/WS connected
+  false, connecting false, socket null, counter before+1, cycle 1/ready and the
+  temporary send guard released. Explicit normal reset succeeded. Reviewer
+  accepted this stored live lifecycle evidence; fixture coverage also supports an
+  identical retained connection and refuses foreign range/report/socket.
+- Exact dd212573e761b2301cfcfcb53104f1bc014592c0 native equity collection on A
+  returned 343 loaded points from the explicit strategy.equity plot. All 34
+  applicable flat-close checkpoints and the final capital+net+open value matched.
+  Maximum observed error was 3.64e-12 account units; fixed tolerance stayed
+  max(1e-7, abs(expected)*1e-10), with reference arithmetic bound 8.33e-8.
+  Returned points remained the raw native values. CSV contained all 343 points
+  plus its header while the JSON preview had 10 rows. A later price update changed
+  revision; page 2 correctly returned REPORT_CHANGED without points.
+- Initial dirty equity audit against rounded native cp/TP fields failed the fixed
+  tolerance and adopted no points. Independent whole-entry/exit fill prices,
+  matched quantity, native entry valuation, same-currency point value and matched
+  commission replaced that rounded primary reference; cp remains auxiliary.
+  Partial exits/pyramiding/overlap, FX, unknown fields or partial checkpoints are
+  unverified. This correction did not widen tolerance.
+
+## Native day precision and zero-trade evidence
+
+Exact dd21257 normalized a DST-local interval to 2024-03-10 05:00Z through
+2024-03-11 04:00Z (23 hours). Native UTC produced midnight-to-midnight 24-hour
+bounds and outside trade evidence; results were DEEP_PERIOD_MISMATCH with no
+metrics/ledger adoption. A single non-DST control, Jan 1 12:00Z to Jan 2 12:00Z,
+also produced Jan 1/2 midnight boundaries and the same refusal. Both controls
+remain failed old-contract evidence. The current supported path requires both
+normalized bounds at UTC midnight and refuses other precision before dispatch;
+no date correction is applied. Original chart/display timezone is preserved.
+
+The saved A source was unchanged while its previously read Case input was set to
+zero and verified. Exact dd21257 UTC Deep returned net/total PnL 0, trades 0,
+ledger rows 0, and the matching native Jan 1-7 window. Undefined ratios remained
+null rather than manufactured zero. Coverage completeness remained unknown:
+absence of trades does not prove bar coverage. Normal reset succeeded. Zero-trade
+equity returned EQUITY_SEMANTICS_UNVERIFIED because no closed checkpoints existed.
+Case was explicitly restored to cycle with a new verified input calculation.
+
+## Bounded offline snapshot benchmark
+
+Before measurements, the script fixed one 1,000-row warm-up, interleaved
+10,000/25,000-row sizes with three trials each, 10 rows per page and 20 cached
+pages per trial. Creation/decode cost is separate; correctness failure aborts and
+no failed trial is silently discarded. Every page retained the exact full
+snapshot reference/revision and expected native ordinals; period validation ran
+once per snapshot. Windows x64 / Node v24.19.0 measurements: mean first snapshot
+15.20 ms (10k) and 36.16 ms (25k); mean cached page 0.83/0.94 ms, maximum
+2.24/2.85 ms. These are isolated fixture/VM timings, not live network timings or
+the account's maximum bar/trade limits. Reproduce with
+`node scripts/benchmark-deep-snapshot.mjs`; raw measurements remain private.
+
+## Alert investigation and preserved resources
+
+A native QA create-alert action was prepared and its dialog editor requested;
+no submit action was invoked. The process later became unreachable and no
+visible dialog was confirmed. After Lead restored Desktop with no-kill consent,
+fresh authenticated list_alerts returned HTTP 200 / ok with 26 persisted alerts
+(price 25, drawing 1) and no QA strategy document candidate. This is current
+server readback, not proof derived merely from a missing submit click. The
+captured editor branch creates local drafts and calls server create only on
+submit; silent invocation would create a server alert and was not used as prefill.
+Messages/webhook values were not collected in this reconciliation projection.
+Quit cause remains undetermined. No alert was removed or changed.
+
+Dedicated saved QA layouts/documents and private failed/unknown records remain.
+B/C genuine unknown Deep intents were neither upgraded nor archived. Live raw
+IDs, source, account data and ownership tokens are excluded from this public
+receipt. Remaining roadmap live cases, server-alert implementation and combined
+acceptance are still incomplete; these candidate receipts do not close #46.
