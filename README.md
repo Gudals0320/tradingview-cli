@@ -26,7 +26,8 @@ tv --version
 tv status
 ```
 
-현재 버전은 `2.2.0`입니다. 전역 연결 없이 `node src/cli/index.js ...`로 실행할 수
+현재 코드 버전은 `2.3.0`입니다. [2.3.0 변경 기록](docs/release-2.3.0.md)에서
+신규 전략 기능과 호환성·지원 한계를 확인하세요. 전역 연결 없이 `node src/cli/index.js ...`로 실행할 수
 있습니다. PowerShell 모듈을 쓰는 동안 저장소 진입점을 고정하려면
 `$env:TV_CLI_ENTRY = (Resolve-Path .\src\cli\index.js).Path`를 설정합니다.
 
@@ -98,19 +99,19 @@ tv workspace show research-a
 뒤 readback과 해당 계산 완료를 확인합니다. `indicator set`은 strategy_props 내부 ID
 변경을 거부합니다. [필드·통화·호환성 계약](docs/strategy-properties.md)을 확인하세요.
 
-개발 브랜치의 `backtest run --mode deep`은 별도 native Deep 작업을 명시 실행합니다.
+2.3.0의 `backtest run --mode deep`은 별도 native Deep 작업을 명시 실행합니다.
 현재 검증된 native 계산은 UTC이며, from/to를 UTC 시각으로 정규화한 두 경계가 모두
 자정인 whole-day 구간만 지원합니다. 다른 시간대 계산·subday 구간은 전송 전에 거부합니다.
-개발 브랜치의 `data equity --list-plots`로 native plot ID를 확인하고,
+`data equity --list-plots`로 native plot ID를 확인하고,
 `data equity --plot-id plot_1`으로 사용자가 이미 추가한 `strategy.equity` plot을
 검증해 수집할 수 있습니다. source 자동 삽입은 하지 않으며, 순손익·수량·통화·수수료
 대조가 불충분하면 미검증으로 거부합니다. [equity 계약](docs/strategy-equity.md).
 status/wait/results는 순수 관측이며 일반 `data strategy`를 딥 결과로 대신 반환하지
 않습니다. [기간·timezone·응답 귀속·불명 작업 계약](docs/deep-backtesting.md)과
 [실제 Desktop 인수 근거·지원 한계](docs/roadmap46-validation.md)를 확인하세요.
-설치된 정식 2.2.0의 지원 목록과 구분하세요.
+2.2.0 설치에서는 `tv update` 후 새 프로세스로 버전과 catalog를 다시 확인하세요.
 
-개발 브랜치의 `alert strategy-create`는 검증된 전략의 체결·alert()·both 서버
+2.3.0의 `alert strategy-create`는 검증된 전략의 체결·alert()·both 서버
 스냅샷을 만들고 정확한 ID로 설정을 재조회합니다. 고정 request ID 재호출은 기존
 결과를 확인하며 중복 생성하지 않습니다. 메시지는 그대로 전달하고 출력에는 hash만
 남깁니다. [전략 알림 계약](docs/strategy-alerts.md)의 fixture와 live 인수는 구분됩니다.
