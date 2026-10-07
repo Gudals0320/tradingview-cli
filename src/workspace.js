@@ -23,6 +23,7 @@ import { layoutList } from './core/ui.js';
 import { canonicalPineSource } from './pine-source.js';
 import { preparationRequest, preparationJournal, preparePineDocument, pinePreparationAdapter,waitPineEditorMount } from './pine-preparation.js';
 import { ensurePineEditorOpen } from './core/pine.js';
+import {recoverySummary} from './workspace-preflight.js';
 export { WORKSPACE_COMMANDS } from './cli/policy.js';
 
 async function raw(client, expression) {
@@ -489,7 +490,7 @@ export async function recoverWorkspace(file, { operationId, rebind = false, rest
       if (restoreDocument) await raw(client, pageCall('restoreWorkspaceDocument', workspace));
       const binding = await raw(client, pageCall('bindWorkspacePage', workspace, randomUUID()));
       const source_proof = await sourceProof(client, binding.snapshot);
-      const previous = workspace.binding?.snapshot;
+      const previous = workspace.binding?.snapshot, generationBefore = workspace.binding?.nonce;
       const adopted_changes = { source: previous ? previous.source !== binding.snapshot.source : true,
         context: JSON.stringify(previous?.context) !== JSON.stringify(binding.snapshot.context),
         inputs: JSON.stringify(previous?.studies) !== JSON.stringify(binding.snapshot.studies) };
@@ -497,7 +498,8 @@ export async function recoverWorkspace(file, { operationId, rebind = false, rest
       lease.saveBinding({ ...binding, browser, source_proof });
       lease.acknowledgeRecovery(operationId);
       lease.finish({ success: true, result: { recovered: true, interrupted_operation: operationId, incomplete: true } });
-      return { success: true, recovered: true, incomplete: true, workspace_id: workspace.id, interrupted_operation: operationId, adopted_changes };
+      return { success: true, recovered: true, incomplete: true, workspace_id: workspace.id, interrupted_operation: operationId, adopted_changes,
+        recovery_summary:recoverySummary({before:generationBefore,after:binding.nonce,context:binding.snapshot.context,adopted_changes}) };
     } catch (error) { try { lease.finish({ success: false, error: error.message }); } catch (cleanup) { error.details = { cleanup_error: cleanup.message }; } throw error; }
   });
 }

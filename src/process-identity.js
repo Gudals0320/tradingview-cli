@@ -1,6 +1,21 @@
 import { execFileSync } from 'node:child_process';
 const processStarted = new Date(Date.now() - process.uptime() * 1000).toISOString();
 const identityCache = new Map();
+/** Public diagnostic state; unlike ownership gates, unknown is not called alive. */
+export function ownerProcessState(owner, _deps = {}) {
+  if (!Number.isInteger(owner?.pid) || owner.pid <= 0) return 'unknown';
+  const kill = _deps.kill || process.kill;
+  try { kill(owner.pid, 0); } catch (cause) { return cause.code === 'ESRCH' ? 'dead' : 'unknown'; }
+  if (!Number.isFinite(Date.parse(owner.process_started_at))) return 'unknown';
+  if (owner.pid === process.pid) return Math.abs(Date.parse(owner.process_started_at)-Date.parse(processStarted))<2000 ? 'live' : 'dead';
+  try {
+    const started = _deps.started ? _deps.started(owner.pid) : process.platform === 'win32'
+      ? execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',`(Get-Process -Id ${owner.pid} -ErrorAction Stop).StartTime.ToUniversalTime().ToString('o')`],{encoding:'utf8',timeout:3000,windowsHide:true,stdio:['ignore','pipe','pipe']}).trim()
+      : execFileSync('ps',['-p',String(owner.pid),'-o','lstart='],{encoding:'utf8',timeout:3000,stdio:['ignore','pipe','pipe']}).trim();
+    if (!Number.isFinite(Date.parse(started))) return 'unknown';
+    return Math.abs(Date.parse(started)-Date.parse(owner.process_started_at))<2000 ? 'live' : 'dead';
+  } catch { return 'unknown'; }
+}
 export function ownerAlive(owner) {
   if (!Number.isInteger(owner?.pid) || owner.pid <= 0) return true;
   try { process.kill(owner.pid, 0); } catch (cause) { return cause.code !== 'ESRCH'; }

@@ -179,7 +179,7 @@ export async function getOhlcv({ count, summary, from, to, cursor, _deps } = {})
     const last = bars[bars.length - 1];
     return {
       success: true, context, ...pageFields, requested: limit, applied: bars.length, limit: MAX_OHLCV_BARS,
-      truncated: data.total_bars > bars.length, insufficient_history: bars.length < limit,
+      truncated: paged ? pageFields.has_more : data.total_bars > bars.length, insufficient_history: paged ? null : bars.length < limit,
       total_available: data.total_bars, bar_count: bars.length,
       period: { from: first.time, to: last.time },
       open: first.open, close: last.close,
@@ -193,7 +193,7 @@ export async function getOhlcv({ count, summary, from, to, cursor, _deps } = {})
   }
 
   return { success: true, context, ...pageFields, requested: limit, applied: data.bars.length, limit: MAX_OHLCV_BARS,
-    truncated: data.total_bars > data.bars.length, insufficient_history: data.bars.length < limit,
+    truncated: paged ? pageFields.has_more : data.total_bars > data.bars.length, insufficient_history: paged ? null : data.bars.length < limit,
     bar_count: data.bars.length, total_available: data.total_bars, source: data.source, bars: data.bars };
 }
 

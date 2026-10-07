@@ -51,6 +51,7 @@ it('20419 loaded bars export old period outside latest 20000 without filling ses
   const old=await getOhlcv({from:100000,to:100100,count:20,_deps:f._deps});
   assert.equal(old.bars[0].time,100000);assert.equal(old.bars.length,11);
   assert.equal(old.coverage.period_satisfied,true);assert.equal(old.count_satisfied,false);
+  assert.equal(old.truncated,false);assert.equal(old.insufficient_history,null);
   assert.equal(old.coverage.internal_gaps,'unknown');assert.equal(old.coverage.last_bar_complete,'unknown');
   const rows=f.rows().filter(r=>r[0]!==100050);f.setRows(rows);
   const gap=await getOhlcv({from:100000,to:100100,count:20,_deps:f._deps});assert.equal(gap.bars.length,10);
@@ -73,4 +74,15 @@ it('final latest bar has no continuation; invalid cursor and range reject before
   const f=fixture({size:2,first:100,step:10});
   const r=await getOhlcv({from:100,to:110,count:2,_deps:f._deps});assert.equal(r.next_cursor,null);assert.equal(r.has_more,false);
   for(const options of [{cursor:'bad'},{from:1},{from:10,to:1}])await assert.rejects(getOhlcv({...options,_deps:{evaluate:()=>assert.fail('no evaluation')}}));
+});
+it('range waits for loading after paging to settle and reports a bounded still-loading guard',async()=>{
+  const f=fixture({size:10,first:100,step:10,more:true}),base=f._deps.evaluate;
+  let polls=0;
+  f._deps.evaluate=async expression=>{const r=await base(expression);if(expression.includes('requestMoreData(1000)'))f.setLoading(true);return r;};
+  f._deps.sleep=async ms=>{if(ms===250 && ++polls===2)f.setLoading(false);};
+  const r=await setVisibleRange({from:80,to:180,_deps:f._deps});
+  assert.equal(r.success,true);assert.equal(polls,2);assert.equal(r.loading.termination,'satisfied');
+  const g=fixture({size:10,first:100,step:10,more:true}),original=g._deps.evaluate;
+  g._deps.evaluate=async expression=>{const r=await original(expression);if(expression.includes('requestMoreData(1000)'))g.setLoading(true);return r;};
+  await assert.rejects(setVisibleRange({from:80,to:180,_deps:g._deps}),e=>e.code==='DATA_NOT_READY'&&e.details.coverage.loading_termination==='guard');
 });

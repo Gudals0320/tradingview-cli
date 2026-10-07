@@ -7,7 +7,7 @@ import { POSITIONALS } from '../src/cli/arguments.js';
 for (const file of readdirSync(new URL('../src/cli/commands/', import.meta.url))) await import(`../src/cli/commands/${file}`);
 
 it('documented single-line CLI examples retain strict option and positional syntax', () => {
-  const files = ['README.md', 'docs/workspaces.md', 'AGENTS.md'];
+  const files = ['README.md', 'docs/workspaces.md', 'AGENTS.md','docs/history-export.md','docs/symbol-search.md','docs/preflight-capture.md'];
   let checked = 0;
   for (const file of files) for (const line of readFileSync(file, 'utf8').split('\n')) {
     if (line.includes('→') || !/^tv\s/.test(line) || /\\$|\.\.\.|\[.*\]/.test(line)) continue;

@@ -51,7 +51,7 @@ export function chartIdentity(context) {
 
 export function historyCoverage(context, requested, returned = null, termination = 'unknown') {
   const loaded = { from: context?.first_bar_time ?? null, to: context?.last_bar_time ?? null, bar_count: context?.bar_count ?? 0 };
-  const satisfied = Boolean(requested && loaded.from !== null && loaded.to !== null && loaded.from <= requested.from && loaded.to >= requested.to);
+  const satisfied = Boolean(requested && !context?.loading && !context?.feed_error && loaded.from !== null && loaded.to !== null && loaded.from <= requested.from && loaded.to >= requested.to);
   return { requested, loaded, returned, period_satisfied: requested ? satisfied : null,
     period_basis: 'loaded_bar_open_time_envelope; internal session gaps are unclassified',
     missing_edges: requested ? [

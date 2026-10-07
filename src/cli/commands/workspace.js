@@ -7,6 +7,7 @@ import { evaluate } from '../../connection.js';
 import { admissionGateStatus, clearAdmissionGate,currentWorkspaceSession } from '../../session.js';
 import { resourceLockStatus, clearDeadResource } from '../../resource-lock.js';
 import {archiveDeepRecord} from '../../deep-record-archive.js';
+import {workspacePreflight} from '../../workspace-preflight.js';
 
 const file = { type: 'string', description: 'Persistent workspace file' };
 const operation = { type: 'string', description: 'Exact interrupted operation ID' };
@@ -35,6 +36,7 @@ register('workspace', {
     }, handler: (opts, args) => createWorkspace(args[0], opts) }],
     ['select', { description: 'Verify workspace/layout selection; PowerShell module applies it to the calling terminal', handler: (_, args) => verifyWorkspaceSelection(args[0]) }],
     ['show', { description: 'Inspect a named workspace without changing terminal selection', handler: (_, args) => workspaceStatus(resolveWorkspace(args[0]), { name: args[0] }) }],
+    ['preflight',{description:'Read-only HTTP connection, recorded generation/context, operation identity and locks; no adoption/replay',handler:(_,args)=>workspacePreflight(resolveWorkspace(args[0]),{name:args[0]})}],
     ['inventory', { description: 'HTTP-only target/layout inventory (no page execution)', handler: workspaceInventory }],
     ['gate-status', { description: 'Inspect admission metadata ownership', handler: () => admissionGateStatus() }],
     ['gate-clear', { description: 'Clear an exact dead admission gate; retain all reservations', options: { token: { type: 'string', description: 'Exact dead admission gate token from gate-status' }, 'repair-token': { type: 'string', description: 'Exact dead repair token from gate-status' } }, handler: opts => clearAdmissionGate(opts.token, { repairToken: opts['repair-token'] }) }],

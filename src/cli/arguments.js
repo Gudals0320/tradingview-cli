@@ -13,6 +13,7 @@ export const POSITIONALS = new Map([
   ['alert strategy-fires',[0,0]],
   ['alert strategy-pause',[0,0]],['alert strategy-resume',[0,0]],['alert strategy-delete',[0,0]],
   ['workspace backtest-archive',[1,1]],
+  ['workspace preflight',[1,1]],
   ['workspace pine-prepare',[1,1]],
   ['workspace reconnect', [1, 1]], ['workspace attach', [1, 1]], ['workspace detach', [1, 1]],
   ['workspace reset',[1,1]],

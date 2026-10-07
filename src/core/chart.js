@@ -190,7 +190,10 @@ export async function setVisibleRange({ from, to, _deps }) {
     await evaluate(`${CHART_API}._chartWidget.model().mainSeries().requestMoreData(1000)`,{mutation:true});
     attempts++;
     await sleep(1800);
-    context = await probe(); check(context);
+    context = await probe();
+    for (let poll = 0; context?.loading && poll < 20; poll++) { await sleep(250); context = await probe(); }
+    if (context?.loading) termination = 'guard';
+    check(context);
   }
   if (context.first_bar_time <= f && context.last_bar_time >= t) termination = 'satisfied';
   const applied = await evaluate(`(() => {
@@ -280,7 +283,7 @@ export async function symbolSearch({ query, type = '', exchange = '', count = 15
   });
   const remaining = Number.isSafeInteger(data?.symbols_remaining) && data.symbols_remaining >= 0 ? data.symbols_remaining : null;
   return {success:true,query,source:'rest_api',results,count:results.length,requested:count,offset,
-    filters:{exchange,type},response_count:rows.length,cli_truncated:offset+results.length<rows.length,
+    filters:{exchange,type,applied_by:'provider',verified:false},response_count:rows.length,cli_truncated:offset+results.length<rows.length,
     truncated:offset+results.length<rows.length,has_more:offset+results.length<rows.length,
     next_offset:offset+results.length<rows.length?offset+results.length:null,
     provider:{pagination:'unverified',total:null,remaining,limit:remaining>0?'observed_more_results':'unknown',

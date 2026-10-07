@@ -4,6 +4,11 @@
 does not fetch history. `insufficient_history` remains a count test, not a period
 test. The maximum page size remains 20,000.
 
+In period mode `truncated` means there are further matching loaded bars after the
+page, and `insufficient_history` is null: a page size does not define the expected
+period bar count. Use `coverage` for the loaded period envelope. In latest/count
+mode both legacy flags retain their original meaning.
+
 Load history first, then read an inclusive UTC-seconds bar-open-time window:
 
 ```sh
@@ -19,6 +24,7 @@ pane/series, symbol, resolution, chart type, target or generation changes requir
 restarting. Load history before paging; scrolling or range loading during paging
 can invalidate a cursor. A final page including the newest bar has no next cursor;
 its completion status is unknown. Summaries describe only the current page.
+Reconnecting changes target/generation identity and invalidates old cursors.
 
 `coverage` separates requested, loaded and returned envelopes. `period_satisfied`
 only means the loaded first/last open timestamps bracket the request. It does not
@@ -32,6 +38,12 @@ OHLCV reports `loading_attempted:false`; range reports attempts and termination:
 history distinguishes observed feed end from not loaded/unknown. Count sufficiency
 is independent of the period envelope. Empty/loading series and feed errors have
 separate errors; range outside-data includes the actual loaded diagnosis.
+Each history request waits 1.8s and polls a still-loading feed for up to 5s. A feed
+still loading after that bound returns DATA_NOT_READY with guard termination.
+At 25 requests, scheduled waits can total about 170s plus CDP/network overhead.
+CDP timeouts apply to each evaluation, and admission timeouts apply to waiting for
+ownership, not an overall operation deadline. No lease expiration is extended.
+`scroll` now uses the same bounded history loading and diagnosis as `range`.
 
 ## OP investigation (#59)
 

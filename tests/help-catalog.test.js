@@ -49,6 +49,10 @@ it('catalog entries carry the published contract fields', () => {
   assert.equal(compile.read_only, false);
   assert.ok(compile.options.some(option => option.name === '--save' && option.type === 'boolean'));
   assert.deepEqual(catalog.commands.find(command => command.name === 'search').positionals, { min: 1, max: null });
+  assert.ok(catalog.commands.find(command=>command.name==='ohlcv').options.some(o=>o.name==='--from'));
+  assert.ok(catalog.commands.find(command=>command.name==='search').options.some(o=>o.name==='--exchange'));
+  const preflight=catalog.commands.find(command=>command.name==='workspace preflight');
+  assert.equal(preflight.read_only,true);assert.equal(preflight.desktop,'cdp_http');assert.deepEqual(preflight.locks,[]);
 });
 
 it('every mixed command documents when it stays a pure read', () => {
