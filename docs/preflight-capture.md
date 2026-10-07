@@ -37,6 +37,11 @@ actual PNG header. The selected element's pane_id is null when not identifiable;
 chart_context describes the active chart and is not proof that the first DOM
 candidate belongs to that active pane. Axis inclusion/region verification remain
 unknown when not visually verified. No image-content claims follow from success.
+`matched_element_count`, `visible_match_count` and `selected_match_index` expose
+the selected DOM candidate. More than one match reports
+`region_coverage:first_match_only`, explicitly distinguishing a partial multi-pane
+capture from a full chart. These counts describe selector elements, not a verified
+count of logical chart panes.
 
 If chart/tester selectors fail, the existing viewport capture is explicitly
 reported as fallback full_page. Alternate selectors are also marked. The generic

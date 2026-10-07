@@ -64,6 +64,28 @@ See [docs/workspaces.md](docs/workspaces.md) for migration and lifetime policies
   GUI inputs while compile/input changes run: GUI does not take CLI locks.
 - Broker connections and order execution are out of scope; never add/attempt them.
 
+## History and diagnostics (2.3.2)
+
+Load history with range before paging OHLCV by inclusive bar-open UTC seconds.
+Pass next_cursor unchanged; past corrections/prepend and generation/context changes
+invalidate it, while later append/ticks are permitted. Period truncated means
+has_more, insufficient_history is null; latest/count retains its existing flags.
+Envelope coverage does not prove session continuity or newest-bar completion.
+Search offset slices a fresh response; native provider pagination/total remain
+unverified. Preserve provider identities/types and never substitute instruments.
+
+```bash
+tv workspace preflight agent-research
+tv --workspace agent-research ohlcv --from 1704067200 --to 1711929600 --count 500
+tv --workspace agent-research ohlcv --cursor EXACT_NEXT_CURSOR --count 500
+```
+
+Preflight is HTTP/filesystem read-only and does not verify live page generation or
+adopt results. Recovery still means incomplete original work. Capture metadata
+reports selector/clip/match count and partial first-match coverage; axis inclusion
+remains unknown unless verified separately. See docs/history-export.md and
+preflight-capture.md. catalog_version stays 2; version/fingerprint invalidate caches.
+
 ## Pine and result collection
 
 Pine is optional for chart-only workspaces. For Pine work, attach a dedicated saved

@@ -28,8 +28,15 @@ export function captureRegionMetadata(window,document,region) {
   const clip=valid?{x:rect.x+(window.scrollX||0),y:rect.y+(window.scrollY||0),width:rect.width,height:rect.height,scale:1}:null;
   let pane=null;
   try{const node=selected?.closest?.('[data-name="pane"], [data-pane-id]');pane=node?.getAttribute?.('data-pane-id')??node?.id??null;}catch{/* Unknown. */}
+  let matchedCount=null,visibleCount=null;
+  if(selector && typeof document.querySelectorAll==='function'){
+    const matches=Array.from(document.querySelectorAll(selector));matchedCount=matches.length;
+    visibleCount=matches.filter(el=>{const r=el.getBoundingClientRect();return r.width>0&&r.height>0;}).length;
+  }
   return {requested_region:region,actual_region:clip?'dom_element':'viewport',
     selector_used:selector,selector_index:index<0?null:index,
+    matched_element_count:matchedCount,visible_match_count:visibleCount,selected_match_index:selector?0:null,
+    region_coverage:clip?(matchedCount>1?'first_match_only':matchedCount===1?'selected_element':'unknown'):'viewport',
     fallback:selectors.length && !clip?'full_page':index>0?'alternate_selector':null,
     fallback_used:Boolean(selectors.length && (!clip || index>0)),pane_id:pane,
     clip,coordinate_system:'page_css_pixels',device_pixel_ratio:Number.isFinite(window.devicePixelRatio)?window.devicePixelRatio:null,
@@ -49,6 +56,7 @@ export async function captureScreenshot({ region = 'full', filename, method, wai
       return {success:true,method:'api',backend:'api',source:'owned_chart_collection_api',file_path:null,
         requested_region:region,actual_region:'unknown',region,pane_id:null,clip:null,coordinate_system:null,
         selector_used:null,fallback:null,fallback_used:false,axes_included:'unknown',requested_region_verified:'unknown',
+        matched_element_count:null,visible_match_count:null,selected_match_index:null,region_coverage:'unknown',
         device_pixel_ratio:null,image_pixels:null,waited_for_render:!!waitForRender,
         note:'takeScreenshot() triggered — TradingView will save/show the screenshot via its own UI; file creation and region are unverified'};
     } catch(cause) {

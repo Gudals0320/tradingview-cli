@@ -81,3 +81,18 @@ it('API capture reports trigger only, unknown region/no file and never falls bac
   deps.evaluate=async()=>{throw Error('API unavailable');};
   await assert.rejects(captureScreenshot({method:'api',_deps:deps}),e=>e.code==='SCREENSHOT_API_UNAVAILABLE');
 });
+it('multiple DOM pane matches explicitly report first match only, without claiming full chart coverage',async()=>{
+  const png=Buffer.alloc(24);Buffer.from([137,80,78,71,13,10,26,10]).copy(png);png.writeUInt32BE(300,16);png.writeUInt32BE(400,20);
+  const el={getBoundingClientRect:()=>({x:0,y:0,width:300,height:400})},window={devicePixelRatio:1};
+  const document={querySelector:()=>el,querySelectorAll:()=>[el,el]};
+  const r=await captureScreenshot({region:'chart',_deps:{evaluate:expression=>runInNewContext(expression,{window,document}),
+    getClient:async()=>({Page:{captureScreenshot:async()=>({data:png.toString('base64')})}}),writeFile:()=>{}}});
+  assert.equal(r.matched_element_count,2);assert.equal(r.visible_match_count,2);assert.equal(r.selected_match_index,0);assert.equal(r.region_coverage,'first_match_only');
+});
+it('preflight distinguishes proven target absence, layout mismatch and duplicate saved layout',async()=>{
+  const state={success:true,workspace_id:'w',target:'t',layout:'l',generation:'g',state:'idle'};
+  for(const [targets,expected,duplicate] of [[[],'target_lost',false],[[{target:'t',layout:'other'}],'identity_mismatch',false],[[{target:'t',layout:'l'},{target:'u',layout:'l'}],'connected',true]]){
+    const r=await workspacePreflight('unused',{_deps:{status:()=>state,load:()=>({}),locks:()=>({}),inventory:async()=>({targets})}});
+    assert.equal(r.connection.state,expected);assert.equal(r.connection.duplicate_layout,duplicate);
+  }
+});
