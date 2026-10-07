@@ -7,14 +7,20 @@ register('quote', {
 });
 
 register('ohlcv', {
-  description: 'Get latest loaded OHLCV bars, with truncation and insufficient-history flags',
+  description: 'Read latest or inclusive bar-open-time period OHLCV; cursor pages preserve historical context, without loading history',
   options: {
     count: { type: 'string', short: 'n', description: 'Latest loaded bars (default 500, max 20000); returns available bars if fewer are loaded, without fetching history' },
     summary: { type: 'boolean', short: 's', description: 'Return summary stats instead of all bars' },
+    from: { type:'string', description:'Inclusive first bar open time (UTC unix seconds); requires to' },
+    to: { type:'string', description:'Inclusive last bar open time (UTC unix seconds); requires from' },
+    cursor: { type:'string', description:'Exact next_cursor; rejects changed past/context, permits later appended bars; no from/to' },
   },
   handler: (opts) => core.getOhlcv({
     count: opts.count ? Number(opts.count) : undefined,
     summary: opts.summary,
+    from: opts.from === undefined ? undefined : Number(opts.from),
+    to: opts.to === undefined ? undefined : Number(opts.to),
+    cursor: opts.cursor,
   }),
 });
 

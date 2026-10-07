@@ -44,10 +44,11 @@ register('info', {
 });
 
 register('search', {
-  description: 'Search for symbols by name or keyword',
+  description: 'Search exact provider identities; filters and local-response pages, unknown provider total',
+  options: {exchange:{type:'string',description:'Provider exchange filter (no alias mapping)'},type:{type:'string',description:'Provider search_type as supplied; no instrument substitution'},count:{type:'string',description:'Returned response slice size 1..500 (default 15)'},offset:{type:'string',description:'Offset within one freshly fetched response; provider pagination unverified'}},
   handler: (opts, positionals) => {
     if (!positionals[0]) throw new Error('Query required. Usage: tv search AAPL');
-    return core.symbolSearch({ query: positionals.join(' ') });
+    return core.symbolSearch({ query: positionals.join(' '),exchange:opts.exchange,type:opts.type,count:Number(opts.count ?? 15),offset:Number(opts.offset ?? 0) });
   },
 });
 
