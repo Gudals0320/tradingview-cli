@@ -23,6 +23,16 @@ function fixture() {
   return { resource, window, chart, inputs, editor, controller, call, owner: { ...resource, nonce: 'nonce' } };
 }
 describe('atomic workspace page guards', () => {
+  it('new history observations never enter workspace identity comparisons',()=>{
+    const f=fixture(),series=f.chart._chartWidget.model().mainSeries();
+    const before=f.call('readWorkspacePage').context;
+    series.requestMoreDataAvailable=()=>true;series.isLoading=()=>false;
+    const first=f.call('readWorkspacePage').context;
+    series.requestMoreDataAvailable=()=>false;series.isLoading=()=>true;
+    const after=f.call('readWorkspacePage').context;
+    assert.deepEqual(first,before);assert.deepEqual(after,before);
+    assert.equal('more_data_available' in after,false);assert.equal('loading_known' in after,false);
+  });
   it('quote permission derives restore identity from the guarded execution baseline', () => {
     const f = fixture();
     f.chart.symbolExt = () => ({ full_name: f.chart.symbol() });

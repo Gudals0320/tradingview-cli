@@ -96,6 +96,9 @@ for (const name of [...LEGACY_COMMANDS]) {
 for (const name of PREPARATION_COMMANDS) WORKSPACE_COMMANDS.delete(name);
 WORKSPACE_COMMANDS.add('stream ohlcv');LEGACY_COMMANDS.delete('stream ohlcv');APP_COMMANDS.delete('stream ohlcv');PURE_READ_COMMANDS.add('stream ohlcv');MIXED_COMMANDS.delete('stream ohlcv');MIXED_RULES.delete('stream ohlcv');
 for (const name of ['workspace list', 'workspace import', 'workspace show','workspace locks','workspace lock-clear','workspace backtest-archive']) OFFLINE_COMMANDS.add(name);
+OFFLINE_COMMANDS.add('workspace preflight');
+PURE_READ_COMMANDS.add('workspace preflight');
+DESKTOP_REQUIREMENTS.set('workspace preflight','cdp_http');
 for (const name of ['workspace reconnect', 'workspace attach', 'workspace detach','workspace reset']) ADMIN_COMMANDS.add(name);
 for (const name of PURE_READ_COMMANDS) if (WORKSPACE_COMMANDS.has(name)) WORKSPACE_READS.add(name);
 for (const name of ['alert list','alert strategy-get','alert strategy-fires','watchlist get','watchlist raw','ui find']) WORKSPACE_READS.add(name);

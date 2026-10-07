@@ -738,6 +738,36 @@ it('real OHLCV entry accepts count and short alias through 20000 and reports loa
   assert.equal(f.requests.length, requests);
 });
 
+it('real period OHLCV CLI passes time cursors without taking locks or creating native journals',async t=>{
+  const page=reportPage();let size=20419;
+  const series=page.window.TradingViewApi._activeChartWidgetWV.value()._chartWidget.model().mainSeries();
+  series.bars=()=>({firstIndex:()=>0,lastIndex:()=>size-1,size:()=>size,valueAt:i=>[1704067200+i*60,1,3,1,2,5]});
+  const f=await fixture(t,expression=>page.evaluate(expression),{snapshotFactory:page.snapshot,epochFactory:page.epoch});
+  const ws=loadWorkspace(join(f.root,'contract.json'),f.options);page.bind(ws);
+  const args=['--workspace','contract','ohlcv'];
+  const first=jsonResult(await f.run([...args,'--from','1704067200','--to','1704070200','--count','5']));
+  assert.equal(first.bars[0].time,1704067200);assert.equal(first.truncated,true);assert.equal(first.insufficient_history,null);
+  size++;
+  const second=jsonResult(await f.run([...args,'--cursor',first.next_cursor,'--count','5']));
+  assert.equal(second.bars[0].time,1704067500);assert.equal(workspaceStatus(ws.file,f.options).operation,null);
+  assert.equal(sessionStatus(f.options).recovery_required,false);
+  const requests=f.requests.length;
+  jsonError(await f.run([...args,'--from','10']),/both from\/to/);assert.equal(f.requests.length,requests);
+  const catalog=jsonResult(await f.run(['help','--json','ohlcv'])).commands[0];
+  assert.equal(catalog.read_only,true);assert.deepEqual(catalog.locks,[]);assert.ok(catalog.options.some(o=>o.name==='--cursor'));
+});
+
+it('real named preflight uses only HTTP inventory and preserves state bytes without mutation admission',async t=>{
+  let pageCalls=0;
+  const f=await fixture(t,()=>{pageCalls++;return {};});
+  const files=()=>{const rows=[];const walk=dir=>{for(const e of readdirSync(dir,{withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name))){const p=join(dir,e.name);if(e.isDirectory())walk(p);else rows.push([p,readFileSync(p,'utf8')]);}};walk(f.options.directory);return JSON.stringify(rows);};
+  const before=files(),r=jsonResult(await f.run(['workspace','preflight','contract']));
+  assert.equal(r.connection.state,'connected');assert.equal(r.owner_state,'none');assert.equal(r.connection.generation_verified,false);
+  assert.equal(files(),before);assert.equal(pageCalls,0);
+  const entry=jsonResult(await f.run(['help','--json','workspace','preflight'])).commands[0];
+  assert.equal(entry.read_only,true);assert.equal(entry.desktop,'cdp_http');assert.equal(entry.workspace_required,false);assert.deepEqual(entry.locks,[]);
+});
+
 it('real extraction CLI returns structured error codes and study details on stderr with exit 1', async t => {
   let failure;
   const f = await fixture(t, () => ({ extraction_error: failure }));

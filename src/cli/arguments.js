@@ -13,6 +13,7 @@ export const POSITIONALS = new Map([
   ['alert strategy-fires',[0,0]],
   ['alert strategy-pause',[0,0]],['alert strategy-resume',[0,0]],['alert strategy-delete',[0,0]],
   ['workspace backtest-archive',[1,1]],
+  ['workspace preflight',[1,1]],
   ['workspace pine-prepare',[1,1]],
   ['workspace reconnect', [1, 1]], ['workspace attach', [1, 1]], ['workspace detach', [1, 1]],
   ['workspace reset',[1,1]],
@@ -34,6 +35,8 @@ export const POSITIONALS = new Map([
 ]);
 
 export function validateArguments(command, values, positionals) {
+  if (command === 'ohlcv' && ((values.from === undefined) !== (values.to === undefined) || values.cursor !== undefined && (values.from !== undefined || values.to !== undefined))) throw new Error('ohlcv requires both from/to, or cursor without from/to.');
+  if (['ohlcv','range'].includes(command) && values.from !== undefined && Number(values.from) > Number(values.to)) throw new Error('from must be <= to.');
   if(command==='alert strategy-update')validateStrategyAlertUpdate({request_id:values['request-id'],operation_id:values['operation-id'],name:values.name,message:values.message,expiration:values.expiration});
   if(['alert strategy-replace','alert strategy-replace-plan'].includes(command))validateStrategyAlertReplacement({request_id:values['request-id'],operation_id:values['operation-id'],replacement_request_id:values['replacement-request-id'],policy:values.policy,mode:values.mode,name:values.name,message:values.message,expiration:values.expiration});
   if(command==='alert strategy-fires'&&(!/^[-a-zA-Z0-9_]{1,100}$/.test(values['request-id']||'')||values.limit!==undefined&&(Number(values.limit)>50||Number(values.limit)<1)||values.before!==undefined&&(!Number.isSafeInteger(Number(values.before))||Number(values.before)<0)))throw Object.assign(Error('Pass exact request ID, limit 1..50 and a native fire-ID cursor.'),{code:'INVALID_STRATEGY_ALERT_LOG'});

@@ -2,7 +2,7 @@
  * Core data access logic.
  */
 import { evaluate, evaluateAsync, KNOWN_PATHS, safeString, requireInteger, configuredTarget } from '../connection.js';
-import { readChartContext, symbolMatches, normalizeTimeframe } from '../chart-context.js';
+import { readChartContext, symbolMatches, normalizeTimeframe, chartIdentity, historyCoverage } from '../chart-context.js';
 import { nativeCheckpoint, nativeQuiescent } from '../session.js';
 import { waitForChartReady } from '../wait.js';
 import { reportExpression, STRATEGY_PAGE_CODE } from '../strategy-state.js';
@@ -34,8 +34,8 @@ async function readData(expression, _deps = {}) {
     try {
       context = readContext(window);
       const data = (${expression}), after = readContext(window);
-      if (!context || !after || context.symbol !== after.symbol || context.resolution !== after.resolution
-        || context.chart_type !== after.chart_type) throw new Error('DATA_CONTEXT_CHANGED: Chart changed during extraction.');
+      const identity = ${chartIdentity.toString()};
+      if (!context || !after || JSON.stringify(identity(context)) !== JSON.stringify(identity(after))) throw new Error('DATA_CONTEXT_CHANGED: Chart changed during extraction.');
       return { data, context };
     } catch (error) {
       return { extraction_error: { code: error.code || String(error.message).match(/^([A-Z_]+):/)?.[1] || 'DATA_EXTRACTION_FAILED',
@@ -116,30 +116,61 @@ function buildGraphicsJS(collectionName, mapKey, filter) {
   `;
 }
 
-export async function getOhlcv({ count, summary, _deps } = {}) {
+export async function getOhlcv({ count, summary, from, to, cursor, _deps } = {}) {
   const limit = requireInteger(count === undefined ? 500 : count, 'count', 1, MAX_OHLCV_BARS);
+  let continuation = null;
+  if (cursor !== undefined) {
+    try { continuation = JSON.parse(Buffer.from(cursor, 'base64url').toString()); } catch { /* validated below */ }
+    if (!continuation || continuation.v !== 1 || !Number.isFinite(continuation.after) || !Number.isFinite(continuation.first)
+      || !/^[a-f0-9]{64}$/.test(continuation.prefix || '') || !/^[a-f0-9]{64}$/.test(continuation.identity || '')
+      || !Number.isFinite(continuation.from) || !Number.isFinite(continuation.to) || continuation.from > continuation.to
+      || from !== undefined || to !== undefined) throw Object.assign(new Error('Pass an unchanged OHLCV cursor without from/to.'), { code:'INVALID_OHLCV_CURSOR' });
+    from = continuation.from; to = continuation.to;
+  }
+  const paged = from !== undefined || to !== undefined;
+  if (paged && (!Number.isFinite(from) || !Number.isFinite(to) || from > to)) throw Object.assign(new Error('Require both finite from/to UTC seconds, from <= to.'), { code:'INVALID_OHLCV_RANGE' });
   const extracted = await readData(`
       (function() {
         var bars = ${BARS_PATH};
         if (!bars || typeof bars.lastIndex !== 'function') return null;
         var result = [];
         var end = bars.lastIndex();
-        var start = Math.max(bars.firstIndex(), end - ${limit} + 1);
+        var start = ${paged} ? bars.firstIndex() : Math.max(bars.firstIndex(), end - ${limit} + 1);
+        var prefix = [], previousPrefix = [], selected = 0;
         for (var i = start; i <= end; i++) {
           var v = bars.valueAt(i);
           if (!v) throw Object.assign(new Error('OHLCV_EXTRACTION_FAILED: Missing bar inside requested range.'), { code:'OHLCV_EXTRACTION_FAILED', bar_index:i });
-          result.push({time: v[0], open: v[1], high: v[2], low: v[3], close: v[4], volume: v[5] ?? null});
+          if (${paged}) {
+            if (v[0] <= ${continuation?.after ?? 'null'} && ${Boolean(continuation)}) previousPrefix.push(v);
+            if (v[0] >= ${from ?? 'null'} && v[0] <= ${to ?? 'null'} && (!${Boolean(continuation)} || v[0] > ${continuation?.after ?? 'null'})) {
+              selected++;
+              if (result.length < ${limit}) result.push({time:v[0],open:v[1],high:v[2],low:v[3],close:v[4],volume:v[5]??null});
+            }
+            prefix.push(v);
+          } else result.push({time: v[0], open: v[1], high: v[2], low: v[3], close: v[4], volume: v[5] ?? null});
         }
-        return {bars: result, total_bars: bars.size(), source: 'direct_bars'};
+        return {bars: result, total_bars: bars.size(), source: 'direct_bars', selected,
+          prefix: ${paged} ? JSON.stringify(prefix.filter(v => v[0] <= result[result.length-1]?.time)) : null,
+          previous_prefix: ${Boolean(continuation)} ? JSON.stringify(previousPrefix) : null};
       })()
     `, _deps);
   const { data, context } = extracted;
+  const hash = value => createHash('sha256').update(value).digest('hex');
+  const identity = hash(JSON.stringify(chartIdentity(context)));
+  if (continuation && (continuation.identity !== identity || continuation.first !== context.first_bar_time || continuation.prefix !== hash(data.previous_prefix))) {
+    throw Object.assign(new Error('OHLCV history or context changed; restart from the requested range.'), { code:'OHLCV_CONTEXT_CHANGED', details:{context, requested:{from,to}} });
+  }
+  const returned = data?.bars?.length ? {from:data.bars[0].time,to:data.bars.at(-1).time,bar_count:data.bars.length} : null;
+  const coverage = historyCoverage(context, paged ? {from,to} : null, returned, context.more_data_available === false ? 'feed_end' : 'unknown');
+  const pageFields = { coverage:{...coverage,loading_attempted:false}, count_satisfied:data?.bars?.length >= limit,
+    ...(paged ? { mode:'period', has_more:data.selected > data.bars.length,
+      next_cursor:data.selected > data.bars.length ? Buffer.from(JSON.stringify({v:1,from,to,after:data.bars.at(-1).time,first:context.first_bar_time,identity,prefix:hash(data.prefix)})).toString('base64url') : null } : {}) };
 
-  if (!data || !data.bars || data.bars.length === 0) {
+  if (!data || !data.bars || (!paged && data.bars.length === 0)) {
     throw new Error('Could not extract OHLCV data. The chart may still be loading.');
   }
 
-  if (summary) {
+  if (summary && data.bars.length) {
     const bars = data.bars;
     const highs = bars.map(b => b.high);
     const lows = bars.map(b => b.low);
@@ -147,8 +178,8 @@ export async function getOhlcv({ count, summary, _deps } = {}) {
     const first = bars[0];
     const last = bars[bars.length - 1];
     return {
-      success: true, context, requested: limit, applied: bars.length, limit: MAX_OHLCV_BARS,
-      truncated: data.total_bars > bars.length, insufficient_history: bars.length < limit,
+      success: true, context, ...pageFields, requested: limit, applied: bars.length, limit: MAX_OHLCV_BARS,
+      truncated: paged ? pageFields.has_more : data.total_bars > bars.length, insufficient_history: paged ? null : bars.length < limit,
       total_available: data.total_bars, bar_count: bars.length,
       period: { from: first.time, to: last.time },
       open: first.open, close: last.close,
@@ -161,8 +192,8 @@ export async function getOhlcv({ count, summary, _deps } = {}) {
     };
   }
 
-  return { success: true, context, requested: limit, applied: data.bars.length, limit: MAX_OHLCV_BARS,
-    truncated: data.total_bars > data.bars.length, insufficient_history: data.bars.length < limit,
+  return { success: true, context, ...pageFields, requested: limit, applied: data.bars.length, limit: MAX_OHLCV_BARS,
+    truncated: paged ? pageFields.has_more : data.total_bars > data.bars.length, insufficient_history: paged ? null : data.bars.length < limit,
     bar_count: data.bars.length, total_available: data.total_bars, source: data.source, bars: data.bars };
 }
 

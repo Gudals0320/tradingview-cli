@@ -26,8 +26,8 @@ tv --version
 tv status
 ```
 
-현재 코드 버전은 `2.3.1`입니다. [2.3.1 변경 기록](docs/release-2.3.1.md)에서
-OHLCV 수집 한도 변경을 확인하세요. 전역 연결 없이 `node src/cli/index.js ...`로 실행할 수
+현재 코드 버전은 `2.3.2`입니다. [2.3.2 변경 기록](docs/release-2.3.2.md)에서
+기간·커서 OHLCV, 검색 범위, preflight와 캡처 진단을 확인하세요. 전역 연결 없이 `node src/cli/index.js ...`로 실행할 수
 있습니다. PowerShell 모듈을 쓰는 동안 저장소 진입점을 고정하려면
 `$env:TV_CLI_ENTRY = (Resolve-Path .\src\cli\index.js).Path`를 설정합니다.
 
@@ -77,6 +77,22 @@ OHLCV 수집: `ohlcv`는 개수를 생략하면 최근 로드된 봉을 최대 *
 tv --workspace research-a ohlcv --count 20000
 tv --workspace research-a ohlcv -n 20000 --summary
 ```
+
+기간을 지정하면 최신 20,000봉 밖의 로드된 옛 구간도 읽을 수 있습니다.
+과거를 먼저 로드한 뒤 페이지를 읽으세요. 커서 중간에 과거를 추가 로드하거나
+문맥을 바꾸면 재시작해야 합니다. 기간 모드의 `truncated`는 다음 페이지 유무이며
+`insufficient_history`는 `null`입니다. 기간 확보는 `coverage`에서 따로 확인합니다.
+
+```powershell
+tv --workspace research-a range --from 1704067200 --to 1711929600
+tv --workspace research-a ohlcv --from 1704067200 --to 1711929600 --count 500
+tv --workspace research-a ohlcv --cursor EXACT_NEXT_CURSOR --count 500
+tv search CONTRACT --exchange BINANCE --type futures --count 100
+tv workspace preflight research-a
+```
+
+[기간·범위 계약](docs/history-export.md), [검색 한계](docs/symbol-search.md),
+[읽기 전용 점검과 캡처 메타데이터](docs/preflight-capture.md)를 확인하세요.
 
 계정 플랜·종목·차트 로딩 상태 때문에 요청보다 적은 봉만 로드되어 있으면
 현재 로드된 구간만 반환합니다. 화면에 보이는 봉뿐 아니라 차트에 로드된 전체 이력 중

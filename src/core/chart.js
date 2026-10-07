@@ -3,7 +3,7 @@
  */
 import { evaluate as _evaluate, evaluateAsync as _evaluateAsync, safeString, requireFinite, KNOWN_PATHS } from '../connection.js';
 import { waitForChartReady as _waitForChartReady } from '../wait.js';
-import { normalizeTimeframe } from '../chart-context.js';
+import { normalizeTimeframe, readChartContext, chartIdentity, historyCoverage } from '../chart-context.js';
 
 const CHART_API = KNOWN_PATHS.chartApi;
 
@@ -169,54 +169,59 @@ export async function getVisibleRange({ _deps } = {}) {
 
 export async function setVisibleRange({ from, to, _deps }) {
   const { evaluate } = _resolve(_deps);
-  const f = requireFinite(from, 'from');
-  const t = requireFinite(to, 'to');
-
-  // Ensure enough history is loaded to cover `from`. The chart lazy-loads bars
-  // (~300 initially), so without this a multi-year range clamps to whatever is
-  // already loaded. Page back via requestMoreData until the earliest loaded bar
-  // reaches `from`, the feed runs out, or a guard trips.
-  for (let i = 0; i < 25; i++) {
-    const state = await evaluate(`(function() {
-      var ms = ${CHART_API}._chartWidget.model().mainSeries();
-      var b = ms.bars(); var fv = b.valueAt(b.firstIndex());
-      var more = true; try { more = ms.requestMoreDataAvailable(); } catch (e) {}
-      return { firstTime: fv && fv[0], more: more };
-    })()`);
-    if (!state || state.firstTime == null || state.firstTime <= f || !state.more) break;
-    await evaluate(`(function() { try { ${CHART_API}._chartWidget.model().mainSeries().requestMoreData(1000); } catch (e) {} })()`);
-    await new Promise(r => setTimeout(r, 1800));
+  const f = requireFinite(from, 'from'), t = requireFinite(to, 'to');
+  if (f > t) throw Object.assign(new Error('from must be <= to.'), {code:'INVALID_RANGE'});
+  const sleep = _deps?.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
+  const probe = () => evaluate(`(() => {const read = ${readChartContext.toString()}; return read(window);})()`);
+  const initial = await probe();
+  let context = initial, termination = 'unknown', attempts = 0;
+  const check = current => {
+    const details = {requested:{from:f,to:t}, context:current, coverage:historyCoverage(current,{from:f,to:t},null,termination)};
+    const fail = (code,message) => {throw Object.assign(new Error(message),{code,details});};
+    if (current?.feed_error) fail('DATA_FEED_ERROR','Chart feed failed: '+current.feed_error);
+    if (!current || current.loading || !current.bar_count || current.first_bar_time === null || current.last_bar_time === null) fail('DATA_NOT_READY','Chart history is empty or loading; wait before requesting a range.');
+    if (JSON.stringify(chartIdentity(initial)) !== JSON.stringify(chartIdentity(current))) fail('DATA_CONTEXT_CHANGED','Chart identity changed during history loading.');
+  };
+  check(context);
+  while (context.first_bar_time > f) {
+    if (context.more_data_available === false) { termination = 'feed_end'; break; }
+    if (context.more_data_available !== true) break;
+    if (attempts >= 25) { termination = 'guard'; break; }
+    await evaluate(`${CHART_API}._chartWidget.model().mainSeries().requestMoreData(1000)`,{mutation:true});
+    attempts++;
+    await sleep(1800);
+    context = await probe();
+    for (let poll = 0; context?.loading && poll < 20; poll++) { await sleep(250); context = await probe(); }
+    if (context?.loading) termination = 'guard';
+    check(context);
   }
-
-  const applied = await evaluate(`
-    (function() {
-      var chart = ${CHART_API};
-      var m = chart._chartWidget.model();
-      var ts = m.timeScale();
-      var bars = m.mainSeries().bars();
-      var startIdx = bars.firstIndex();
-      var endIdx = bars.lastIndex();
-      var fromIdx = -1, toIdx = -1;
-      for (var i = startIdx; i <= endIdx; i++) {
-        var v = bars.valueAt(i);
-        if (v && v[0] >= ${f} && fromIdx === -1) fromIdx = i;
-        if (v && v[0] <= ${t}) toIdx = i;
-      }
-      if (fromIdx === -1 || toIdx === -1 || fromIdx > toIdx) throw new Error('RANGE_OUTSIDE_DATA: Requested window does not overlap loaded data.');
-      ts.zoomToBarsRange(fromIdx, toIdx);
-      return { from_index: fromIdx, to_index: toIdx, from: bars.valueAt(fromIdx)[0], to: bars.valueAt(toIdx)[0],
-        clamped: bars.valueAt(startIdx)[0] > ${f} || bars.valueAt(endIdx)[0] < ${t} };
-    })()
-  `, { mutation: true });
-  await new Promise(r => setTimeout(r, 500));
-  const actual = await evaluate(`
-    (function() {
-      var chart = ${CHART_API};
-      try { var r = chart.getVisibleRange(); return { from: r.from || 0, to: r.to || 0 }; }
-      catch(e) { return { from: 0, to: 0, error: e.message }; }
-    })()
-  `);
-  return { success: true, applied, requested: { from, to }, actual: actual || { from: 0, to: 0 } };
+  if (context.first_bar_time <= f && context.last_bar_time >= t) termination = 'satisfied';
+  const applied = await evaluate(`(() => {
+    const read = ${readChartContext.toString()}, identity = ${chartIdentity.toString()};
+    const context = read(window), requested = ${JSON.stringify({from:f,to:t})};
+    const fail = (code,error) => ({success:false,code,error,context,requested});
+    if (context?.feed_error) return fail('DATA_FEED_ERROR','Chart feed failed.');
+    if (!context || context.loading || !context.bar_count) return fail('DATA_NOT_READY','Chart is empty or loading.');
+    if (JSON.stringify(identity(context)) !== ${JSON.stringify(JSON.stringify(chartIdentity(initial)))}) return fail('DATA_CONTEXT_CHANGED','Chart identity changed before range application.');
+    const chart = ${CHART_API}, model = chart._chartWidget.model(), bars = model.mainSeries().bars();
+    let fromIdx = null, toIdx = null;
+    for (let i = bars.firstIndex(); i <= bars.lastIndex(); i++) {
+      const v = bars.valueAt(i);
+      if (!v) return fail('DATA_NOT_READY','Loaded history has an unreadable bar.');
+      if (v[0] >= requested.from && fromIdx === null) fromIdx = i;
+      if (v[0] <= requested.to) toIdx = i;
+    }
+    if (fromIdx === null || toIdx === null || fromIdx > toIdx) return fail('RANGE_OUTSIDE_DATA','Requested window contains no loaded bar open times.');
+    model.timeScale().zoomToBarsRange(fromIdx,toIdx);
+    return {success:true,context,from_index:fromIdx,to_index:toIdx,from:bars.valueAt(fromIdx)[0],to:bars.valueAt(toIdx)[0],
+      clamped:context.first_bar_time > requested.from || context.last_bar_time < requested.to};
+  })()`,{mutation:true});
+  if (!applied?.success) throw Object.assign(new Error(applied?.error || 'Range application unavailable.'),{code:applied?.code || 'DATA_NOT_READY',
+    details:{requested:{from:f,to:t},context:applied?.context || context,coverage:historyCoverage(applied?.context || context,{from:f,to:t},null,termination),loading:{attempts,termination}}});
+  await sleep(500);
+  const actual = await evaluate(`${CHART_API}.getVisibleRange()`);
+  return {success:true,applied,requested:{from:f,to:t},actual,context:applied.context,
+    coverage:historyCoverage(applied.context,{from:f,to:t},{from:applied.from,to:applied.to},termination),loading:{attempts,termination}};
 }
 
 export async function scrollToDate({ date, _deps } = {}) {
@@ -238,28 +243,8 @@ export async function scrollToDate({ date, _deps } = {}) {
   const from = timestamp - halfWindow;
   const to = timestamp + halfWindow;
 
-  const applied = await evaluate(`
-    (function() {
-      var chart = ${CHART_API};
-      var m = chart._chartWidget.model();
-      var ts = m.timeScale();
-      var bars = m.mainSeries().bars();
-      var startIdx = bars.firstIndex();
-      var endIdx = bars.lastIndex();
-      var fromIdx = -1, toIdx = -1;
-      for (var i = startIdx; i <= endIdx; i++) {
-        var v = bars.valueAt(i);
-        if (v && v[0] >= ${from} && fromIdx === -1) fromIdx = i;
-        if (v && v[0] <= ${to}) toIdx = i;
-      }
-      if (fromIdx === -1 || toIdx === -1 || fromIdx > toIdx) throw new Error('RANGE_OUTSIDE_DATA: Requested window does not overlap loaded data.');
-      ts.zoomToBarsRange(fromIdx, toIdx);
-      return { from_index: fromIdx, to_index: toIdx, from: bars.valueAt(fromIdx)[0], to: bars.valueAt(toIdx)[0],
-        clamped: bars.valueAt(startIdx)[0] > ${from} || bars.valueAt(endIdx)[0] < ${to} };
-    })()
-  `, { mutation: true });
-  await new Promise(r => setTimeout(r, 500));
-  return { success: true, applied, date, centered_on: timestamp, resolution, window: { from, to } };
+  const result = await setVisibleRange({from,to,_deps});
+  return {...result,date,centered_on:timestamp,resolution,window:{from,to}};
 }
 
 export async function symbolInfo({ _deps } = {}) {
@@ -278,31 +263,29 @@ export async function symbolInfo({ _deps } = {}) {
   return { success: true, ...result };
 }
 
-export async function symbolSearch({ query, type }) {
-  // Use TradingView's public symbol search REST API (works without auth)
-  const params = new URLSearchParams({
-    text: query,
-    hl: '1',
-    exchange: '',
-    lang: 'en',
-    search_type: type || '',
-    domain: 'production',
+export async function symbolSearch({ query, type = '', exchange = '', count = 15, offset = 0, _deps } = {}) {
+  if (!Number.isSafeInteger(count) || count < 1 || count > 500 || !Number.isSafeInteger(offset) || offset < 0) throw new Error('Search count must be 1..500 and offset a safe nonnegative integer.');
+  const params = new URLSearchParams({text:query,hl:'1',exchange,lang:'en',search_type:type,domain:'production'});
+  const resp = await (_deps?.fetch || fetch)(`https://symbol-search.tradingview.com/symbol_search/v3/?${params}`, {
+    headers: {'Origin':'https://www.tradingview.com','Referer':'https://www.tradingview.com/'}
   });
-
-  const resp = await fetch(`https://symbol-search.tradingview.com/symbol_search/v3/?${params}`, {
-    headers: { 'Origin': 'https://www.tradingview.com', 'Referer': 'https://www.tradingview.com/' },
+  if (!resp.ok) throw Object.assign(new Error(`Symbol search provider returned ${resp.status}.`),{code:resp.status===403?'SEARCH_PROVIDER_BLOCKED':'SEARCH_PROVIDER_ERROR',details:{status:resp.status}});
+  let data;
+  try { data = await resp.json(); } catch { throw Object.assign(new Error('Symbol search provider returned non-JSON data; no authenticated fallback.'),{code:'SEARCH_PROVIDER_BLOCKED',details:{status:resp.status}}); }
+  const rows = Array.isArray(data) ? data : data?.symbols;
+  if (!Array.isArray(rows)) throw Object.assign(new Error('Symbol search provider schema is unavailable.'),{code:'SEARCH_PROVIDER_SCHEMA'});
+  const strip = value => String(value || '').replace(/<\/?em>/g,'');
+  const results = rows.slice(offset,offset+count).map(r => {
+    const prefix = r.exchange || r.prefix || '';
+    return {symbol:strip(r.symbol),description:strip(r.description),exchange:prefix,type:r.type || '',
+      full_name:strip(r.full_name || r.pro_name || (prefix ? `${prefix}:${strip(r.symbol)}` : r.symbol)),
+      provider_symbol:r.symbol,provider_full_name:r.full_name ?? r.pro_name ?? null};
   });
-  if (!resp.ok) throw new Error(`Symbol search API returned ${resp.status}`);
-  const data = await resp.json();
-
-  const strip = s => (s || '').replace(/<\/?em>/g, '');
-  const results = (data.symbols || data || []).slice(0, 15).map(r => ({
-    symbol: strip(r.symbol),
-    description: strip(r.description),
-    exchange: r.exchange || r.prefix || '',
-    type: r.type || '',
-    full_name: r.exchange ? `${r.exchange}:${strip(r.symbol)}` : strip(r.symbol),
-  }));
-
-  return { success: true, query, source: 'rest_api', results, count: results.length };
+  const remaining = Number.isSafeInteger(data?.symbols_remaining) && data.symbols_remaining >= 0 ? data.symbols_remaining : null;
+  return {success:true,query,source:'rest_api',results,count:results.length,requested:count,offset,
+    filters:{exchange,type,applied_by:'provider',verified:false},response_count:rows.length,cli_truncated:offset+results.length<rows.length,
+    truncated:offset+results.length<rows.length,has_more:offset+results.length<rows.length,
+    next_offset:offset+results.length<rows.length?offset+results.length:null,
+    provider:{pagination:'unverified',total:null,remaining,limit:remaining>0?'observed_more_results':'unknown',
+      note:'Offset slices one freshly fetched provider response; cross-call ordering and native provider paging are unverified.'}};
 }

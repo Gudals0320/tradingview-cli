@@ -220,6 +220,13 @@ describe('chart.js — sanitized evaluate calls', () => {
 
   it('setVisibleRange passes valid numbers to evaluate', async () => {
     const { _deps, evaluate } = mockDeps();
+    const context = {symbol:'QA',resolution:'60',chart_type:1,first_bar_time:1699900000,last_bar_time:1700200000,bar_count:100,loading:false};
+    _deps.evaluate = async expression => {
+      evaluate.calls.push(expression);
+      if (expression.includes('zoomToBarsRange')) return {success:true,context,from:1700000000,to:1700100000};
+      return context;
+    };
+    _deps.sleep = async () => {};
     await setVisibleRange({ from: 1700000000, to: 1700100000, _deps });
     const call = evaluate.calls.find(c => c.includes('zoomToBarsRange'));
     assert.ok(call, 'zoomToBarsRange called');
